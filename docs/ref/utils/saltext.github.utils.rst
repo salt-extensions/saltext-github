@@ -1,6 +1,5 @@
+saltext.github.utils
+====================
 
-saltext.github.utils.github
-===========================
-
-.. automodule:: saltext.github.utils.github
+.. automodule:: saltext.github.utils
     :members:
