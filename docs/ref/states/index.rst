@@ -10,4 +10,3 @@ _____________
     :toctree:
 
     github
-    github_mod
