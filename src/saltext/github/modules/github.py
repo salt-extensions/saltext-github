@@ -28,8 +28,6 @@ For example:
       # in an automated way. set this to True to allow privacy modifications
       allow_repo_privacy_changes: False
 """
-
-
 import logging
 
 import salt.utils.http
@@ -61,8 +59,7 @@ def __virtual__():
         return __virtualname__
     return (
         False,
-        "The github execution module cannot be loaded: "
-        "PyGithub library is not installed.",
+        "The github execution module cannot be loaded: PyGithub library is not installed.",
     )
 
 
@@ -80,16 +77,13 @@ def _get_config_value(profile, config_name):
     config = __salt__["config.option"](profile)
     if not config:
         raise CommandExecutionError(
-            "Authentication information could not be found for the "
-            "'{}' profile.".format(profile)
+            f"Authentication information could not be found for the '{profile}' profile."
         )
 
     config_value = config.get(config_name)
     if config_value is None:
         raise CommandExecutionError(
-            "The '{}' parameter was not found in the '{}' profile.".format(
-                config_name, profile
-            )
+            f"The '{config_name}' parameter was not found in the '{profile}' profile."
         )
 
     return config_value
@@ -100,7 +94,9 @@ def _get_client(profile):
     Return the GitHub client, cached into __context__ for performance
     """
     token = _get_config_value(profile, "token")
-    key = "github.{}:{}".format(token, _get_config_value(profile, "org_name"))
+    key = "github.{}:{}".format(  # pylint: disable=consider-using-f-string
+        token, _get_config_value(profile, "org_name")
+    )
 
     if key not in __context__:
         __context__[key] = github.Github(token, per_page=100)
@@ -119,7 +115,7 @@ def _get_members(organization, params=None):
 def _get_repos(profile, params=None, ignore_cache=False):
     # Use cache when no params are given
     org_name = _get_config_value(profile, "org_name")
-    key = "github.{}:repos".format(org_name)
+    key = f"github.{org_name}:repos"
 
     if key not in __context__ or ignore_cache or params is not None:
         org_name = _get_config_value(profile, "org_name")
@@ -143,7 +139,7 @@ def _get_repos(profile, params=None, ignore_cache=False):
             next_result.append(repo)
 
             # Cache a copy of each repo for single lookups
-            repo_key = "github.{}:{}:repo_info".format(org_name, repo.name.lower())
+            repo_key = f"github.{org_name}:{repo.name.lower()}:repo_info"
             __context__[repo_key] = _repo_to_dict(repo)
 
         __context__[key] = next_result
@@ -171,7 +167,7 @@ def list_users(profile="github", ignore_cache=False):
         salt myminion github.list_users profile='my-github-profile'
     """
     org_name = _get_config_value(profile, "org_name")
-    key = "github.{}:users".format(org_name)
+    key = f"github.{org_name}:users"
     if key not in __context__ or ignore_cache:
         client = _get_client(profile)
         organization = client.get_organization(org_name)
@@ -356,9 +352,7 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
     return ret
 
 
-def get_issue_comments(
-    issue_number, repo_name=None, profile="github", since=None, output="min"
-):
+def get_issue_comments(issue_number, repo_name=None, profile="github", since=None, output="min"):
     """
     Return information about the comments for a given issue in a named repository.
 
@@ -636,9 +630,7 @@ def get_milestones(
     return ret
 
 
-def get_milestone(
-    number=None, name=None, repo_name=None, profile="github", output="min"
-):
+def get_milestone(number=None, name=None, repo_name=None, profile="github", output="min"):
     """
     Return information about a single milestone in a named repository.
 
@@ -675,9 +667,7 @@ def get_milestone(
     ret = {}
 
     if not any([number, name]):
-        raise CommandExecutionError(
-            "Either a milestone 'name' or 'number' must be provided."
-        )
+        raise CommandExecutionError("Either a milestone 'name' or 'number' must be provided.")
 
     org_name = _get_config_value(profile, "org_name")
     if repo_name is None:
@@ -754,7 +744,7 @@ def get_repo_info(repo_name, profile="github", ignore_cache=False):
     """
 
     org_name = _get_config_value(profile, "org_name")
-    key = "github.{}:{}:repo_info".format(
+    key = "github.{}:{}:repo_info".format(  # pylint: disable=consider-using-f-string
         _get_config_value(profile, "org_name"), repo_name.lower()
     )
 
@@ -772,11 +762,10 @@ def get_repo_info(repo_name, profile="github", ignore_cache=False):
             ret = _repo_to_dict(repo)
 
             __context__[key] = ret
-        except github.UnknownObjectException:
+        except github.UnknownObjectException as exc:
             raise CommandExecutionError(
-                "The '{}' repository under the '{}' organization could not "
-                "be found.".format(repo_name, org_name)
-            )
+                f"The '{repo_name}' repository under the '{org_name}' organization could not be found."
+            ) from exc
     return __context__[key]
 
 
@@ -805,22 +794,18 @@ def get_repo_teams(repo_name, profile="github"):
 
     try:
         repo = client.get_repo("/".join([org_name, repo_name]))
-    except github.UnknownObjectException:
+    except github.UnknownObjectException as exc:
         raise CommandExecutionError(
-            "The '{}' repository under the '{}' organization could not "
-            "be found.".format(repo_name, org_name)
-        )
+            f"The '{repo_name}' repository under the '{org_name}' organization could not be found."
+        ) from exc
     try:
         teams = repo.get_teams()
         for team in teams:
-            ret.append(
-                {"id": team.id, "name": team.name, "permission": team.permission}
-            )
-    except github.UnknownObjectException:
+            ret.append({"id": team.id, "name": team.name, "permission": team.permission})
+    except github.UnknownObjectException as exc:
         raise CommandExecutionError(
-            "Unable to retrieve teams for repository '{}' under the '{}' "
-            "organization.".format(repo_name, org_name)
-        )
+            f"Unable to retrieve teams for repository '{repo_name}' under the '{org_name}' organization."
+        ) from exc
     return ret
 
 
@@ -1032,9 +1017,7 @@ def edit_repo(
 
     if private is not None and not allow_private_change:
         raise CommandExecutionError(
-            "The private field is set to be changed for "
-            "repo {} but allow_repo_privacy_changes "
-            "disallows this.".format(name)
+            f"The private field is set to be changed for repo {name} but allow_repo_privacy_changes disallows this."
         )
 
     try:
@@ -1407,9 +1390,7 @@ def remove_team_repo(repo_name, team_name, profile="github"):
         log.exception("Resource not found: %s", team["id"])
         return False
     team.remove_from_repos(repo)
-    return repo_name not in list_team_repos(
-        team_name, profile=profile, ignore_cache=True
-    )
+    return repo_name not in list_team_repos(team_name, profile=profile, ignore_cache=True)
 
 
 def list_team_members(team_name, profile="github", ignore_cache=False):
@@ -1473,7 +1454,9 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
 
     .. versionadded:: 2016.11.0
     """
-    key = "github.{}:non_mfa_users".format(_get_config_value(profile, "org_name"))
+    key = "github.{}:non_mfa_users".format(  # pylint: disable=consider-using-f-string
+        _get_config_value(profile, "org_name")
+    )
 
     if key not in __context__ or ignore_cache:
         client = _get_client(profile)
@@ -1486,8 +1469,7 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
             filter_key = "filter_"
 
         __context__[key] = [
-            m.login.lower()
-            for m in _get_members(organization, {filter_key: "2fa_disabled"})
+            m.login.lower() for m in _get_members(organization, {filter_key: "2fa_disabled"})
         ]
     return __context__[key]
 
@@ -1604,8 +1586,7 @@ def remove_team_member(name, team_name, profile="github"):
     if not hasattr(team, "remove_from_members"):
         return (
             False,
-            "PyGithub 1.26.0 or greater is required for team "
-            "management, please upgrade.",
+            "PyGithub 1.26.0 or greater is required for team management, please upgrade.",
         )
 
     team.remove_from_members(member)
@@ -1630,7 +1611,9 @@ def list_teams(profile="github", ignore_cache=False):
 
     .. versionadded:: 2016.11.0
     """
-    key = "github.{}:teams".format(_get_config_value(profile, "org_name"))
+    key = "github.{}:teams".format(  # pylint: disable=consider-using-f-string
+        _get_config_value(profile, "org_name")
+    )
 
     if key not in __context__ or ignore_cache:
         client = _get_client(profile)
@@ -1834,7 +1817,7 @@ def _query(
         url += action
 
     if command:
-        url += "/{}".format(command)
+        url += f"/{command}"
 
     log.debug("GitHub URL: %s", url)
 
@@ -1886,9 +1869,8 @@ def _query(
 
             complete_result = complete_result + result["dict"]
         else:
-            raise CommandExecutionError(
-                "GitHub Response Error: {}".format(result.get("error"))
-            )
+            err = result.get("error")
+            raise CommandExecutionError(f"GitHub Response Error: {err}")
 
         try:
             link_info = result.get("headers").get("Link").split(",")[0]
