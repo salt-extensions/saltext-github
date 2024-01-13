@@ -18,7 +18,7 @@ def get_user_pubkeys(users):
 
     Some example data structures that coupld be passed in would look like:
 
-    .. code_block:: yaml
+    .. code-block:: yaml
 
         ['user1', 'user2', 'user3']
 
