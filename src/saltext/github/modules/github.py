@@ -28,6 +28,7 @@ For example:
       # in an automated way. set this to True to allow privacy modifications
       allow_repo_privacy_changes: False
 """
+import json
 import logging
 
 import salt.utils.http
@@ -121,6 +122,8 @@ def _get_repos(profile, params=None, ignore_cache=False):
         org_name = _get_config_value(profile, "org_name")
         client = _get_client(profile)
         organization = client.get_organization(org_name)
+
+        print("Client: ", client)
 
         result = github.PaginatedList.PaginatedList(
             github.Repository.Repository,
@@ -343,11 +346,13 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
     ret = {}
     issue_data = _query(profile, action=action, command=command)
 
-    issue_id = issue_data.get("id")
-    if output == "full":
-        ret[issue_id] = issue_data
-    else:
-        ret[issue_id] = _format_issue(issue_data)
+    issue_id = issue_data.get("dict").get("id")
+
+    if issue_id:
+        if output == "full":
+            ret[issue_id] = issue_data["dict"]
+        else:
+            ret[issue_id] = _format_issue(issue_data["dict"])
 
     return ret
 
@@ -399,7 +404,7 @@ def get_issue_comments(issue_number, repo_name=None, profile="github", since=Non
     comments = _query(profile, action=action, command=command, args=args)
 
     ret = {}
-    for comment in comments:
+    for comment in comments.get("dict"):
         comment_id = comment.get("id")
         if output == "full":
             ret[comment_id] = comment
@@ -532,7 +537,7 @@ def get_issues(
     ret = {}
     issues = _query(profile, action=action, command="issues", args=args)
 
-    for issue in issues:
+    for issue in issues.get("dict"):
         # Pull requests are included in the issue list from GitHub
         # Let's not include those in the return.
         if issue.get("pull_request"):
@@ -617,7 +622,7 @@ def get_milestones(
     ret = {}
     milestones = _query(profile, action=action, command="milestones", args=args)
 
-    for milestone in milestones:
+    for milestone in milestones.get("dict"):
         milestone_id = milestone.get("id")
         if output == "full":
             ret[milestone_id] = milestone
@@ -677,15 +682,17 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github", outp
     if number:
         command = "milestones/" + str(number)
         milestone_data = _query(profile, action=action, command=command)
+        milestone_data = milestone_data.get("dict")
         milestone_id = milestone_data.get("id")
-        if output == "full":
-            ret[milestone_id] = milestone_data
-        else:
-            milestone_data.pop("creator")
-            milestone_data.pop("html_url")
-            milestone_data.pop("labels_url")
-            ret[milestone_id] = milestone_data
-        return ret
+        if milestone_id:
+            if output == "full":
+                ret[milestone_id] = milestone_data
+            else:
+                milestone_data.pop("creator")
+                milestone_data.pop("html_url")
+                milestone_data.pop("labels_url")
+                ret[milestone_id] = milestone_data
+            return ret
 
     else:
         milestones = get_milestones(repo_name=repo_name, profile=profile, output=output)
@@ -1728,7 +1735,7 @@ def get_prs(
     ret = {}
     prs = _query(profile, action=action, command="pulls", args=args)
 
-    for pr_ in prs:
+    for pr_ in prs.get("dict"):
         pr_id = pr_.get("id")
         if output == "full":
             ret[pr_id] = pr_
@@ -1739,6 +1746,7 @@ def get_prs(
 
 
 def _format_pr(pr_):
+
     """
     Helper function to format API return information into a more manageable
     and useful dictionary for pull request information.
@@ -1821,16 +1829,15 @@ def _query(
 
     log.debug("GitHub URL: %s", url)
 
-    if "access_token" not in args.keys():
-        args["access_token"] = _get_config_value(profile, "token")
+    if not header_dict:
+        header_dict = {}
+
+    if not header_dict.get("Authorization"):
+        header_dict["Authorization"] = f"token {_get_config_value(profile, 'token')}"
     if per_page and "per_page" not in args.keys():
         args["per_page"] = per_page
 
-    if header_dict is None:
-        header_dict = {}
-
-    if method != "POST":
-        header_dict["Accept"] = "application/json"
+    header_dict["Accept"] = "application/vnd.github+json"
 
     decode = True
     if method == "DELETE":
@@ -1838,6 +1845,7 @@ def _query(
 
     # GitHub paginates all queries when returning many items.
     # Gather all data using multiple queries and handle pagination.
+    ret = {}
     complete_result = []
     next_page = True
     page_number = ""
@@ -1855,22 +1863,29 @@ def _query(
             headers=True,
             status=True,
             text=True,
-            hide_fields=["access_token"],
+            hide_fields=header_dict["Authorization"],
             opts=__opts__,
         )
         log.debug("GitHub Response Status Code: %s", result["status"])
 
-        if result["status"] == 200:
+        if result["status"] in [200, 201, 204]:
+            if result["status"] == 204:
+                return result
+
             if isinstance(result["dict"], dict):
                 # If only querying for one item, such as a single issue
                 # The GitHub API returns a single dictionary, instead of
                 # A list of dictionaries. In that case, we can return.
-                return result["dict"]
+                return result
 
+            ret = result
             complete_result = complete_result + result["dict"]
+            ret["dict"] = complete_result
+
         else:
-            err = result.get("error")
-            raise CommandExecutionError(f"GitHub Response Error: {err}")
+            return result
+            # err = result.get("error")
+            # raise CommandExecutionError(f"GitHub Response Error: {err}")
 
         try:
             link_info = result.get("headers").get("Link").split(",")[0]
@@ -1886,4 +1901,318 @@ def _query(
             # Last page already processed; break the loop.
             next_page = False
 
-    return complete_result
+    return ret
+
+
+def _param_dict(rule_params=False, rule_id=False, page=False, **kwargs):
+    """
+    Helper function to set kwargs values
+    """
+    kwargs["ruleset_type"] = kwargs.get("ruleset_type", None)
+    kwargs["owner"] = kwargs.get("owner", None)
+    kwargs["repo_name"] = kwargs.get("repo_name", None)
+    kwargs["org_name"] = kwargs.get("org_name", None)
+    kwargs["header_dict"] = kwargs.get("header_dict", None)
+
+    if rule_params:
+        kwargs["ruleset_params"] = kwargs.get("ruleset_params", None)
+    if rule_id:
+        kwargs["ruleset_id"] = kwargs.get("ruleset_id", None)
+    if page:
+        kwargs["per_page"] = kwargs.get("per_page", None)
+
+    return kwargs
+
+
+def _check_params(profile, **kwargs):
+    """
+    Helper function to check for params values on command line
+    and in config file
+
+    profile
+        The name of the profile configuration to use.
+    """
+
+    if not kwargs.get("ruleset_type"):
+        kwargs["ruleset_type"] = _get_config_value(profile, "ruleset_type")
+    if kwargs["ruleset_type"] not in ["repo", "org"]:
+        raise CommandExecutionError
+
+    if kwargs["ruleset_type"] == "repo":
+        kwargs.pop("org_name")
+
+    if kwargs["ruleset_type"] == "org":
+        kwargs.pop("repo_name")
+        kwargs.pop("owner")
+
+    for param in kwargs:  # pylint: disable=consider-using-dict-items
+        if not kwargs[param]:
+            if param == "header_dict":
+                try:
+                    kwargs[param] = _get_config_value(profile, param)
+                except CommandExecutionError:
+                    kwargs[param] = {}
+            elif param == "per_page":
+                try:
+                    kwargs[param] = _get_config_value(profile, param)
+                except CommandExecutionError:
+                    kwargs[param] = None
+            else:
+                kwargs[param] = _get_config_value(profile, param)
+    return kwargs
+
+
+def _format_action(rule_id=False, **kwargs):
+    """
+    Helper function to format action
+    """
+    if kwargs["ruleset_type"] == "repo":
+        action = "/".join(["repos", kwargs["owner"], kwargs["repo_name"], "rulesets"])
+    else:
+        action = "/".join(["orgs", kwargs["org_name"], "rulesets"])
+    if rule_id:
+        action = action + "/" + str(kwargs["ruleset_id"])
+    return action
+
+
+def get_ruleset(profile="github", **kwargs):
+    """
+    Get information of specific ruleset.
+
+    profile
+        The name of the profile configuration to use. Defaults to ``github``.
+    ruleset_type
+        The type of ruleset. 'repo' or 'org'.
+    ruleset_id
+        Id of the ruleset.
+    owner
+        The account owner of the repository.
+    repo_name
+        The name of the repo.
+    org_name
+        The name of the organization.
+    header_dict
+        Headers to pass to Github API.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion github.get_ruleset
+        salt myminion github.get_ruleset ruleset_id=1
+    """
+
+    kwargs = _param_dict(rule_id=True, **kwargs)
+    params = _check_params(profile, **kwargs)
+    action = _format_action(rule_id=True, **params)
+
+    try:
+        ret = _query(profile, action, header_dict=params["header_dict"])
+        if not ret.get("error"):
+            return ret["dict"]
+        else:
+            ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
+            ret["result"] = False
+    except CommandExecutionError:
+        ret = {}
+        ret["result"] = False
+        ret["comment"] = "Error getting ruleset"
+
+    return ret
+
+
+def delete_ruleset(profile="github", **kwargs):
+    """
+    Delete ruleset
+
+    profile
+        The name of the profile configuration to use. Defaults to ``github``.
+    ruleset_type
+        The type of ruleset. 'repo' or 'org'.
+    owner
+        The account owner of the repository.
+    repo_name
+        The name of the repo.
+    ruleset_id
+        Id of the ruleset.
+    org_name
+        The name of the organization.
+    header_dict
+        Headers to pass to Github API.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion github.delete_ruleset
+        salt myminion github.delete_ruleset ruleset_id=1
+    """
+    kwargs = _param_dict(rule_id=True, **kwargs)
+    params = _check_params(profile, **kwargs)
+    action = _format_action(rule_id=True, **params)
+
+    try:
+        ret = _query(profile, action, method="DELETE", header_dict=params["header_dict"])
+        if not ret.get("error"):
+            ret["comment"] = f"ruleset {params['ruleset_id']} successfully deleted"
+        else:
+            ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
+            ret["result"] = False
+    except CommandExecutionError:
+        ret = {}
+        ret["result"] = False
+        ret["comment"] = "Error deleting ruleset"
+    return ret
+
+
+def update_ruleset(profile="github", **kwargs):
+    """
+    Update ruleset
+
+    profile
+        The name of the profile configuration to use. Defaults to ``github``.
+    ruleset_type
+        The type of ruleset. 'repo' or 'org'.
+    ruleset_id
+        Id of the ruleset.
+    owner
+        The account owner of the repository.
+    repo_name
+        The name of the repo.
+    org_name
+        The name of the organization.
+    header_dict
+        headers to pass to Github API.
+    ruleset_params
+        number of returned results (max 100).
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion github.update_ruleset
+        salt myminion github.update_ruleset ruleset_id=1
+    """
+    kwargs = _param_dict(rule_params=True, rule_id=True, **kwargs)
+    params = _check_params(profile, **kwargs)
+    action = _format_action(rule_id=True, **params)
+
+    if not isinstance(params["ruleset_params"], dict):
+        raise TypeError("params need to be a dict")
+
+    ruleset_params = json.dumps(params["ruleset_params"])
+    ret = _query(
+        profile, action, method="PUT", data=ruleset_params, header_dict=params["header_dict"]
+    )
+    try:
+        if not ret.get("error"):
+            return ret["dict"]
+        else:
+            ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
+            ret["result"] = False
+    except CommandExecutionError:
+        ret = {}
+        ret["result"] = False
+        ret["comment"] = "Error updating ruleset"
+
+    return ret
+
+
+def add_ruleset(profile="github", **kwargs):
+    """
+    Add ruleset
+
+    profile
+        The name of the profile configuration to use. Defaults to ``github``.
+    ruleset_type
+        The type of ruleset. 'repo' or 'org'.
+    owner
+        The account owner of the repository.
+    repo_name
+        The name of the repo.
+    org_name
+        The name of the organization.
+    header_dict
+        headers to pass to Github API.
+    ruleset_params
+        number of returned results (max 100).
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion github.add_ruleset
+    """
+    kwargs = _param_dict(rule_params=True, **kwargs)
+    params = _check_params(profile, **kwargs)
+    action = _format_action(**params)
+
+    if not isinstance(params["ruleset_params"], dict):
+        raise TypeError("params need to be a dict")
+    if "name" not in params["ruleset_params"]:
+        raise ValueError("name is required")
+    if "enforcement" not in params["ruleset_params"]:
+        raise ValueError("enforcement is required")
+
+    ruleset_params = json.dumps(params["ruleset_params"])
+    try:
+        ret = _query(
+            profile, action, method="POST", data=ruleset_params, header_dict=params["header_dict"]
+        )
+        if not ret.get("error"):
+            return ret["dict"]
+        else:
+            ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
+            ret["result"] = False
+    except CommandExecutionError:
+        ret = {}
+        ret["result"] = False
+        ret["comment"] = "Error adding ruleset"
+    return ret
+
+
+def list_rulesets(profile="github", **kwargs):
+    """
+    List rulesets
+
+    profile
+        The name of the profile configuration to use. Defaults to ``github``.
+    ruleset_type
+        The type of ruleset. 'repo' or 'org'.
+    owner
+        The account owner of the repository.
+    repo_name
+        The name of the repo.
+    org_name
+        The name of the organization.
+    header_dict
+        headers to pass to Github API.
+    per_page
+        number of returned results (max 100).
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion github.list_rulesets
+    """
+    kwargs = _param_dict(page=True, **kwargs)
+    params = _check_params(profile, **kwargs)
+    action = _format_action(**params)
+
+    try:
+        ret = _query(
+            profile, action, header_dict=params["header_dict"], per_page=params["per_page"]
+        )
+        if not ret.get("error"):
+            if ret["dict"]:
+                return ret["dict"]
+            return None
+        else:
+            ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
+            ret["result"] = False
+    except CommandExecutionError:
+        ret = {}
+        ret["result"] = False
+        ret["comment"] = "Error getting rulesets"
+    return ret
