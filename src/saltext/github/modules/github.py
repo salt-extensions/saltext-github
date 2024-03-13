@@ -1882,8 +1882,6 @@ def _query(
 
         else:
             return result
-            # err = result.get("error")
-            # raise CommandExecutionError(f"GitHub Response Error: {err}")
 
         try:
             link_info = result.get("headers").get("Link").split(",")[0]
