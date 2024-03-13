@@ -123,8 +123,6 @@ def _get_repos(profile, params=None, ignore_cache=False):
         client = _get_client(profile)
         organization = client.get_organization(org_name)
 
-        print("Client: ", client)
-
         result = github.PaginatedList.PaginatedList(
             github.Repository.Repository,
             organization._requester,
