@@ -798,8 +798,8 @@ def ruleset_absent(
 
                 if result:
                     ret["comment"] = f"Deleted ruleset {name}"
-                    ret["changes"].setdefault("old", f"ruleset {name} exists")
-                    ret["changes"].setdefault("new", f"ruleset {name} deleted")
+                    ret["changes"]["old"] = f"ruleset {name} exists"
+                    ret["changes"]["new"] = f"ruleset {name} deleted"
                     ret["result"] = True
                     return ret
                 else:
@@ -853,7 +853,9 @@ def ruleset_present(
     ret = {"name": name, "changes": {}, "result": True, "comment": ""}
 
     if ruleset_type not in ["org", "repo"]:
-        raise CommandExecutionError
+        ret["result"] = False
+        ret["comment"] = "ruleset_type not set to repo or org"
+        return ret
 
     if ruleset_type == "repo":
         kwargs.update({"owner": owner, "repo_name": repo_name, "ruleset_type": ruleset_type})
@@ -876,7 +878,7 @@ def ruleset_present(
                     for key in ruleset_info and ruleset_params:
                         if ruleset_info.get(key) != ruleset_params.get(key):
                             changes = {
-                                "old": f"Rulset properties were {ruleset_info}",
+                                "old": f"Ruleset properties were {ruleset_info}",
                                 "new": f"Ruleset properties (that changed) are {ruleset_params}",
                             }
                             ret["changes"] = changes
