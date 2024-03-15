@@ -344,10 +344,10 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
     ret = {}
     issue_data = _query(profile, action=action, command=command)
 
-    issue_id = issue_data.get("dict").get("id")
+    issue_id = issue_data.get("dict", {}).get("id")
 
     if issue_id:
-        if output == "full":
+        if output.lower() == "full":
             ret[issue_id] = issue_data["dict"]
         else:
             ret[issue_id] = _format_issue(issue_data["dict"])
@@ -402,7 +402,7 @@ def get_issue_comments(issue_number, repo_name=None, profile="github", since=Non
     comments = _query(profile, action=action, command=command, args=args)
 
     ret = {}
-    for comment in comments.get("dict"):
+    for comment in comments.get("dict", {}):
         comment_id = comment.get("id")
         if output == "full":
             ret[comment_id] = comment
@@ -535,7 +535,7 @@ def get_issues(
     ret = {}
     issues = _query(profile, action=action, command="issues", args=args)
 
-    for issue in issues.get("dict"):
+    for issue in issues.get("dict", {}):
         # Pull requests are included in the issue list from GitHub
         # Let's not include those in the return.
         if issue.get("pull_request"):
@@ -620,7 +620,7 @@ def get_milestones(
     ret = {}
     milestones = _query(profile, action=action, command="milestones", args=args)
 
-    for milestone in milestones.get("dict"):
+    for milestone in milestones.get("dict", {}):
         milestone_id = milestone.get("id")
         if output == "full":
             ret[milestone_id] = milestone
@@ -680,10 +680,10 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github", outp
     if number:
         command = "milestones/" + str(number)
         milestone_data = _query(profile, action=action, command=command)
-        milestone_data = milestone_data.get("dict")
+        milestone_data = milestone_data.get("dict", {})
         milestone_id = milestone_data.get("id")
         if milestone_id:
-            if output == "full":
+            if output.lower() == "full":
                 ret[milestone_id] = milestone_data
             else:
                 milestone_data.pop("creator")
@@ -1733,7 +1733,7 @@ def get_prs(
     ret = {}
     prs = _query(profile, action=action, command="pulls", args=args)
 
-    for pr_ in prs.get("dict"):
+    for pr_ in prs.get("dict", {}):
         pr_id = pr_.get("id")
         if output == "full":
             ret[pr_id] = pr_
@@ -1744,7 +1744,6 @@ def get_prs(
 
 
 def _format_pr(pr_):
-
     """
     Helper function to format API return information into a more manageable
     and useful dictionary for pull request information.
