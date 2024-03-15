@@ -2005,9 +2005,8 @@ def get_ruleset(profile="github", **kwargs):
         ret = _query(profile, action, header_dict=params["header_dict"])
         if not ret.get("error"):
             return ret["dict"]
-        else:
-            ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
-            ret["result"] = False
+        ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
+        ret["result"] = False
     except CommandExecutionError:
         ret = {}
         ret["result"] = False
@@ -2048,11 +2047,11 @@ def delete_ruleset(profile="github", **kwargs):
 
     try:
         ret = _query(profile, action, method="DELETE", header_dict=params["header_dict"])
-        if not ret.get("error"):
-            ret["comment"] = f"ruleset {params['ruleset_id']} successfully deleted"
-        else:
+        if ret.get("error"):
             ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
             ret["result"] = False
+        else:
+            ret["comment"] = f"ruleset {params['ruleset_id']} successfully deleted"
     except CommandExecutionError:
         ret = {}
         ret["result"] = False
@@ -2093,7 +2092,7 @@ def update_ruleset(profile="github", **kwargs):
     action = _format_action(rule_id=True, **params)
 
     if not isinstance(params["ruleset_params"], dict):
-        raise TypeError("params need to be a dict")
+        raise CommandExecutionError("params need to be a dict")
 
     ruleset_params = salt.utils.json.dumps(params["ruleset_params"])
     ret = _query(
@@ -2143,11 +2142,11 @@ def add_ruleset(profile="github", **kwargs):
     action = _format_action(**params)
 
     if not isinstance(params["ruleset_params"], dict):
-        raise TypeError("params need to be a dict")
+        raise CommandExecutionError("params need to be a dict")
     if "name" not in params["ruleset_params"]:
-        raise ValueError("name is required")
+        raise CommandExecutionError("name is required")
     if "enforcement" not in params["ruleset_params"]:
-        raise ValueError("enforcement is required")
+        raise CommandExecutionError("enforcement is required")
 
     ruleset_params = salt.utils.json.dumps(params["ruleset_params"])
     try:
