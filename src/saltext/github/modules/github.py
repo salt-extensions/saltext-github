@@ -28,10 +28,10 @@ For example:
       # in an automated way. set this to True to allow privacy modifications
       allow_repo_privacy_changes: False
 """
-import json
 import logging
 
 import salt.utils.http
+import salt.utils.json
 from salt.exceptions import CommandExecutionError
 
 HAS_LIBS = False
@@ -2096,7 +2096,7 @@ def update_ruleset(profile="github", **kwargs):
     if not isinstance(params["ruleset_params"], dict):
         raise TypeError("params need to be a dict")
 
-    ruleset_params = json.dumps(params["ruleset_params"])
+    ruleset_params = salt.utils.json.dumps(params["ruleset_params"])
     ret = _query(
         profile, action, method="PUT", data=ruleset_params, header_dict=params["header_dict"]
     )
@@ -2150,7 +2150,7 @@ def add_ruleset(profile="github", **kwargs):
     if "enforcement" not in params["ruleset_params"]:
         raise ValueError("enforcement is required")
 
-    ruleset_params = json.dumps(params["ruleset_params"])
+    ruleset_params = salt.utils.json.dumps(params["ruleset_params"])
     try:
         ret = _query(
             profile, action, method="POST", data=ruleset_params, header_dict=params["header_dict"]
