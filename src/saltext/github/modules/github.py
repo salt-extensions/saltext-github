@@ -1826,7 +1826,7 @@ def _query(
 
     log.debug("GitHub URL: %s", url)
 
-    if not header_dict:
+    if header_dict is None:
         header_dict = {}
 
     if not header_dict.get("Authorization"):
@@ -1936,6 +1936,10 @@ def _check_ruleset_params(profile, rule_id=False, rule_params=False, **kwargs):
         try:
             kwargs["header_dict"] = _get_config_value(profile, "header_dict")
         except CommandExecutionError:
+            kwargs["header_dict"] = {}
+
+        # verify header_dict is a dict
+        if not isinstance(kwargs["header_dict"], dict):
             kwargs["header_dict"] = {}
 
     # if ruleset is required, check for ruleset_id
