@@ -1860,7 +1860,7 @@ def _query(
             headers=True,
             status=True,
             text=True,
-            hide_fields=header_dict["Authorization"],
+            hide_fields=None,
             opts=__opts__,
         )
         log.debug("GitHub Response Status Code: %s", result["status"])
@@ -1899,75 +1899,58 @@ def _query(
     return ret
 
 
-def _param_dict(rule_params=False, rule_id=False, page=False, **kwargs):
+def _check_ruleset_params(profile, rule_id=False, rule_params=False, **kwargs):
     """
-    Helper function to set kwargs values
-    """
-    kwargs["ruleset_type"] = kwargs.get("ruleset_type", None)
-    kwargs["owner"] = kwargs.get("owner", None)
-    kwargs["repo_name"] = kwargs.get("repo_name", None)
-    kwargs["org_name"] = kwargs.get("org_name", None)
-    kwargs["header_dict"] = kwargs.get("header_dict", None)
-
-    if rule_params:
-        kwargs["ruleset_params"] = kwargs.get("ruleset_params", None)
-    if rule_id:
-        kwargs["ruleset_id"] = kwargs.get("ruleset_id", None)
-    if page:
-        kwargs["per_page"] = kwargs.get("per_page", None)
-
-    return kwargs
-
-
-def _check_params(profile, **kwargs):
-    """
-    Helper function to check for params values on command line
-    and in config file
+    Helper function to check for param values on command line and in config file
 
     profile
         The name of the profile configuration to use.
-    """
 
+    ruleset_id
+        Defautls to false. If ruleset_id is required, set to True.
+
+    ruleset_params
+        Defautls to false. If ruleset_params are required, set to True.
+
+    """
     if not kwargs.get("ruleset_type"):
         kwargs["ruleset_type"] = _get_config_value(profile, "ruleset_type")
     if kwargs["ruleset_type"] not in ["repo", "org"]:
         raise CommandExecutionError
 
     if kwargs["ruleset_type"] == "repo":
-        kwargs.pop("org_name")
+        if not kwargs.get("owner"):
+            kwargs["owner"] = _get_config_value(profile, "owner")
+        if not kwargs.get("repo_name"):
+            kwargs["repo_name"] = _get_config_value(profile, "repo_name")
 
-    if kwargs["ruleset_type"] == "org":
-        kwargs.pop("repo_name")
-        kwargs.pop("owner")
-
-    for param in kwargs:  # pylint: disable=consider-using-dict-items
-        if not kwargs[param]:
-            if param == "header_dict":
-                try:
-                    kwargs[param] = _get_config_value(profile, param)
-                except CommandExecutionError:
-                    kwargs[param] = {}
-            elif param == "per_page":
-                try:
-                    kwargs[param] = _get_config_value(profile, param)
-                except CommandExecutionError:
-                    kwargs[param] = None
-            else:
-                kwargs[param] = _get_config_value(profile, param)
-    return kwargs
-
-
-def _format_action(rule_id=False, **kwargs):
-    """
-    Helper function to format action
-    """
-    if kwargs["ruleset_type"] == "repo":
         action = "/".join(["repos", kwargs["owner"], kwargs["repo_name"], "rulesets"])
     else:
+        if not kwargs.get("org_name"):
+            kwargs["org_name"] = _get_config_value(profile, "org_name")
+
         action = "/".join(["orgs", kwargs["org_name"], "rulesets"])
+
+    # check for optional header_dict
+    if not kwargs.get("header_dict"):
+        try:
+            kwargs["header_dict"] = _get_config_value(profile, "header_dict")
+        except CommandExecutionError:
+            kwargs["header_dict"] = {}
+
+    # if ruleset is required, check for ruleset_id
     if rule_id:
+        if not kwargs.get("ruleset_id"):
+            kwargs["ruleset_id"] = _get_config_value(profile, "ruleset_id")
+
         action = action + "/" + str(kwargs["ruleset_id"])
-    return action
+
+    # if ruleset_params are required, check for ruleset_params
+    if rule_params:
+        if not kwargs.get("ruleset_params"):
+            kwargs["ruleset_params"] = _get_config_value(profile, "ruleset_params")
+
+    return kwargs, action
 
 
 def get_ruleset(profile="github", **kwargs):
@@ -1996,10 +1979,7 @@ def get_ruleset(profile="github", **kwargs):
         salt myminion github.get_ruleset
         salt myminion github.get_ruleset ruleset_id=1
     """
-
-    kwargs = _param_dict(rule_id=True, **kwargs)
-    params = _check_params(profile, **kwargs)
-    action = _format_action(rule_id=True, **params)
+    params, action = _check_ruleset_params(profile, rule_id=True, **kwargs)
 
     try:
         ret = _query(profile, action, header_dict=params["header_dict"])
@@ -2041,9 +2021,7 @@ def delete_ruleset(profile="github", **kwargs):
         salt myminion github.delete_ruleset
         salt myminion github.delete_ruleset ruleset_id=1
     """
-    kwargs = _param_dict(rule_id=True, **kwargs)
-    params = _check_params(profile, **kwargs)
-    action = _format_action(rule_id=True, **params)
+    params, action = _check_ruleset_params(profile, rule_id=True, **kwargs)
 
     try:
         ret = _query(profile, action, method="DELETE", header_dict=params["header_dict"])
@@ -2087,9 +2065,7 @@ def update_ruleset(profile="github", **kwargs):
         salt myminion github.update_ruleset
         salt myminion github.update_ruleset ruleset_id=1
     """
-    kwargs = _param_dict(rule_params=True, rule_id=True, **kwargs)
-    params = _check_params(profile, **kwargs)
-    action = _format_action(rule_id=True, **params)
+    params, action = _check_ruleset_params(profile, rule_id=True, rule_params=True, **kwargs)
 
     if not isinstance(params["ruleset_params"], dict):
         raise CommandExecutionError("params need to be a dict")
@@ -2137,9 +2113,7 @@ def add_ruleset(profile="github", **kwargs):
 
         salt myminion github.add_ruleset
     """
-    kwargs = _param_dict(rule_params=True, **kwargs)
-    params = _check_params(profile, **kwargs)
-    action = _format_action(**params)
+    params, action = _check_ruleset_params(profile, rule_params=True, **kwargs)
 
     if not isinstance(params["ruleset_params"], dict):
         raise CommandExecutionError("params need to be a dict")
@@ -2190,14 +2164,16 @@ def list_rulesets(profile="github", **kwargs):
 
         salt myminion github.list_rulesets
     """
-    kwargs = _param_dict(page=True, **kwargs)
-    params = _check_params(profile, **kwargs)
-    action = _format_action(**params)
+    params, action = _check_ruleset_params(profile, **kwargs)
+
+    if not kwargs.get("per_page"):
+        try:
+            per_page = _get_config_value(profile, "per_page")
+        except CommandExecutionError:
+            per_page = None
 
     try:
-        ret = _query(
-            profile, action, header_dict=params["header_dict"], per_page=params["per_page"]
-        )
+        ret = _query(profile, action, header_dict=params["header_dict"], per_page=per_page)
         if not ret.get("error"):
             if ret["dict"]:
                 return ret["dict"]
