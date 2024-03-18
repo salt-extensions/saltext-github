@@ -1,9 +1,7 @@
 from unittest import mock
-from unittest import TestCase
 
 import pytest
 import salt.modules.config as config_module
-import salt.modules.test as testmod
 import saltext.github.modules.github as github_module
 from salt.exceptions import CommandExecutionError
 
@@ -11,8 +9,8 @@ from salt.exceptions import CommandExecutionError
 @pytest.fixture
 def configure_loader_modules():
     module_globals = {
-        "__salt__": {"test.echo": testmod.echo, "config.option": config_module.option},
-        "__opts__": {"mock": {"ruleset_type": "mocked_value"}},
+        "__salt__": {"config.option": config_module.option},
+        "__opts__": {"test_ruleset": {"ruleset_type": "mocked_value"}},
     }
     return {
         github_module: module_globals,
@@ -31,33 +29,23 @@ def params():
     }
 
 
-def test__check_params():
+def test__check_ruleset_params():
     ## test no valid config
-    with TestCase().assertRaises(CommandExecutionError):
-        github_module._check_params(profile="mock")
+    with pytest.raises(CommandExecutionError):
+        github_module._check_ruleset_params(profile="test_ruleset")
 
     # test cli config
-    kwargs = {"ruleset_type": "repo", "repo_name": "mock", "org_name": None}
-    ret = github_module._check_params(profile="mock", **kwargs)
-    assert ret == {"ruleset_type": "repo", "repo_name": "mock"}
-
-
-def test__param_dict():
-    expected = {
-        "ruleset_type": None,
-        "owner": None,
-        "repo_name": None,
-        "org_name": None,
-        "header_dict": None,
-    }
-    assert github_module._param_dict() == expected
-
-
-def test__format_action():
-    kwargs = {"ruleset_type": "repo", "owner": "mock_owner", "repo_name": "mock_repo_name"}
-    expected = "repos/mock_owner/mock_repo_name/rulesets"
-
-    assert github_module._format_action(profile="mock", **kwargs) == expected
+    kwargs = {"ruleset_type": "repo", "repo_name": "mock_repo_name", "owner": "mock_owner"}
+    ret = github_module._check_ruleset_params(profile="test_ruleset", **kwargs)
+    assert ret == (
+        {
+            "ruleset_type": "repo",
+            "repo_name": "mock_repo_name",
+            "owner": "mock_owner",
+            "header_dict": {},
+        },
+        "repos/mock_owner/mock_repo_name/rulesets",
+    )
 
 
 def test_get_ruleset(params):
@@ -68,7 +56,7 @@ def test_get_ruleset(params):
     expected = {"id": "1"}
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
-        assert github_module.get_ruleset(profile="mock", **params) == expected
+        assert github_module.get_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock 404 error
     mock_query = {"error": "404 not found", "status": 404}
@@ -80,14 +68,12 @@ def test_get_ruleset(params):
     }
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
-        assert github_module.get_ruleset(profile="mock", **params) == expected
+        assert github_module.get_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock empty return
-    expected = {"comment": "error getting ruleset", "result": False}
-
-    with mock.patch("salt.utils.http.query", mock.MagicMock(return_value={})):
-        with TestCase().assertRaises((CommandExecutionError, KeyError)):
-            assert github_module.get_ruleset(profile="mock", **params) == expected
+    expected = {"comment": "Error getting ruleset", "result": False}
+    with mock.patch("salt.utils.http.query", return_value={}):
+        assert github_module.get_ruleset(profile="test_ruleset", **params) == expected
 
 
 def test_add_ruleset(params):
@@ -99,7 +85,7 @@ def test_add_ruleset(params):
     expected = {"name": "mock_name", "enforcement": "disabled"}
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
-        assert github_module.add_ruleset(profile="mock", **params) == expected
+        assert github_module.add_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock 404 error
     expected = {
@@ -112,14 +98,13 @@ def test_add_ruleset(params):
     with mock.patch(
         "salt.utils.http.query", return_value={"error": "404 not found", "status": 404}
     ):
-        assert github_module.add_ruleset(profile="mock", **params) == expected
+        assert github_module.add_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock empty return
-    expected = {"comment": "error getting ruleset", "result": False}
+    expected = {"comment": "Error adding ruleset", "result": False}
 
     with mock.patch("salt.utils.http.query", return_value={}):
-        with TestCase().assertRaises((CommandExecutionError, KeyError)):
-            assert github_module.add_ruleset(profile="mock", **params) == expected
+        assert github_module.add_ruleset(profile="test_ruleset", **params) == expected
 
 
 def test_list_rulesets(params):
@@ -133,14 +118,14 @@ def test_list_rulesets(params):
     expected = [{"name": "mock_ruleset_1"}, {"name": "mock_ruleset_2"}]
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
-        assert github_module.list_rulesets(profile="mock", **params) == expected
+        assert github_module.list_rulesets(profile="test_ruleset", **params) == expected
 
     # test mock 200 status, no rulesets returned
     mock_query = {"dict": [], "status": 200}
     expected = None
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
-        assert github_module.list_rulesets(profile="mock", **params) == expected
+        assert github_module.list_rulesets(profile="test_ruleset", **params) == expected
 
     # test mock 404 error
     mock_query = {"error": "404 not found", "status": 404}
@@ -152,14 +137,12 @@ def test_list_rulesets(params):
     }
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
-        assert github_module.list_rulesets(profile="mock", **params) == expected
+        assert github_module.list_rulesets(profile="test_ruleset", **params) == expected
 
     # test mock empty return
-    expected = {"comment": "error getting ruleset", "result": False}
-
+    expected = {"comment": "Error getting rulesets", "result": False}
     with mock.patch("salt.utils.http.query", return_value={}):
-        with TestCase().assertRaises((CommandExecutionError, KeyError)):
-            assert github_module.list_rulesets(profile="mock", **params) == expected
+        assert github_module.list_rulesets(profile="test_ruleset", **params) == expected
 
 
 def test_update_ruleset(params):
@@ -172,7 +155,7 @@ def test_update_ruleset(params):
     expected = {"name": "mock_name", "enforcement": "disabled"}
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
-        assert github_module.update_ruleset(profile="mock", **params) == expected
+        assert github_module.update_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock 404 error
     mock_query = {"error": "404 not found", "status": 404}
@@ -184,14 +167,12 @@ def test_update_ruleset(params):
     }
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
-        assert github_module.update_ruleset(profile="mock", **params) == expected
+        assert github_module.update_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock empty return
-    expected = {"comment": "error getting ruleset", "result": False}
-
+    expected = {"comment": "Error updating ruleset", "result": False}
     with mock.patch("salt.utils.http.query", return_value={}):
-        with TestCase().assertRaises((CommandExecutionError, KeyError)):
-            assert github_module.update_ruleset(profile="mock", **params) == expected
+        assert github_module.update_ruleset(profile="test_ruleset", **params) == expected
 
 
 def test_delete_ruleset(params):
@@ -202,7 +183,7 @@ def test_delete_ruleset(params):
     expected = {"comment": "ruleset 1 successfully deleted", "status": 204}
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
-        assert github_module.delete_ruleset(profile="mock", **params) == expected
+        assert github_module.delete_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock 404 error
     mock_query = {"error": "404 not found", "status": 404}
@@ -214,11 +195,9 @@ def test_delete_ruleset(params):
     }
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
-        assert github_module.delete_ruleset(profile="mock", **params) == expected
+        assert github_module.delete_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock empty return
-    expected = {"comment": "error getting ruleset", "result": False}
-
+    expected = {"comment": "Error deleting ruleset", "result": False}
     with mock.patch("salt.utils.http.query", return_value={}):
-        with TestCase().assertRaises((CommandExecutionError, KeyError)):
-            assert github_module.delete_ruleset(profile="mock", **params) == expected
+        assert github_module.delete_ruleset(profile="test_ruleset", **params) == expected
