@@ -1863,11 +1863,9 @@ def _query(
             hide_fields=None,
             opts=__opts__,
         )
-        log.debug("GitHub Response Status Code: %s", result["status"])
+        log.debug("GitHub Response Status Code: %s", result.get("status"))
 
-        if result["status"] in [200, 201, 204]:
-            if result["status"] == 204:
-                return result
+        if result.get("status") in [200, 201]:
 
             if isinstance(result["dict"], dict):
                 # If only querying for one item, such as a single issue
@@ -1880,7 +1878,9 @@ def _query(
             ret["dict"] = complete_result
 
         else:
-            return result
+            if result:
+                return result
+            raise CommandExecutionError
 
         try:
             link_info = result.get("headers").get("Link").split(",")[0]
@@ -2075,10 +2075,10 @@ def update_ruleset(profile="github", **kwargs):
         raise CommandExecutionError("params need to be a dict")
 
     ruleset_params = salt.utils.json.dumps(params["ruleset_params"])
-    ret = _query(
-        profile, action, method="PUT", data=ruleset_params, header_dict=params["header_dict"]
-    )
     try:
+        ret = _query(
+            profile, action, method="PUT", data=ruleset_params, header_dict=params["header_dict"]
+        )
         if not ret.get("error"):
             return ret["dict"]
         else:
