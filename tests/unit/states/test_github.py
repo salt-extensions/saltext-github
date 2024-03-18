@@ -2,17 +2,12 @@ from unittest import mock
 
 import pytest
 import salt.modules.config as config_module
-import salt.modules.test as testmod
-import saltext.github.modules.github as github_module
 import saltext.github.states.github as github_state
 
 
 @pytest.fixture
 def configure_loader_modules():
     return {
-        github_module: {
-            "__salt__": {"test.echo": testmod.echo, "config.option": config_module.option},
-        },
         github_state: {
             "__salt__": {
                 "github.list_rulesets": mock.MagicMock(return_value=None),
@@ -24,8 +19,8 @@ def configure_loader_modules():
             "__opts__": {"test": False},
         },
         config_module: {
-            "__salt__": {"test.echo": testmod.echo, "config.option": config_module.option},
-            "__opts__": {"mock": {"ruleset_type": "mocked_value"}},
+            "__salt__": {"config.option": config_module.option},
+            "__opts__": {"test_ruleset": {"ruleset_type": "mocked_value"}},
         },
     }
 
@@ -42,7 +37,7 @@ def test_repo_absent_no_changes():
     ret = github_state.ruleset_absent(
         name="mock_repo_absent",
         ruleset_type="repo",
-        profile="mock",
+        profile="test_ruleset",
         owner="mock",
         repo_name="mock_repo",
     )
@@ -55,7 +50,7 @@ def test_repo_absent_no_changes():
         ret = github_state.ruleset_absent(
             name="mock_repo_absent",
             ruleset_type="repo",
-            profile="mock",
+            profile="test_ruleset",
             owner="mock",
             repo_name="mock_repo",
         )
@@ -68,7 +63,7 @@ def test_repo_absent_no_changes():
         ret = github_state.ruleset_absent(
             name="mock_repo_absent",
             ruleset_type="repo",
-            profile="mock",
+            profile="test_ruleset",
             owner="mock",
             repo_name="mock_repo",
         )
@@ -97,7 +92,7 @@ def test_repo_absent_changes():
         ret = github_state.ruleset_absent(
             name="mock_repo_absent",
             ruleset_type="repo",
-            profile="mock",
+            profile="test_ruleset",
             owner="mock",
             repo_name="mock_repo",
         )
@@ -122,7 +117,7 @@ def test_repo_absent_changes():
             ret = github_state.ruleset_absent(
                 name="mock_repo_absent",
                 ruleset_type="repo",
-                profile="mock",
+                profile="test_ruleset",
                 owner="mock",
                 repo_name="mock_repo",
             )
@@ -149,7 +144,7 @@ def test_repo_present_no_changes():
             ret = github_state.ruleset_present(
                 name="mock_repo_absent",
                 ruleset_type="repo",
-                profile="mock",
+                profile="test_ruleset",
                 owner="mock",
                 repo_name="mock_repo",
                 ruleset_params={},
@@ -165,7 +160,7 @@ def test_repo_present_no_changes():
         ret = github_state.ruleset_present(
             name="mock_repo_absent",
             ruleset_type="repo",
-            profile="mock",
+            profile="test_ruleset",
             owner="mock",
             repo_name="mock_repo",
             ruleset_params={},
@@ -177,7 +172,7 @@ def test_repo_present_update_ruleset():
     expected = {
         "name": "mock_repo_absent",
         "changes": {
-            "old": "Rulset properties were {'name': 'mock_repo_absent', 'id': 1, 'target': 'branch'}",
+            "old": "Ruleset properties were {'name': 'mock_repo_absent', 'id': 1, 'target': 'branch'}",
             "new": "Ruleset properties (that changed) are {'target': 'tag', 'name': 'mock_repo_absent'}",
         },
         "result": True,
@@ -203,7 +198,7 @@ def test_repo_present_update_ruleset():
         ret = github_state.ruleset_present(
             name="mock_repo_absent",
             ruleset_type="repo",
-            profile="mock",
+            profile="test_ruleset",
             owner="mock",
             repo_name="mock_repo",
             ruleset_params={"target": "tag"},
@@ -213,10 +208,7 @@ def test_repo_present_update_ruleset():
     # Test mode
     expected = {
         "name": "mock_repo_absent",
-        "changes": {
-            "old": "Rulset properties were {'name': 'mock_repo_absent', 'id': 1, 'target': 'branch'}",
-            "new": "Ruleset properties (that changed) are {'target': 'tag', 'name': 'mock_repo_absent'}",
-        },
+        "changes": {},
         "result": None,
         "comment": "ruleset will be updated",
     }
@@ -233,7 +225,7 @@ def test_repo_present_update_ruleset():
             ret = github_state.ruleset_present(
                 name="mock_repo_absent",
                 ruleset_type="repo",
-                profile="mock",
+                profile="test_ruleset",
                 owner="mock",
                 repo_name="mock_repo",
                 ruleset_params={"target": "tag"},
@@ -261,7 +253,7 @@ def test_repo_present_add_ruleset():
         ret = github_state.ruleset_present(
             name="mock_repo_absent",
             ruleset_type="repo",
-            profile="mock",
+            profile="test_ruleset",
             owner="mock",
             repo_name="mock_repo",
             ruleset_params={"enforcement": "disabled"},
@@ -271,6 +263,7 @@ def test_repo_present_add_ruleset():
     # Test mode
     expected["result"] = None
     expected["comment"] = "ruleset will be added"
+    expected["changes"] = {}
 
     with mock.patch.dict(github_state.__opts__, {"test": True}):
         with mock.patch.dict(
@@ -280,7 +273,7 @@ def test_repo_present_add_ruleset():
             ret = github_state.ruleset_present(
                 name="mock_repo_absent",
                 ruleset_type="repo",
-                profile="mock",
+                profile="test_ruleset",
                 owner="mock",
                 repo_name="mock_repo",
                 ruleset_params={"enforcement": "disabled"},
