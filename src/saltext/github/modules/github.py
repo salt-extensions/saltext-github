@@ -2172,12 +2172,14 @@ def list_rulesets(profile="github", **kwargs):
 
     if not kwargs.get("per_page"):
         try:
-            per_page = _get_config_value(profile, "per_page")
+            kwargs["per_page"] = _get_config_value(profile, "per_page")
         except CommandExecutionError:
-            per_page = None
+            kwargs["per_page"] = None
 
     try:
-        ret = _query(profile, action, header_dict=params["header_dict"], per_page=per_page)
+        ret = _query(
+            profile, action, header_dict=params["header_dict"], per_page=kwargs["per_page"]
+        )
         if not ret.get("error"):
             if ret["dict"]:
                 return ret["dict"]
