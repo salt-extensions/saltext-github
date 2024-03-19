@@ -2182,8 +2182,8 @@ def list_rulesets(profile="github", **kwargs):
         )
         if not ret.get("error"):
             if ret["dict"]:
-                return ret["dict"]
-            return None
+                return {"rulesets": ret["dict"]}
+            return {"rulesets": None}
         else:
             ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
             ret["result"] = False

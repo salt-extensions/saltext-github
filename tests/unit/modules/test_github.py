@@ -115,14 +115,14 @@ def test_list_rulesets(params):
         "status": 200,
     }
 
-    expected = [{"name": "mock_ruleset_1"}, {"name": "mock_ruleset_2"}]
+    expected = {"rulesets": [{"name": "mock_ruleset_1"}, {"name": "mock_ruleset_2"}]}
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
         assert github_module.list_rulesets(profile="test_ruleset", **params) == expected
 
     # test mock 200 status, no rulesets returned
     mock_query = {"dict": [], "status": 200}
-    expected = None
+    expected = {"rulesets": None}
 
     with mock.patch("salt.utils.http.query", return_value=mock_query):
         assert github_module.list_rulesets(profile="test_ruleset", **params) == expected

@@ -27,6 +27,8 @@ def configure_loader_modules():
 
 def test_repo_absent_no_changes():
     # test list rulesets are None
+    mock_query = mock.MagicMock(return_value={"rulesets": []})
+
     expected = {
         "name": "mock_repo_absent",
         "changes": {},
@@ -34,17 +36,18 @@ def test_repo_absent_no_changes():
         "comment": "Ruleset mock_repo_absent does not exist",
     }
 
-    ret = github_state.ruleset_absent(
-        name="mock_repo_absent",
-        ruleset_type="repo",
-        profile="test_ruleset",
-        owner="mock",
-        repo_name="mock_repo",
-    )
-    assert ret == expected
+    with mock.patch.dict(github_state.__salt__, {"github.list_rulesets": mock_query}):
+        ret = github_state.ruleset_absent(
+            name="mock_repo_absent",
+            ruleset_type="repo",
+            profile="test_ruleset",
+            owner="mock",
+            repo_name="mock_repo",
+        )
+        assert ret == expected
 
     # test list rulesets are returned but ruleset to be deleted is not listed
-    mock_query = mock.MagicMock(return_value=[{"name": "mocked_repo_absent"}])
+    mock_query = mock.MagicMock(return_value={"rulesets": [{"name": "mocked_repo_absent"}]})
 
     with mock.patch.dict(github_state.__salt__, {"github.list_rulesets": mock_query}):
         ret = github_state.ruleset_absent(
@@ -59,15 +62,16 @@ def test_repo_absent_no_changes():
     # test mode
     expected["result"] = None
 
-    with mock.patch.dict(github_state.__opts__, {"test": True}):
-        ret = github_state.ruleset_absent(
-            name="mock_repo_absent",
-            ruleset_type="repo",
-            profile="test_ruleset",
-            owner="mock",
-            repo_name="mock_repo",
-        )
-        assert ret == expected
+    with mock.patch.dict(github_state.__salt__, {"github.list_rulesets": mock_query}):
+        with mock.patch.dict(github_state.__opts__, {"test": True}):
+            ret = github_state.ruleset_absent(
+                name="mock_repo_absent",
+                ruleset_type="repo",
+                profile="test_ruleset",
+                owner="mock",
+                repo_name="mock_repo",
+            )
+            assert ret == expected
 
 
 def test_repo_absent_changes():
@@ -82,7 +86,7 @@ def test_repo_absent_changes():
         "comment": "Deleted ruleset mock_repo_absent",
     }
 
-    mock_query = mock.MagicMock(return_value=[{"name": "mock_repo_absent", "id": 1}])
+    mock_query = mock.MagicMock(return_value={"rulesets": [{"name": "mock_repo_absent", "id": 1}]})
     mock_delete = mock.MagicMock(return_value={"comment": "ruleset 1 successfully deleted"})
 
     with mock.patch.dict(
@@ -106,7 +110,7 @@ def test_repo_absent_changes():
         "comment": "Ruleset mock_repo_absent will be deleted",
     }
 
-    mock_query = mock.MagicMock(return_value=[{"name": "mock_repo_absent", "id": 1}])
+    mock_query = mock.MagicMock(return_value={"rulesets": [{"name": "mock_repo_absent", "id": 1}]})
     mock_delete = mock.MagicMock(return_value={"comment": "ruleset 1 successfully deleted"})
 
     with mock.patch.dict(github_state.__opts__, {"test": True}):
@@ -133,7 +137,7 @@ def test_repo_present_no_changes():
         "comment": "ruleset present",
     }
 
-    mock_query = mock.MagicMock(return_value=[{"name": "mock_repo_absent", "id": 1}])
+    mock_query = mock.MagicMock(return_value={"rulesets": [{"name": "mock_repo_absent", "id": 1}]})
     mock_ruleset = mock.MagicMock(return_value={"name": "mock_repo_absent", "id": 1})
 
     with mock.patch.dict(github_state.__opts__, {"test": True}):
@@ -179,7 +183,7 @@ def test_repo_present_update_ruleset():
         "comment": "ruleset updated",
     }
 
-    mock_query = mock.MagicMock(return_value=[{"name": "mock_repo_absent", "id": 1}])
+    mock_query = mock.MagicMock(return_value={"rulesets": [{"name": "mock_repo_absent", "id": 1}]})
     mock_ruleset = mock.MagicMock(
         return_value={"name": "mock_repo_absent", "id": 1, "target": "branch"}
     )
@@ -242,7 +246,7 @@ def test_repo_present_add_ruleset():
         "comment": "ruleset added",
     }
 
-    mock_query = mock.MagicMock(return_value=[])
+    mock_query = mock.MagicMock(return_value={"rulesets": None})
     mock_add = mock.MagicMock(
         return_value={"name": "mock_repo_absent", "id": 1, "enforcement": "disabled"}
     )
