@@ -773,20 +773,24 @@ def ruleset_absent(
     ret = {"name": name, "changes": {}, "result": None, "comment": ""}
 
     if ruleset_type not in ["org", "repo"]:
-        raise CommandExecutionError
+        ret["result"] = False
+        ret["comment"] = "ruleset_type not set to repo or org"
+        return ret
 
     if ruleset_type == "repo":
         kwargs.update({"owner": owner, "repo_name": repo_name, "ruleset_type": ruleset_type})
     if ruleset_type == "org":
         kwargs.update({"org_name": org_name, "ruleset_type": ruleset_type})
 
-    try:
-        rulesets = __salt__["github.list_rulesets"](profile, **kwargs)
-    except CommandExecutionError:
-        rulesets = None
+    rulesets = __salt__["github.list_rulesets"](profile, **kwargs)
 
-    if rulesets:
-        for ruleset in rulesets:
+    if rulesets.get("result") is False:
+        ret["result"] = False
+        ret["comment"] = "error listing rulesets"
+        return ret
+
+    if rulesets["rulesets"]:
+        for ruleset in rulesets["rulesets"]:
             if ruleset["name"] == name:
                 if __opts__["test"]:
                     ret["comment"] = f"Ruleset {name} will be deleted"
@@ -869,12 +873,17 @@ def ruleset_present(
 
     rulesets = __salt__["github.list_rulesets"](profile, **kwargs)
 
-    if rulesets:
-        for ruleset in rulesets:
+    if rulesets.get("result") is False:
+        ret["result"] = False
+        ret["comment"] = "error listing rulesets"
+        return ret
+
+    if rulesets["rulesets"]:
+        for ruleset in rulesets["rulesets"]:
             if ruleset["name"] == name:
                 kwargs.update({"ruleset_id": ruleset["id"]})
                 ruleset_info = __salt__["github.get_ruleset"](profile, **kwargs)
-                if ruleset_info["id"]:
+                if ruleset_info.get("id"):
                     for key in ruleset_info and ruleset_params:
                         if ruleset_info.get(key) != ruleset_params.get(key):
                             changes = {
@@ -900,8 +909,9 @@ def ruleset_present(
                         ret["changes"] = {}
                     return ret
                 else:
-                    if not ruleset_info:
-                        raise CommandExecutionError("error getting ruleset info")
+                    ret["comment"] = "Could not get ruleset"
+                    ret["result"] = False
+                    return ret
 
     changes = {"old": "No existing ruleset found", "new": "Ruleset created"}
     ret["changes"] = changes
