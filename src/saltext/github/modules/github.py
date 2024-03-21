@@ -1830,7 +1830,7 @@ def _query(
         header_dict = {}
 
     if not header_dict.get("Authorization"):
-        header_dict["Authorization"] = f"token {_get_config_value(profile, 'token')}"
+        header_dict["Authorization"] = f"Bearer {_get_config_value(profile, 'token')}"
     if per_page and "per_page" not in args.keys():
         args["per_page"] = per_page
 
