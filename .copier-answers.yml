@@ -9,7 +9,6 @@ license: apache
 loaders:
   - module
   - state
-  - utils
 max_salt_version: 3006
 no_saltext_namespace: false
 package_name: github
