@@ -2,6 +2,7 @@ from unittest import mock
 
 import pytest
 import salt.modules.config as config_module
+
 import saltext.github.states.github as github_state
 
 

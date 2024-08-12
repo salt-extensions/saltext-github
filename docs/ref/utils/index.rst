@@ -4,10 +4,9 @@ _________
 Utilities
 _________
 
-.. currentmodule:: saltext.github
+.. currentmodule:: saltext.github.utils
 
 .. autosummary::
     :toctree:
 
-    utils
-    utils.github
+    github
