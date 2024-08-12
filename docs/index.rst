@@ -1,7 +1,7 @@
 ``saltext-github``: Integrate Salt with Github
 ==============================================
 
-Salt Extension for interacting with Github
+Salt Extension for interacting with GitHub
 
 .. toctree::
   :maxdepth: 2
