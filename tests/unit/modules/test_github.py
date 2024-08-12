@@ -2,8 +2,9 @@ from unittest import mock
 
 import pytest
 import salt.modules.config as config_module
-import saltext.github.modules.github as github_module
 from salt.exceptions import CommandExecutionError
+
+import saltext.github.modules.github as github_module
 
 
 @pytest.fixture

@@ -13,6 +13,7 @@ This state is used to ensure presence of users in the Organization.
             - email: example@domain.com
             - username: 'gitexample'
 """
+
 import datetime
 import logging
 import time
@@ -667,9 +668,9 @@ def repo_present(
                 )
                 if not current_permission:
                     ret["result"] = False
-                    ret[
-                        "comment"
-                    ] = f"Failed to determine current permission for team {team_name} in repo {name}"
+                    ret["comment"] = (
+                        f"Failed to determine current permission for team {team_name} in repo {name}"
+                    )
                     return ret
                 elif current_permission != permission:
                     team_change = {
@@ -687,9 +688,9 @@ def repo_present(
                             ret["changes"][team_name] = team_change
                         else:
                             ret["result"] = False
-                            ret[
-                                "comment"
-                            ] = f"Failed to set permission on repo {name} from team {team_name} to {permission}."
+                            ret["comment"] = (
+                                f"Failed to set permission on repo {name} from team {team_name} to {permission}."
+                            )
                             return ret
     return ret
 
@@ -738,9 +739,9 @@ def repo_absent(name, profile="github", **kwargs):
             ret["changes"].setdefault("new", f"Repo {name} deleted")
             ret["result"] = True
         else:
-            ret[
-                "comment"
-            ] = f"Failed to delete repo {name}. Ensure the delete_repo scope is enabled if using OAuth."
+            ret["comment"] = (
+                f"Failed to delete repo {name}. Ensure the delete_repo scope is enabled if using OAuth."
+            )
             ret["result"] = False
     return ret
 

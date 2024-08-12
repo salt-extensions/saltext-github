@@ -1,6 +1,7 @@
 """
 Connection library for GitHub
 """
+
 import logging
 
 import salt.utils.http

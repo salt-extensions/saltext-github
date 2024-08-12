@@ -28,6 +28,7 @@ For example:
       # in an automated way. set this to True to allow privacy modifications
       allow_repo_privacy_changes: False
 """
+
 import logging
 
 import salt.utils.http
