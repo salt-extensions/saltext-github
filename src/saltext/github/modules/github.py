@@ -227,7 +227,7 @@ def get_user(name, profile="github", user_details=False):
     response["url"] = user.url
 
     try:
-        headers, data = organization._requester.requestJsonAndCheck(
+        _, data = organization._requester.requestJsonAndCheck(
             "GET", organization.url + "/memberships/" + user._identity
         )
     except UnknownObjectException:
@@ -267,7 +267,7 @@ def add_user(name, profile="github"):
         log.exception("Resource not found")
         return False
 
-    headers, data = organization._requester.requestJsonAndCheck(
+    _, data = organization._requester.requestJsonAndCheck(
         "PUT", organization.url + "/memberships/" + github_named_user._identity
     )
 
@@ -1354,9 +1354,7 @@ def add_team_repo(repo_name, team_name, profile="github", permission=None):
     if permission is not None:
         params = {"permission": permission}
 
-    headers, data = team._requester.requestJsonAndCheck(
-        "PUT", team.url + "/repos/" + repo._identity, input=params
-    )
+    team._requester.requestJsonAndCheck("PUT", team.url + "/repos/" + repo._identity, input=params)
     # Try to refresh cache
     list_team_repos(team_name, profile=profile, ignore_cache=True)
     return True
@@ -1542,7 +1540,7 @@ def add_team_member(name, team_name, profile="github"):
     try:
         # Can't use team.add_membership due to this bug that hasn't made it into
         # a PyGithub release yet https://github.com/PyGithub/PyGithub/issues/363
-        headers, data = team._requester.requestJsonAndCheck(
+        team._requester.requestJsonAndCheck(
             "PUT",
             team.url + "/memberships/" + member._identity,
             input={"role": "member"},
