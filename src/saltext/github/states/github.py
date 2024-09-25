@@ -99,8 +99,6 @@ def absent(name, profile="github", **kwargs):
         Github handle of the user in organization
 
     """
-    email = kwargs.get("email")
-    full_name = kwargs.get("fullname")
 
     ret = {
         "name": name,
@@ -238,7 +236,6 @@ def team_present(
                     ret["comment"] = "Failed to update team properties."
                     return ret
 
-        manage_repos = repo_names is not None
         current_repos = set(__salt__["github.list_team_repos"](name, profile=profile).keys())
         repo_names = set(repo_names or [])
 
@@ -602,7 +599,7 @@ def repo_present(
                         name, profile=profile, **kwargs
                     )
                     break
-                except CommandExecutionError as e:
+                except CommandExecutionError:
                     log.info("Attempt %s to fetch new repo %s failed", attempt, name)
 
             if current_teams is None:
