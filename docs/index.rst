@@ -1,4 +1,4 @@
-``saltext-github``: Integrate Salt with Github
+``saltext-github``: Integrate Salt with GitHub
 ==============================================
 
 Salt Extension for interacting with GitHub
