@@ -35,7 +35,6 @@ import salt.utils.http
 import salt.utils.json
 from salt.exceptions import CommandExecutionError
 
-HAS_LIBS = False
 try:
     # pylint: disable=no-name-in-module
     import github
@@ -46,7 +45,7 @@ try:
     # pylint: enable=no-name-in-module
     HAS_LIBS = True
 except ImportError:
-    pass
+    HAS_LIBS = False
 
 log = logging.getLogger(__name__)
 
