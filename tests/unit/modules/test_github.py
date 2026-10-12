@@ -13,8 +13,11 @@ from saltext.github.utils.github.exceptions import GitHubApiError
 @pytest.fixture
 def configure_loader_modules():
     module_globals = {
-        "__salt__": {"config.option": config_mod.option},
-        "__opts__": {"test_ruleset": {"ruleset_type": "mocked_value"}},
+        "__salt__": {"config.get": config_mod.get},
+        "__opts__": {
+            "test_ruleset": {"ruleset_type": "mocked_value"},
+            "sdb_profile": {"token": "sdb://osenv/GITHUB_TOKEN"},
+        },
     }
     return {
         github_mod: module_globals,
@@ -47,6 +50,18 @@ def test_get_issue_without_id_returns_empty():
 def test_get_milestone_without_id_returns_empty():
     with patch.object(gh_client, "query", return_value={"message": "no id here"}):
         assert not github_mod.get_milestone(1, repo_name="repo")
+
+
+def test__get_config_value_renders_sdb_uris():
+    # This matters for pillar-sourced profiles, which are not rendered
+    # by Salt automatically, unlike values in the minion configuration.
+    def fake_sdb_get(value, *args, **kwargs):  # pylint: disable=unused-argument
+        if isinstance(value, str) and value.startswith("sdb://"):
+            return "rendered-token"
+        return value
+
+    with patch.object(config_mod.sdb, "sdb_get", side_effect=fake_sdb_get):
+        assert github_mod._get_config_value("sdb_profile", "token") == "rendered-token"
 
 
 def test__resolve_ruleset_params():

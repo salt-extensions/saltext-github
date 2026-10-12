@@ -1,7 +1,6 @@
 from unittest import mock
 
 import pytest
-import salt.modules.config as config_module
 
 from saltext.github.states import github as github_mod
 
@@ -18,10 +17,6 @@ def configure_loader_modules():
                 "github.add_ruleset": mock.MagicMock(return_value=None),
             },
             "__opts__": {"test": False},
-        },
-        config_module: {
-            "__salt__": {"config.option": config_module.option},
-            "__opts__": {"test_ruleset": {"ruleset_type": "mocked_value"}},
         },
     }
 

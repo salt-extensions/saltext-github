@@ -15,6 +15,23 @@ will use the ``github`` key by default, if defined.
     Added the ``api_url`` configuration option to override the API endpoint
     we run against. Can be used for GitHub Enterprise instances.
 
+.. versionadded:: 1.1.0
+
+    Profile configuration values containing SDB URIs are now rendered on
+    access. Salt itself only renders them inside the minion/master
+    configuration during startup, so this makes them work in pillar-sourced
+    profiles as well:
+
+    .. code-block:: yaml
+
+        # Requires a corresponding SDB profile in the minion configuration,
+        # e.g.
+        #   osenv:
+        #     driver: env
+        github:
+          token: sdb://osenv/GITHUB_TOKEN
+          org_name: my_organization
+
 For example:
 
 .. code-block:: yaml
@@ -90,14 +107,19 @@ def _get_config_value(profile, config_name):
         The configuration item's name to use to return configuration values.
     """
     if "gh_profile" not in __context__ or profile not in __context__["gh_profile"]:
-        config = __salt__["config.option"](profile)
-        if not config:
+        if not __salt__["config.get"](profile):
             raise CommandExecutionError(
                 f"Authentication information could not be found for the '{profile}' profile."
             )
-        __context__.setdefault("gh_profile", {})[profile] = config
+        __context__.setdefault("gh_profile", {})[profile] = {}
 
-    config_value = __context__["gh_profile"][profile].get(config_name)
+    cache = __context__["gh_profile"][profile]
+    if config_name not in cache:
+        # Unlike config.option, config.get resolves SDB URIs in scalar values,
+        # hence request each value separately and cache the rendered result.
+        cache[config_name] = __salt__["config.get"](f"{profile}:{config_name}", default=None)
+
+    config_value = cache[config_name]
     if config_value is None:
         raise CommandExecutionError(
             f"The '{config_name}' parameter was not found in the '{profile}' profile."
