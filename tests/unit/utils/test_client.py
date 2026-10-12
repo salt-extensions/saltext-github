@@ -4,9 +4,9 @@ import github as pygithub
 import pytest
 from salt.exceptions import CommandExecutionError
 
-from saltext.github.utils.github import client as gh_client
-from saltext.github.utils.github.exceptions import GitHubApiError
-from saltext.github.utils.github.exceptions import GitHubNotFoundError
+from saltext.github.utils.gh import client as gh_client
+from saltext.github.utils.gh.exceptions import GitHubApiError
+from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
 
 @pytest.fixture

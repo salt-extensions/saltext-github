@@ -8,8 +8,8 @@ from github.GithubException import UnknownObjectException
 from salt.exceptions import CommandExecutionError
 
 from saltext.github.utils import filter_unset
-from saltext.github.utils.github.client import api_request
-from saltext.github.utils.github.exceptions import GitHubNotFoundError
+from saltext.github.utils.gh.client import api_request
+from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def list_all(conn, ignore_cache=False):
     objects (cached).
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ignore_cache
         Bypass the cached repository list.
@@ -71,7 +71,7 @@ def get_info(conn, name, ignore_cache=False):
     Return information about a single repository as a dictionary (cached).
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
         The name of the repository.
@@ -79,7 +79,7 @@ def get_info(conn, name, ignore_cache=False):
     ignore_cache
         Bypass the cached repository information.
 
-    Raises :class:`~saltext.github.utils.github.exceptions.GitHubNotFoundError`
+    Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the repository does not exist.
     """
     key = ("repo_info", name.lower())
@@ -106,12 +106,12 @@ def get_teams(conn, name):
     Return the teams a repository belongs to.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
         The name of the repository.
 
-    Raises :class:`~saltext.github.utils.github.exceptions.GitHubNotFoundError`
+    Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the repository does not exist.
     """
     try:
@@ -146,7 +146,7 @@ def create(
     Create a new repository in the organization.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
         The name of the repository to create.
@@ -187,7 +187,7 @@ def update(
     Update an existing repository in the organization.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
         The name of the repository to update.
@@ -225,7 +225,7 @@ def delete(conn, name):
     Delete a repository from the organization.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
         The name of the repository to delete.

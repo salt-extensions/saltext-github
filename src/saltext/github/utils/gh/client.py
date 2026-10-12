@@ -2,8 +2,8 @@
 Shared plumbing for talking to the GitHub v3 API via PyGithub.
 
 The functions in this package operate on a :class:`GitHubConnection` and
-raise :class:`~saltext.github.utils.github.exceptions.GitHubApiError`
-(or its :class:`~saltext.github.utils.github.exceptions.GitHubNotFoundError`
+raise :class:`~saltext.github.utils.gh.exceptions.GitHubApiError`
+(or its :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
 subclass) on API errors. They are shared between the classic ``github``
 execution module and future resource modules.
 """
@@ -17,8 +17,8 @@ import github
 from github.GithubException import UnknownObjectException
 from salt.exceptions import CommandExecutionError
 
-from saltext.github.utils.github.exceptions import GitHubApiError
-from saltext.github.utils.github.exceptions import GitHubNotFoundError
+from saltext.github.utils.gh.exceptions import GitHubApiError
+from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
 log = logging.getLogger(__name__)
 

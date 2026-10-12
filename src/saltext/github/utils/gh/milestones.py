@@ -4,7 +4,7 @@ Operations on GitHub repository milestones.
 
 import logging
 
-from saltext.github.utils.github import client
+from saltext.github.utils.gh import client
 
 log = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ def get(conn, repo_name, number):
     Return the raw data of a single milestone.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
         The name of the repository the milestone belongs to.
@@ -39,7 +39,7 @@ def list_all(
     search options.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
         The name of the repository whose milestones to list.

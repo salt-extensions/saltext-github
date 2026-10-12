@@ -61,16 +61,16 @@ from salt.exceptions import CommandExecutionError
 from saltext.github.utils import filter_unset
 
 try:
-    from saltext.github.utils.github import client as gh_client
-    from saltext.github.utils.github import issues as gh_issues
-    from saltext.github.utils.github import milestones as gh_milestones
-    from saltext.github.utils.github import pulls as gh_pulls
-    from saltext.github.utils.github import repos as gh_repos
-    from saltext.github.utils.github import rulesets as gh_rulesets
-    from saltext.github.utils.github import teams as gh_teams
-    from saltext.github.utils.github import users as gh_users
-    from saltext.github.utils.github.exceptions import GitHubApiError
-    from saltext.github.utils.github.exceptions import GitHubNotFoundError
+    from saltext.github.utils.gh import client as gh_client
+    from saltext.github.utils.gh import issues as gh_issues
+    from saltext.github.utils.gh import milestones as gh_milestones
+    from saltext.github.utils.gh import pulls as gh_pulls
+    from saltext.github.utils.gh import repos as gh_repos
+    from saltext.github.utils.gh import rulesets as gh_rulesets
+    from saltext.github.utils.gh import teams as gh_teams
+    from saltext.github.utils.gh import users as gh_users
+    from saltext.github.utils.gh.exceptions import GitHubApiError
+    from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
     HAS_LIBS = True
 except ImportError:  # pragma: no cover

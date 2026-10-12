@@ -6,7 +6,7 @@ internal cache refreshes (which used to fall back to the default profile).
 import pytest
 from salt.exceptions import CommandExecutionError
 
-from saltext.github.utils.github.exceptions import GitHubNotFoundError
+from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
 
 @pytest.fixture(scope="module")

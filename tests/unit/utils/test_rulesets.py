@@ -1,7 +1,7 @@
 import pytest
 from salt.exceptions import CommandExecutionError
 
-from saltext.github.utils.github import rulesets as gh_rulesets
+from saltext.github.utils.gh import rulesets as gh_rulesets
 
 
 def test_build_path_repo():

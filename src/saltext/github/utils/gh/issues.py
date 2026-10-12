@@ -4,7 +4,7 @@ Operations on GitHub repository issues.
 
 import logging
 
-from saltext.github.utils.github import client
+from saltext.github.utils.gh import client
 
 log = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ def get(conn, repo_name, number):
     Return the raw data of a single issue.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
         The name of the repository the issue belongs to.
@@ -30,7 +30,7 @@ def get_comments(conn, repo_name, number, since=None):
     Return the raw comment data for a single issue.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
         The name of the repository the issue belongs to.
@@ -70,7 +70,7 @@ def list_all(
     options. Pull requests are excluded.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
         The name of the repository whose issues to list.
