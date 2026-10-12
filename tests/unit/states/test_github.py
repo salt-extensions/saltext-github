@@ -3,13 +3,13 @@ from unittest import mock
 import pytest
 import salt.modules.config as config_module
 
-import saltext.github.states.github as github_state
+from saltext.github.states import github as github_mod
 
 
 @pytest.fixture
 def configure_loader_modules():
     return {
-        github_state: {
+        github_mod: {
             "__salt__": {
                 "github.list_rulesets": mock.MagicMock(return_value=None),
                 "github.delete_ruleset": mock.MagicMock(return_value=None),
@@ -37,8 +37,8 @@ def test_repo_absent_no_changes():
         "comment": "Ruleset mock_repo_absent does not exist",
     }
 
-    with mock.patch.dict(github_state.__salt__, {"github.list_rulesets": mock_query}):
-        ret = github_state.ruleset_absent(
+    with mock.patch.dict(github_mod.__salt__, {"github.list_rulesets": mock_query}):
+        ret = github_mod.ruleset_absent(
             name="mock_repo_absent",
             ruleset_type="repo",
             profile="test_ruleset",
@@ -50,8 +50,8 @@ def test_repo_absent_no_changes():
     # test list rulesets are returned but ruleset to be deleted is not listed
     mock_query = mock.MagicMock(return_value={"rulesets": [{"name": "mocked_repo_absent"}]})
 
-    with mock.patch.dict(github_state.__salt__, {"github.list_rulesets": mock_query}):
-        ret = github_state.ruleset_absent(
+    with mock.patch.dict(github_mod.__salt__, {"github.list_rulesets": mock_query}):
+        ret = github_mod.ruleset_absent(
             name="mock_repo_absent",
             ruleset_type="repo",
             profile="test_ruleset",
@@ -61,9 +61,9 @@ def test_repo_absent_no_changes():
     assert ret == expected
 
     # test mode: an already absent ruleset is still a fulfilled state
-    with mock.patch.dict(github_state.__salt__, {"github.list_rulesets": mock_query}):
-        with mock.patch.dict(github_state.__opts__, {"test": True}):
-            ret = github_state.ruleset_absent(
+    with mock.patch.dict(github_mod.__salt__, {"github.list_rulesets": mock_query}):
+        with mock.patch.dict(github_mod.__opts__, {"test": True}):
+            ret = github_mod.ruleset_absent(
                 name="mock_repo_absent",
                 ruleset_type="repo",
                 profile="test_ruleset",
@@ -89,10 +89,10 @@ def test_repo_absent_changes():
     mock_delete = mock.MagicMock(return_value={"comment": "ruleset 1 successfully deleted"})
 
     with mock.patch.dict(
-        github_state.__salt__,
+        github_mod.__salt__,
         {"github.list_rulesets": mock_query, "github.delete_ruleset": mock_delete},
     ):
-        ret = github_state.ruleset_absent(
+        ret = github_mod.ruleset_absent(
             name="mock_repo_absent",
             ruleset_type="repo",
             profile="test_ruleset",
@@ -115,12 +115,12 @@ def test_repo_absent_changes():
     mock_query = mock.MagicMock(return_value={"rulesets": [{"name": "mock_repo_absent", "id": 1}]})
     mock_delete = mock.MagicMock(return_value={"comment": "ruleset 1 successfully deleted"})
 
-    with mock.patch.dict(github_state.__opts__, {"test": True}):
+    with mock.patch.dict(github_mod.__opts__, {"test": True}):
         with mock.patch.dict(
-            github_state.__salt__,
+            github_mod.__salt__,
             {"github.list_rulesets": mock_query, "github.delete_ruleset": mock_delete},
         ):
-            ret = github_state.ruleset_absent(
+            ret = github_mod.ruleset_absent(
                 name="mock_repo_absent",
                 ruleset_type="repo",
                 profile="test_ruleset",
@@ -142,12 +142,12 @@ def test_repo_present_no_changes():
     mock_query = mock.MagicMock(return_value={"rulesets": [{"name": "mock_repo_absent", "id": 1}]})
     mock_ruleset = mock.MagicMock(return_value={"name": "mock_repo_absent", "id": 1})
 
-    with mock.patch.dict(github_state.__opts__, {"test": True}):
+    with mock.patch.dict(github_mod.__opts__, {"test": True}):
         with mock.patch.dict(
-            github_state.__salt__,
+            github_mod.__salt__,
             {"github.list_rulesets": mock_query, "github.get_ruleset": mock_ruleset},
         ):
-            ret = github_state.ruleset_present(
+            ret = github_mod.ruleset_present(
                 name="mock_repo_absent",
                 ruleset_type="repo",
                 profile="test_ruleset",
@@ -158,10 +158,10 @@ def test_repo_present_no_changes():
             assert ret == expected
 
     with mock.patch.dict(
-        github_state.__salt__,
+        github_mod.__salt__,
         {"github.list_rulesets": mock_query, "github.get_ruleset": mock_ruleset},
     ):
-        ret = github_state.ruleset_present(
+        ret = github_mod.ruleset_present(
             name="mock_repo_absent",
             ruleset_type="repo",
             profile="test_ruleset",
@@ -192,14 +192,14 @@ def test_repo_present_update_ruleset():
     )
 
     with mock.patch.dict(
-        github_state.__salt__,
+        github_mod.__salt__,
         {
             "github.list_rulesets": mock_query,
             "github.get_ruleset": mock_ruleset,
             "github.update_ruleset": mock_update,
         },
     ):
-        ret = github_state.ruleset_present(
+        ret = github_mod.ruleset_present(
             name="mock_repo_absent",
             ruleset_type="repo",
             profile="test_ruleset",
@@ -221,15 +221,15 @@ def test_repo_present_update_ruleset():
     }
 
     with mock.patch.dict(
-        github_state.__salt__,
+        github_mod.__salt__,
         {
             "github.list_rulesets": mock_query,
             "github.get_ruleset": mock_ruleset,
             "github.update_ruleset": mock_update,
         },
     ):
-        with mock.patch.dict(github_state.__opts__, {"test": True}):
-            ret = github_state.ruleset_present(
+        with mock.patch.dict(github_mod.__opts__, {"test": True}):
+            ret = github_mod.ruleset_present(
                 name="mock_repo_absent",
                 ruleset_type="repo",
                 profile="test_ruleset",
@@ -255,9 +255,9 @@ def test_repo_present_add_ruleset():
     )
 
     with mock.patch.dict(
-        github_state.__salt__, {"github.list_rulesets": mock_query, "github.add_ruleset": mock_add}
+        github_mod.__salt__, {"github.list_rulesets": mock_query, "github.add_ruleset": mock_add}
     ):
-        ret = github_state.ruleset_present(
+        ret = github_mod.ruleset_present(
             name="mock_repo_absent",
             ruleset_type="repo",
             profile="test_ruleset",
@@ -271,12 +271,12 @@ def test_repo_present_add_ruleset():
     expected["result"] = None
     expected["comment"] = "ruleset will be added"
 
-    with mock.patch.dict(github_state.__opts__, {"test": True}):
+    with mock.patch.dict(github_mod.__opts__, {"test": True}):
         with mock.patch.dict(
-            github_state.__salt__,
+            github_mod.__salt__,
             {"github.list_rulesets": mock_query, "github.add_ruleset": mock_add},
         ):
-            ret = github_state.ruleset_present(
+            ret = github_mod.ruleset_present(
                 name="mock_repo_absent",
                 ruleset_type="repo",
                 profile="test_ruleset",

@@ -58,12 +58,12 @@ class TeamRoutes(APIBase):
         raise TypeError("Missing team_id or team_slug in match")
 
     @GET("orgs/<org>/teams")
-    def _list_teams(self, match, query, body):
+    def _list_teams(self, match, _query, _body):
         org = self._resolve_org(match)
         return 200, [team.payload() for team in sorted(org.teams, key=lambda x: x.id)]
 
     @POST("orgs/<org>/teams")
-    def _create_team(self, match, query, body):
+    def _create_team(self, match, _query, body):
         org = self._resolve_org(match)
         if "privacy" not in body:
             body["privacy"] = "secret"
@@ -76,11 +76,11 @@ class TeamRoutes(APIBase):
         return 201, team.payload()
 
     @GET(*_team_uris())
-    def _get_team(self, match, query, body):
+    def _get_team(self, match, _query, _body):
         return 200, self._resolve_team(match).payload()
 
     @PATCH(*_team_uris())
-    def _edit_team(self, match, query, body):
+    def _edit_team(self, match, _query, body):
         team = self._resolve_team(match)
         new_team = team.update(
             **{
@@ -92,13 +92,13 @@ class TeamRoutes(APIBase):
         return 200, new_team.payload()
 
     @DELETE(*_team_uris())
-    def _delete_team(self, match, query, body):
+    def _delete_team(self, match, _query, _body):
         team = self._resolve_team(match)
         team.org.remove_team(team.slug)
         return 204
 
     @GET(*_team_uris("repos"))
-    def _team_repos(self, match, query, body):
+    def _team_repos(self, match, _query, _body):
         team = self._resolve_team(match)
         return 200, [
             self.state.get_repo(repo_id).team_payload(permission)
@@ -106,28 +106,28 @@ class TeamRoutes(APIBase):
         ]
 
     @PUT(*_team_uris("repos/<repo>"))
-    def _team_add_repo(self, match, query, body):
+    def _team_add_repo(self, match, _query, body):
         team = self._resolve_team(match)
         repo = self.state.get_repo((match["owner"], match["repo"]))
         team.add_repo(repo, (body or {}).get("permission", "pull"))
         return 204
 
     @DELETE(*_team_uris("repos/<repo>"))
-    def _team_remove_repo(self, match, query, body):
+    def _team_remove_repo(self, match, _query, _body):
         team = self._resolve_team(match)
         repo = self.state.get_repo((match["owner"], match["repo"]))
         team.remove_repo(repo)
         return 204
 
     @GET(*_team_uris("members"))
-    def _team_members(self, match, query, body):
+    def _team_members(self, match, _query, _body):
         team = self._resolve_team(match)
         return 200, [
             member.user.payload() for member in sorted(team.members, key=lambda x: x.data.login)
         ]
 
     @GET(*_team_uris("memberships/<login>"))
-    def _team_get_member(self, match, query, body):
+    def _team_get_member(self, match, _query, _body):
         team = self._resolve_team(match)
         login = match["login"]
         if login in team.data.members:
@@ -135,13 +135,13 @@ class TeamRoutes(APIBase):
         raise NotFound(login)
 
     @DELETE(*_team_uris("memberships/<login>"))
-    def _delete_membership(self, match, query, body):
+    def _delete_membership(self, match, _query, _body):
         team = self._resolve_team(match)
         team.remove_member(match["login"])
         return 204
 
     @PUT(*_team_uris("memberships/<login>"))
-    def _team_add_member(self, match, query, body):
+    def _team_add_member(self, match, _query, _body):
         team = self._resolve_team(match)
         membership = team.add_member(match["login"])
         return 200, membership.payload()

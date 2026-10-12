@@ -2,21 +2,21 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
-import salt.modules.config as config_module
 from salt.exceptions import CommandExecutionError
+from salt.modules import config as config_mod
 
-import saltext.github.modules.github as github_module
+from saltext.github.modules import github as github_mod
 
 
 @pytest.fixture
 def configure_loader_modules():
     module_globals = {
-        "__salt__": {"config.option": config_module.option},
+        "__salt__": {"config.option": config_mod.option},
         "__opts__": {"test_ruleset": {"ruleset_type": "mocked_value"}},
     }
     return {
-        github_module: module_globals,
-        config_module: module_globals,
+        github_mod: module_globals,
+        config_mod: module_globals,
     }
 
 
@@ -36,8 +36,8 @@ def test__query_decodes_json_string_data():
     requester.requestJson.return_value = (200, {}, '{"written": true}')
     client = MagicMock(requester=requester)
 
-    with patch.object(github_module, "_get_client", return_value=client):
-        ret = github_module._query(
+    with patch.object(github_mod, "_get_client", return_value=client):
+        ret = github_mod._query(
             "test_ruleset", action="repos", method="POST", data='{"some": "payload"}'
         )
 
@@ -54,8 +54,8 @@ def test__query_github_exception():
     requester.requestJson.side_effect = pygithub.GithubException(502, {"message": "bad gateway"})
     client = MagicMock(requester=requester)
 
-    with patch.object(github_module, "_get_client", return_value=client):
-        ret = github_module._query("test_ruleset", action="repos")
+    with patch.object(github_mod, "_get_client", return_value=client):
+        ret = github_mod._query("test_ruleset", action="repos")
 
     assert ret["status"] == 502
     assert "bad gateway" in ret["error"]
@@ -66,19 +66,19 @@ def test__query_unexpected_exception():
     requester.requestJson.side_effect = OSError("connection refused")
     client = MagicMock(requester=requester)
 
-    with patch.object(github_module, "_get_client", return_value=client):
+    with patch.object(github_mod, "_get_client", return_value=client):
         with pytest.raises(CommandExecutionError, match="connection refused"):
-            github_module._query("test_ruleset", action="repos")
+            github_mod._query("test_ruleset", action="repos")
 
 
 def test__check_ruleset_params():
     ## test no valid config
     with pytest.raises(CommandExecutionError):
-        github_module._check_ruleset_params(profile="test_ruleset")
+        github_mod._check_ruleset_params(profile="test_ruleset")
 
     # test cli config
     kwargs = {"ruleset_type": "repo", "repo_name": "mock_repo_name", "owner": "mock_owner"}
-    ret = github_module._check_ruleset_params(profile="test_ruleset", **kwargs)
+    ret = github_mod._check_ruleset_params(profile="test_ruleset", **kwargs)
     assert ret == (
         ["repos", "mock_owner", "mock_repo_name", "rulesets"],
         {},
@@ -97,8 +97,8 @@ def test_get_ruleset(params):
     mock_query = {"dict": {"id": "1"}, "status": 200}
     expected = {"id": "1"}
 
-    with patch.object(github_module, "_query", return_value=mock_query):
-        assert github_module.get_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value=mock_query):
+        assert github_mod.get_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock 404 error
     mock_query = {"error": "404 not found", "status": 404}
@@ -109,13 +109,13 @@ def test_get_ruleset(params):
         "result": False,
     }
 
-    with patch.object(github_module, "_query", return_value=mock_query):
-        assert github_module.get_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value=mock_query):
+        assert github_mod.get_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock empty return
     expected = {"comment": "Error getting ruleset", "result": False}
-    with patch.object(github_module, "_query", side_effect=CommandExecutionError):
-        assert github_module.get_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", side_effect=CommandExecutionError):
+        assert github_mod.get_ruleset(profile="test_ruleset", **params) == expected
 
 
 def test_add_ruleset(params):
@@ -126,8 +126,8 @@ def test_add_ruleset(params):
 
     expected = {"name": "mock_name", "enforcement": "disabled"}
 
-    with patch.object(github_module, "_query", return_value=mock_query):
-        assert github_module.add_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value=mock_query):
+        assert github_mod.add_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock 404 error
     expected = {
@@ -137,16 +137,14 @@ def test_add_ruleset(params):
         "result": False,
     }
 
-    with patch.object(
-        github_module, "_query", return_value={"error": "404 not found", "status": 404}
-    ):
-        assert github_module.add_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value={"error": "404 not found", "status": 404}):
+        assert github_mod.add_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock empty return
     expected = {"comment": "Error adding ruleset", "result": False}
 
-    with patch.object(github_module, "_query", side_effect=CommandExecutionError):
-        assert github_module.add_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", side_effect=CommandExecutionError):
+        assert github_mod.add_ruleset(profile="test_ruleset", **params) == expected
 
 
 def test_list_rulesets(params):
@@ -159,15 +157,15 @@ def test_list_rulesets(params):
 
     expected = {"rulesets": [{"name": "mock_ruleset_1"}, {"name": "mock_ruleset_2"}]}
 
-    with patch.object(github_module, "_query", return_value=mock_query):
-        assert github_module.list_rulesets(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value=mock_query):
+        assert github_mod.list_rulesets(profile="test_ruleset", **params) == expected
 
     # test mock 200 status, no rulesets returned
     mock_query = {"dict": [], "status": 200}
     expected = {"rulesets": None}
 
-    with patch.object(github_module, "_query", return_value=mock_query):
-        assert github_module.list_rulesets(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value=mock_query):
+        assert github_mod.list_rulesets(profile="test_ruleset", **params) == expected
 
     # test mock 404 error
     mock_query = {"error": "404 not found", "status": 404}
@@ -178,13 +176,13 @@ def test_list_rulesets(params):
         "result": False,
     }
 
-    with patch.object(github_module, "_query", return_value=mock_query):
-        assert github_module.list_rulesets(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value=mock_query):
+        assert github_mod.list_rulesets(profile="test_ruleset", **params) == expected
 
     # test mock empty return
     expected = {"comment": "Error getting rulesets", "result": False}
-    with patch.object(github_module, "_query", side_effect=CommandExecutionError):
-        assert github_module.list_rulesets(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", side_effect=CommandExecutionError):
+        assert github_mod.list_rulesets(profile="test_ruleset", **params) == expected
 
 
 def test_update_ruleset(params):
@@ -196,8 +194,8 @@ def test_update_ruleset(params):
 
     expected = {"name": "mock_name", "enforcement": "disabled"}
 
-    with patch.object(github_module, "_query", return_value=mock_query):
-        assert github_module.update_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value=mock_query):
+        assert github_mod.update_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock 404 error
     mock_query = {"error": "404 not found", "status": 404}
@@ -208,13 +206,13 @@ def test_update_ruleset(params):
         "result": False,
     }
 
-    with patch.object(github_module, "_query", return_value=mock_query):
-        assert github_module.update_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value=mock_query):
+        assert github_mod.update_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock empty return
     expected = {"comment": "Error updating ruleset", "result": False}
-    with patch.object(github_module, "_query", side_effect=CommandExecutionError):
-        assert github_module.update_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", side_effect=CommandExecutionError):
+        assert github_mod.update_ruleset(profile="test_ruleset", **params) == expected
 
 
 def test_delete_ruleset(params):
@@ -224,8 +222,8 @@ def test_delete_ruleset(params):
     mock_query = {"status": 204}
     expected = {"comment": "ruleset 1 successfully deleted", "status": 204}
 
-    with patch.object(github_module, "_query", return_value=mock_query):
-        assert github_module.delete_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value=mock_query):
+        assert github_mod.delete_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock 404 error
     mock_query = {"error": "404 not found", "status": 404}
@@ -236,10 +234,10 @@ def test_delete_ruleset(params):
         "result": False,
     }
 
-    with patch.object(github_module, "_query", return_value=mock_query):
-        assert github_module.delete_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", return_value=mock_query):
+        assert github_mod.delete_ruleset(profile="test_ruleset", **params) == expected
 
     # test mock empty return
     expected = {"comment": "Error deleting ruleset", "result": False}
-    with patch.object(github_module, "_query", side_effect=CommandExecutionError):
-        assert github_module.delete_ruleset(profile="test_ruleset", **params) == expected
+    with patch.object(github_mod, "_query", side_effect=CommandExecutionError):
+        assert github_mod.delete_ruleset(profile="test_ruleset", **params) == expected

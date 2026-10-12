@@ -12,12 +12,12 @@ from tests.support.github.routing import POST
 
 class RepoRoutes(APIBase):
     @GET("orgs/<org>/repos")
-    def _list_repos(self, match, query, body):
+    def _list_repos(self, match, _query, _body):
         org = self._resolve_org(match)
         return 200, [repo.payload() for repo in sorted(org.repos, key=lambda x: x.name)]
 
     @POST("orgs/<org>/repos")
-    def _create_repo(self, match, query, body):
+    def _create_repo(self, match, _query, body):
         org = self._resolve_org(match)
         name = body["name"]
         repo_params = {"private": bool(body.get("private"))}
@@ -28,12 +28,12 @@ class RepoRoutes(APIBase):
         return 201, repo.payload()
 
     @GET("repos/<org>/<repo>")
-    def _get_repo(self, match, query, body):
+    def _get_repo(self, match, _query, _body):
         org = self._resolve_org(match)
         return 200, org.get_repo(match["repo"]).payload()
 
     @PATCH("repos/<org>/<repo>")
-    def _edit_repo(self, match, query, body):
+    def _edit_repo(self, match, _query, body):
         repo = self._resolve_repo(match)
         upd = {}
         for fld, value in body.items():
@@ -42,13 +42,13 @@ class RepoRoutes(APIBase):
         return 200, repo.update(**upd).payload()
 
     @DELETE("repos/<org>/<repo>")
-    def _delete_repo(self, match, query, body):
+    def _delete_repo(self, match, _query, _body):
         org = self._resolve_org(match)
         org.remove_repo(match["repo"])
         return 204
 
     @GET("repos/<org>/<repo>/teams")
-    def _repo_teams(self, match, query, body):
+    def _repo_teams(self, match, _query, _body):
         repo = self._resolve_repo(match)
         owner = repo.owner
         if not isinstance(owner, Organization):

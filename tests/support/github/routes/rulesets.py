@@ -19,57 +19,57 @@ class RulesetRoutes(APIBase):
         return org.get_ruleset(match["ruleset_id"])
 
     @GET("repos/<org>/<repo>/rulesets")
-    def _list_repo_rulesets(self, match, query, body):
+    def _list_repo_rulesets(self, match, _query, _body):
         repo = self._resolve_repo(match)
         rulesets = [ruleset.payload() for ruleset in repo.rulesets]
         return 200, rulesets
 
     @GET("orgs/<org>/rulesets")
-    def _list_org_rulesets(self, match, query, body):
+    def _list_org_rulesets(self, match, _query, _body):
         org = self._resolve_org(match)
         rulesets = [ruleset.payload() for ruleset in org.rulesets]
         return 200, rulesets
 
     @POST("repos/<org>/<repo>/rulesets")
-    def _add_repo_ruleset(self, match, query, body):
+    def _add_repo_ruleset(self, match, _query, body):
         repo = self._resolve_repo(match)
         ruleset = repo.add_ruleset(**dict(body))
         return 201, ruleset.payload()
 
     @POST("orgs/<org>/rulesets")
-    def _add_org_ruleset(self, match, query, body):
+    def _add_org_ruleset(self, match, _query, body):
         org = self._resolve_org(match)
         ruleset = org.add_ruleset(**dict(body))
         return 201, ruleset.payload()
 
     @GET("repos/<org>/<repo>/rulesets/<ruleset_id>")
-    def _get_repo_ruleset(self, match, query, body):
+    def _get_repo_ruleset(self, match, _query, _body):
         ruleset = self._get_ruleset(match)
         return 200, ruleset.payload()
 
     @GET("orgs/<org>/rulesets/<ruleset_id>")
-    def _get_org_ruleset(self, match, query, body):
+    def _get_org_ruleset(self, match, _query, _body):
         ruleset = self._get_ruleset(match)
         return 200, ruleset.payload()
 
     @PUT("repos/<org>/<repo>/rulesets/<ruleset_id>")
-    def _update_repo_ruleset(self, match, query, body):
+    def _update_repo_ruleset(self, match, _query, body):
         ruleset = self._get_ruleset(match)
         return 200, ruleset.update(**body).payload()
 
     @PUT("orgs/<org>/rulesets/<ruleset_id>")
-    def _update_org_ruleset(self, match, query, body):
+    def _update_org_ruleset(self, match, _query, body):
         ruleset = self._get_ruleset(match)
         return 200, ruleset.update(**body).payload()
 
     @DELETE("repos/<org>/<repo>/rulesets/<ruleset_id>")
-    def _delete_repo_ruleset(self, match, query, body):
+    def _delete_repo_ruleset(self, match, _query, _body):
         repo = self._resolve_repo(match)
         repo.remove_ruleset(match["ruleset_id"])
         return 204
 
     @DELETE("orgs/<org>/rulesets/<ruleset_id>")
-    def _delete_org_ruleset(self, match, query, body):
+    def _delete_org_ruleset(self, match, _query, _body):
         org = self._resolve_org(match)
         org.remove_ruleset(match["ruleset_id"])
         return 204
