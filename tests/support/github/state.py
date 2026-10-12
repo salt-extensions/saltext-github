@@ -12,6 +12,8 @@ from dataclasses import field
 
 from tests.support.github.entities import Entity
 from tests.support.github.entities import EntityData
+from tests.support.github.entities import Issue
+from tests.support.github.entities import IssueData
 from tests.support.github.entities import Member
 from tests.support.github.entities import MemberData
 from tests.support.github.entities import Milestone
@@ -21,6 +23,8 @@ from tests.support.github.entities import Organization
 from tests.support.github.entities import OrganizationData
 from tests.support.github.entities import OrgName
 from tests.support.github.entities import OrgRulesetData
+from tests.support.github.entities import PullRequest
+from tests.support.github.entities import PullRequestData
 from tests.support.github.entities import Repo
 from tests.support.github.entities import RepoData
 from tests.support.github.entities import RepoId
@@ -51,6 +55,10 @@ class GlobalState:
     milestones: dict[RepoId, dict[int, MilestoneData]] = field(
         default_factory=lambda: defaultdict(dict)
     )
+    issues: dict[RepoId, dict[int, IssueData]] = field(default_factory=lambda: defaultdict(dict))
+    pulls: dict[RepoId, dict[int, PullRequestData]] = field(
+        default_factory=lambda: defaultdict(dict)
+    )
 
     def __post_init__(self):
         self.snapshot()
@@ -64,6 +72,8 @@ class GlobalState:
         self._init_rulesets_org = deepcopy(self.rulesets_org)
         self._init_rulesets_repo = deepcopy(self.rulesets_repo)
         self._init_milestones = deepcopy(self.milestones)
+        self._init_issues = deepcopy(self.issues)
+        self._init_pulls = deepcopy(self.pulls)
 
     def reset(self):
         self.orgs = {}
@@ -74,6 +84,8 @@ class GlobalState:
         self.rulesets_org = defaultdict(dict)
         self.rulesets_repo = defaultdict(dict)
         self.milestones = defaultdict(dict)
+        self.issues = defaultdict(dict)
+        self.pulls = defaultdict(dict)
         self._init_orgs = {}
         self._init_users = {}
         self._init_repos = {}
@@ -82,6 +94,8 @@ class GlobalState:
         self._init_rulesets_org = defaultdict(dict)
         self._init_rulesets_repo = defaultdict(dict)
         self._init_milestones = defaultdict(dict)
+        self._init_issues = defaultdict(dict)
+        self._init_pulls = defaultdict(dict)
 
     def restore(self):
         self.orgs = deepcopy(self._init_orgs)
@@ -92,6 +106,12 @@ class GlobalState:
         self.rulesets_org = deepcopy(self._init_rulesets_org)
         self.rulesets_repo = deepcopy(self._init_rulesets_repo)
         self.milestones = deepcopy(self._init_milestones)
+        self.issues = deepcopy(self._init_issues)
+        self.pulls = deepcopy(self._init_pulls)
+
+    def _next_issue_number(self, repo_id: RepoId) -> int:
+        # Issues and pull requests share one number sequence per repo.
+        return len(self.issues[repo_id]) + len(self.pulls[repo_id]) + 1
 
     def add_user(self, name: str, **params) -> User:
         user = UserData(name, **params)
@@ -168,6 +188,16 @@ class GlobalState:
                 data = data.with_(number=len(self.milestones[data.repo]) + 1)
             self.milestones[data.repo][data.number] = data
             return Milestone(self, data)
+        if isinstance(data, IssueData):
+            if data.number < 0:
+                data = data.with_(number=self._next_issue_number(data.repo))
+            self.issues[data.repo][data.number] = data
+            return Issue(self, data)
+        if isinstance(data, PullRequestData):
+            if data.number < 0:
+                data = data.with_(number=self._next_issue_number(data.repo))
+            self.pulls[data.repo][data.number] = data
+            return PullRequest(self, data)
         if isinstance(data, UserData):
             self.users[data.login] = data
             return User(self, data)
@@ -198,6 +228,10 @@ class GlobalState:
             self.rulesets_org[old_data.source].pop(old_data.id)
         elif isinstance(old_data, MilestoneData):
             self.milestones[old_data.repo].pop(old_data.number)
+        elif isinstance(old_data, IssueData):
+            self.issues[old_data.repo].pop(old_data.number)
+        elif isinstance(old_data, PullRequestData):
+            self.pulls[old_data.repo].pop(old_data.number)
         elif isinstance(old_data, UserData):
             self.users.pop(old_data.login)
         elif isinstance(old_data, OrganizationData):

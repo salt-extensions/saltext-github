@@ -101,10 +101,13 @@ def test_repo_absent_changes():
         )
         assert ret == expected
 
-    # test mode
+    # test mode: projected changes are reported
     expected = {
         "name": "mock_repo_absent",
-        "changes": {},
+        "changes": {
+            "old": "ruleset mock_repo_absent exists",
+            "new": "ruleset mock_repo_absent deleted",
+        },
         "result": None,
         "comment": "Ruleset mock_repo_absent will be deleted",
     }

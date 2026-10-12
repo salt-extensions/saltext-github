@@ -62,6 +62,8 @@ def present(name, profile="github", **kwargs):
     elif not target.get("in_org", False) and target.get("membership_state") != "pending":
         if __opts__["test"]:
             ret["comment"] = f"User {name} will be added to the org"
+            ret["changes"]["old"] = None
+            ret["changes"]["new"] = f"User {name} exists in the org now"
             return ret
 
         # add the user
@@ -113,6 +115,8 @@ def absent(name, profile="github", **kwargs):
         if isinstance(target, bool) or target.get("in_org", False):
             if __opts__["test"]:
                 ret["comment"] = f"User {name} will be deleted"
+                ret["changes"]["old"] = f"User {name} exists"
+                ret["changes"]["new"] = f"User {name} deleted"
                 ret["result"] = None
                 return ret
 
@@ -221,16 +225,18 @@ def team_present(
             parameters["privacy"] = privacy
 
         if len(parameters) > 0:
+            team_change = {
+                "old": f"Team properties were {target}",
+                "new": f"Team properties (that changed) are {parameters}",
+            }
             if __opts__["test"]:
                 test_comments.append(f"Team properties are set to be edited: {parameters}")
                 ret["result"] = None
+                ret["changes"]["team"] = team_change
             else:
                 result = __salt__["github.edit_team"](name, profile=profile, **parameters)
                 if result:
-                    ret["changes"]["team"] = {
-                        "old": f"Team properties were {target}",
-                        "new": f"Team properties (that changed) are {parameters}",
-                    }
+                    ret["changes"]["team"] = team_change
                 else:
                     ret["result"] = False
                     ret["comment"] = "Failed to update team properties."
@@ -250,16 +256,19 @@ def team_present(
                     )
                 )
                 ret["result"] = None
-            else:
-                for repo_name in repos_to_add:
+            for repo_name in repos_to_add:
+                repo_change = {
+                    "old": f"Repo {repo_name} is not in team {name}",
+                    "new": f"Repo {repo_name} is in team {name}",
+                }
+                if __opts__["test"]:
+                    ret["changes"][repo_name] = repo_change
+                else:
                     result = __salt__["github.add_team_repo"](
                         repo_name, name, profile=profile, **kwargs
                     )
                     if result:
-                        ret["changes"][repo_name] = {
-                            "old": f"Repo {repo_name} is not in team {name}",
-                            "new": f"Repo {repo_name} is in team {name}",
-                        }
+                        ret["changes"][repo_name] = repo_change
                     else:
                         ret["result"] = False
                         ret["comment"] = f"Failed to add repo {repo_name} to team {name}."
@@ -273,16 +282,19 @@ def team_present(
                     )
                 )
                 ret["result"] = None
-            else:
-                for repo_name in repos_to_remove:
+            for repo_name in repos_to_remove:
+                repo_change = {
+                    "old": f"Repo {repo_name} is in team {name}",
+                    "new": f"Repo {repo_name} is not in team {name}",
+                }
+                if __opts__["test"]:
+                    ret["changes"][repo_name] = repo_change
+                else:
                     result = __salt__["github.remove_team_repo"](
                         repo_name, name, profile=profile, **kwargs
                     )
                     if result:
-                        ret["changes"][repo_name] = {
-                            "old": f"Repo {repo_name} is in team {name}",
-                            "new": f"Repo {repo_name} is not in team {name}",
-                        }
+                        ret["changes"][repo_name] = repo_change
                     else:
                         ret["result"] = False
                         ret["comment"] = f"Failed to remove repo {repo_name} from team {name}."
@@ -290,7 +302,9 @@ def team_present(
 
     else:  # Team does not exist - it will be created.
         if __opts__["test"]:
+            # Note: member/repo changes are not projected for new teams
             ret["comment"] = f"Team {name} is set to be created."
+            ret["changes"]["team"] = {"old": None, "new": f"Team {name} has been created"}
             ret["result"] = None
             return ret
 
@@ -337,17 +351,20 @@ def team_present(
                     )
             else:  # Add to team
                 member_change = True
+                member_add = {
+                    "old": f"User {member} is not in team {name}",
+                    "new": f"User {member} is in team {name}",
+                }
                 if __opts__["test"]:
                     test_comments.append(f"User {member} set to be added to the team.")
                     ret["result"] = None
+                    ret["changes"][member] = member_add
                 else:
                     result = __salt__["github.add_team_member"](
                         member, name, profile=profile, **kwargs
                     )
                     if result:
-                        ret["changes"][member] = {}
-                        ret["changes"][member]["old"] = f"User {member} is not in team {name}"
-                        ret["changes"][member]["new"] = f"User {member} is in team {name}"
+                        ret["changes"][member] = member_add
                     else:
                         ret["result"] = False
                         ret["comment"] = f"Failed to add user {member} to team {name}."
@@ -362,6 +379,11 @@ def team_present(
         if manage_members and member not in members_lower or (enforce_mfa and mfa_violation):
             # Remove from team
             member_change = True
+            extra_changes = " due to MFA violation" if mfa_violation else ""
+            member_removal = {
+                "old": f"User {member} is in team {name}",
+                "new": f"User {member} is not in team {name}{extra_changes}",
+            }
             if __opts__["test"]:
                 if mfa_violation:
                     test_comments.append(
@@ -370,16 +392,13 @@ def team_present(
                 else:
                     test_comments.append(f"User {member} set to be removed from the team.")
                 ret["result"] = None
+                ret["changes"][member] = member_removal
             else:
                 result = __salt__["github.remove_team_member"](
                     member, name, profile=profile, **kwargs
                 )
                 if result:
-                    extra_changes = " due to MFA violation" if mfa_violation else ""
-                    ret["changes"][member] = {
-                        "old": f"User {member} is in team {name}",
-                        "new": f"User {member} is not in team {name}{extra_changes}",
-                    }
+                    ret["changes"][member] = member_removal
                 else:
                     ret["result"] = False
                     ret["comment"] = f"Failed to remove user {member} from team {name}."
@@ -433,6 +452,8 @@ def team_absent(name, profile="github", **kwargs):
     else:
         if __opts__["test"]:
             ret["comment"] = f"Team {name} will be deleted"
+            ret["changes"]["old"] = f"Team {name} exists"
+            ret["changes"]["new"] = f"Team {name} deleted"
             ret["result"] = None
             return ret
 
@@ -655,7 +676,7 @@ def repo_present(
                         ret["changes"][team_name] = team_change
                     else:
                         ret["result"] = False
-                        ret["comment"] = f"Failed to remove repo {name} from team {team_name}."
+                        ret["comment"] = f"Failed to add repo {name} to team {team_name}."
                         return ret
             else:
                 current_permission = (
@@ -725,6 +746,8 @@ def repo_absent(name, profile="github", **kwargs):
     else:
         if __opts__["test"]:
             ret["comment"] = f"Repo {name} will be deleted"
+            ret["changes"]["old"] = f"Repo {name} exists"
+            ret["changes"]["new"] = f"Repo {name} deleted"
             ret["result"] = None
             return ret
 
@@ -792,13 +815,16 @@ def ruleset_absent(
             if ruleset["name"] == name:
                 if __opts__["test"]:
                     ret["comment"] = f"Ruleset {name} will be deleted"
+                    ret["changes"]["old"] = f"ruleset {name} exists"
+                    ret["changes"]["new"] = f"ruleset {name} deleted"
                     ret["result"] = None
                     return ret
 
                 kwargs.update({"ruleset_id": ruleset["id"]})
                 result = __salt__["github.delete_ruleset"](profile, **kwargs)
 
-                if result:
+                # delete_ruleset returns a (truthy) dict with result: False on failure
+                if result.get("result") is not False:
                     ret["comment"] = f"Deleted ruleset {name}"
                     ret["changes"]["old"] = f"ruleset {name} exists"
                     ret["changes"]["new"] = f"ruleset {name} deleted"
@@ -807,6 +833,7 @@ def ruleset_absent(
                 else:
                     ret["comment"] = f"Failed to delete ruleset {name}"
                     ret["result"] = False
+                return ret
 
     ret["comment"] = f"Ruleset {name} does not exist"
     ret["result"] = True

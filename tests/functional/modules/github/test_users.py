@@ -43,5 +43,9 @@ def test_remove_user_not_a_member(github):
     assert github.remove_user("newuser") is True
 
 
+def test_add_user_unknown(github):
+    assert github.add_user("ghost") is False
+
+
 def test_remove_user_unknown(github):
     assert github.remove_user("ghost") is False

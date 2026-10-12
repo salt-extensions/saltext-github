@@ -1,0 +1,1 @@
+Fixed ``ruleset_absent`` reporting success when the ruleset could not be deleted. The module function returns a truthy error dict on failure, which was mistaken for success, and the failure result was subsequently overwritten by the "does not exist" fallback.

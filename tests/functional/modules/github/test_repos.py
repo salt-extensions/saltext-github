@@ -72,6 +72,27 @@ def test_remove_repo_missing(github):
     assert github.remove_repo("ghost") is False
 
 
+def test_remove_repo_failure(github, fake_org):
+    # The repo vanishes server-side behind the module's cache
+    github.list_repos()
+    fake_org.remove_repo("repo-b")
+    assert github.remove_repo("repo-b") is False
+
+
+def test_add_repo_duplicate(github):
+    # The API refuses to create a repo with an existing name
+    assert github.add_repo("repo-a") is False
+
+
+def test_edit_repo_missing(github):
+    assert github.edit_repo("ghost", description="Nope") is False
+
+
 def test_get_repo_teams(github):
     ret = github.get_repo_teams("repo-a")
     assert [team["name"] for team in ret] == ["Team A"]
+
+
+def test_get_repo_teams_missing_repo(github):
+    with pytest.raises(CommandExecutionError, match="could not be found"):
+        github.get_repo_teams("ghost")

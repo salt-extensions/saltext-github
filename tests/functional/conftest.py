@@ -164,6 +164,7 @@ def github_profile(fake_github, fake_org):
         "org_name": fake_org.data.login,
         "api_url": fake_github.url,
         "allow_repo_privacy_changes": True,
+        "repo_name": "repo-a",
     }
 
 
@@ -219,6 +220,13 @@ def fake_setup(fake_state):
     team_a.add_repo(repo_a, "pull")
     repo_a.add_milestone("v1.0", user1)
     repo_a.add_milestone("v2.0", user1)
+    bug = repo_a.add_issue(
+        "Found a bug", user1, labels=["bug", "prio:high"], assignee="user2", milestone="v1.0"
+    )
+    bug.add_comment(user2, "Working on it", updated_at="2026-10-11T14:00:00Z")
+    bug.add_comment(user1, "Thanks!", updated_at="2026-10-11T15:00:00Z")
+    repo_a.add_issue("Stale issue", user2, state="closed")
+    repo_a.add_pull("Fix the bug", user2, head="bugfix")
 
 
 @pytest.fixture(scope="module", autouse=True)
