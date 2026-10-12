@@ -14,13 +14,13 @@ def get(conn, repo_name, number):
     Return the raw data of a single issue.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository the issue belongs to.
+        Repository the issue belongs to.
 
     number
-        The number of the issue to retrieve.
+        Issue number to retrieve.
     """
     return client.query(conn, ["repos", conn.org_name, repo_name, "issues", str(number)])
 
@@ -30,13 +30,13 @@ def get_comments(conn, repo_name, number, since=None):
     Return the raw comment data for a single issue.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository the issue belongs to.
+        Repository the issue belongs to.
 
     number
-        The number of the issue whose comments to retrieve.
+        Issue number whose comments to retrieve.
 
     since
         Only comments updated at or after this time are returned. This is a
@@ -70,13 +70,46 @@ def list_all(
     options. Pull requests are excluded.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository whose issues to list.
+        Repository whose issues to list.
 
-    Other parameters as described in
-    :py:func:`github.get_issues <saltext.github.modules.github.get_issues>`.
+    milestone
+        Number of a GitHub milestone, or a string of either ``*`` or ``none``.
+
+    state
+        Filter returned issues by their state. Can be either ``open``,
+        ``closed``, or ``all``. Default is ``open``.
+
+    assignee
+        Filter returned issues by assigned user handle. Pass ``none``
+        (as a string) for issues with no assigned user or ``*`` for
+        issues assigned to any user.
+
+    creator
+        Filter by the username that created the issue.
+
+    mentioned
+        Filter issues for a user that's mentioned in the issue.
+
+    labels
+        Filter issues by associated labels. String of comma separated
+        label names. For example, ``bug,ui,@high``.
+
+    sort
+        Field to sort results by. Either ``created``, ``updated``, or
+        ``comments``. Default is ``created``.
+
+    direction
+        Sort direction. Either ``asc`` or ``desc``. Default is ``desc``.
+
+    since
+        Only list issues updated at or after this time. This is a
+        timestamp in ISO 8601 format: ``YYYY-MM-DDTHH:MM:SSZ``.
+
+    per_page
+        Pagination size, maximum 100.
     """
     params = {}
 
@@ -116,8 +149,10 @@ def format_issue(issue):
     Format API return information into a more manageable
     and useful dictionary for issue information.
 
+    Legacy function, only used by deprecated callers.
+
     issue
-        The issue to format.
+        Issue to format.
     """
     ret = {
         "id": issue.get("id"),

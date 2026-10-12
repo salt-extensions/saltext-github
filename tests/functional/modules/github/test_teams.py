@@ -209,12 +209,6 @@ def test_add_team_member_api_failure(github, monkeypatch):
     assert github.add_team_member("user2", "Team A") is False
 
 
-def test_remove_team_member_not_removed(github, monkeypatch):
-    # The API reports success, but the member is still present afterwards
-    monkeypatch.setattr(Team, "remove_member", lambda *args, **kwargs: None)
-    assert github.remove_team_member("user1", "Team A") is False
-
-
 def test_remove_team_member_missing_team(github):
     assert github.remove_team_member("user1", "ghost") is False
 

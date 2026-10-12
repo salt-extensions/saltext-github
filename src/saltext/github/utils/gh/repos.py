@@ -3,6 +3,7 @@ Operations on GitHub organization repositories.
 """
 
 import logging
+import time
 
 from github.GithubException import UnknownObjectException
 from salt.exceptions import CommandExecutionError
@@ -16,7 +17,9 @@ log = logging.getLogger(__name__)
 
 def to_dict(repo):
     """
-    Render a PyGithub ``Repository`` object into a plain dictionary.
+    Render a PyGithub ``Repository`` object into a plain dictionary,
+    excluding GitHub's deprecated alias fields (``watchers_count``,
+    ``watchers``, ``forks``, ``open_issues``).
     """
     ret = {}
     ret["id"] = repo.id
@@ -30,12 +33,9 @@ def to_dict(repo):
     ret["homepage"] = repo.homepage
     ret["size"] = repo.size
     ret["stargazers_count"] = repo.stargazers_count
-    ret["watchers_count"] = repo.watchers_count
     ret["language"] = repo.language
+    ret["forks_count"] = repo.forks_count
     ret["open_issues_count"] = repo.open_issues_count
-    ret["forks"] = repo.forks
-    ret["open_issues"] = repo.open_issues
-    ret["watchers"] = repo.watchers
     ret["default_branch"] = repo.default_branch
     ret["has_issues"] = repo.has_issues
     ret["has_wiki"] = repo.has_wiki
@@ -50,7 +50,7 @@ def list_all(conn, ignore_cache=False):
     objects (cached).
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ignore_cache
         Bypass the cached repository list.
@@ -71,10 +71,10 @@ def get_info(conn, name, ignore_cache=False):
     Return information about a single repository as a dictionary (cached).
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
-        The name of the repository.
+        Repository name.
 
     ignore_cache
         Bypass the cached repository information.
@@ -106,10 +106,10 @@ def get_teams(conn, name):
     Return the teams a repository belongs to.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
-        The name of the repository.
+        Repository name.
 
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the repository does not exist.
@@ -143,16 +143,41 @@ def create(
     license_template=None,
 ):
     """
-    Create a new repository in the organization.
+    Create a new repository in the organization and wait for it to
+    become visible.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
-        The name of the repository to create.
+        Repository name to create.
 
-    Other parameters as described in
-    :py:func:`github.add_repo <saltext.github.modules.github.add_repo>`.
+    description
+        Repository description.
+
+    homepage
+        URL with more information about the repository, e.g. rendered docs.
+
+    private
+        Repository visibility.
+
+    has_issues
+        Enable issues for this repository.
+
+    has_wiki
+        Enable the wiki for this repository.
+
+    has_downloads
+        Enable downloads for this repository.
+
+    auto_init
+        Create an initial commit with an empty README.
+
+    gitignore_template
+        Desired language or platform for a .gitignore, e.g. "Haskell".
+
+    license_template
+        Desired LICENSE template to apply, e.g. "mit" or "mozilla".
     """
     parameters = filter_unset(
         {
@@ -168,6 +193,19 @@ def create(
         }
     )
     repo = conn.org.create_repo(name, **parameters)
+
+    # Fetching a new repo's associations can 404 for a short while
+    # after creation, wait until it settles.
+    for attempt in range(3):
+        try:
+            get_teams(conn, name)
+            break
+        except GitHubNotFoundError:
+            log.info("Attempt %s to fetch new repo %s failed", attempt, name)
+            time.sleep(1)
+    else:
+        raise CommandExecutionError(f"Failed to verify repo {name} after creation.")
+
     info = to_dict(repo)
     conn.cache[("repo_info", repo.name.lower())] = info
     if "repos" in conn.cache:
@@ -193,24 +231,44 @@ def update(
     Update an existing repository in the organization.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
-        The name of the repository to update.
+        Repository name to update.
+
+    description
+        Repository description.
+
+    homepage
+        URL with more information about the repository, e.g. rendered docs.
+
+    private
+        Repository visibility. Changing this requires ``allow_repo_privacy_changes``
+        to be enabled in the profile.
+
+    has_issues
+        Enable issues for this repository.
+
+    has_wiki
+        Enable the wiki for this repository.
+
+    has_downloads
+        Enable downloads for this repository.
+
+    default_branch
+        Default branch of the repository. Must already exist: Ignored during repo creation.
 
     allow_privacy_change
-        Whether a change of the repository's visibility is allowed.
-        Defaults to false.
-
-    Other parameters as described in
-    :py:func:`github.edit_repo <saltext.github.modules.github.edit_repo>`.
+        Allow changing the repository's visibility. Defaults to false.
     """
     if private is not None and not allow_privacy_change:
         raise CommandExecutionError(
             f"The private field is set to be changed for repo {name} "
             "but allow_repo_privacy_changes disallows this."
         )
-    repo = conn.org.get_repo(name)
+    # Resolve via the owner-agnostic endpoint, which also works for
+    # user-owned repositories
+    repo = conn.client.get_repo(f"{conn.org_name}/{name}")
     parameters = filter_unset(
         {
             "description": description,
@@ -232,11 +290,13 @@ def delete(conn, name):
     Delete a repository from the organization.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
-        The name of the repository to delete.
+        Repository name to delete.
     """
-    repo = conn.org.get_repo(name)
+    # Resolve via the owner-agnostic endpoint, which also works for
+    # user-owned repositories
+    repo = conn.client.get_repo(f"{conn.org_name}/{name}")
     repo.delete()
     list_all(conn, ignore_cache=True)  # Refresh cache

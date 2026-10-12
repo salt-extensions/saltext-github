@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from dataclasses import field
+from dataclasses import fields
 
 from tests.support.github.entities import DeployKey
 from tests.support.github.entities import DeployKeyData
@@ -82,71 +83,21 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
     def __post_init__(self):
         self.snapshot()
 
+    def _stores(self):
+        return [fld.name for fld in fields(self) if fld.name != "base_url"]
+
     def snapshot(self):
-        self._init_orgs = deepcopy(self.orgs)
-        self._init_users = deepcopy(self.users)
-        self._init_repos = deepcopy(self.repos)
-        self._init_members = deepcopy(self.members)
-        self._init_teams = deepcopy(self.teams)
-        self._init_rulesets_org = deepcopy(self.rulesets_org)
-        self._init_rulesets_repo = deepcopy(self.rulesets_repo)
-        self._init_milestones = deepcopy(self.milestones)
-        self._init_issues = deepcopy(self.issues)
-        self._init_pulls = deepcopy(self.pulls)
-        self._init_deploy_keys = deepcopy(self.deploy_keys)
-        self._init_secrets = deepcopy(self.secrets)
-        self._init_environments = deepcopy(self.environments)
-        self._init_labels = deepcopy(self.labels)
-        self._init_pages = deepcopy(self.pages)
+        self._snapshot = {name: deepcopy(getattr(self, name)) for name in self._stores()}
 
     def reset(self):
-        self.orgs = {}
-        self.users = {}
-        self.repos = {}
-        self.members = {}
-        self.teams = {}
-        self.rulesets_org = defaultdict(dict)
-        self.rulesets_repo = defaultdict(dict)
-        self.milestones = defaultdict(dict)
-        self.issues = defaultdict(dict)
-        self.pulls = defaultdict(dict)
-        self.deploy_keys = defaultdict(dict)
-        self.secrets = defaultdict(dict)
-        self.environments = defaultdict(dict)
-        self.labels = defaultdict(dict)
-        self.pages = {}
-        self._init_orgs = {}
-        self._init_users = {}
-        self._init_repos = {}
-        self._init_members = {}
-        self._init_teams = {}
-        self._init_rulesets_org = defaultdict(dict)
-        self._init_rulesets_repo = defaultdict(dict)
-        self._init_milestones = defaultdict(dict)
-        self._init_issues = defaultdict(dict)
-        self._init_pulls = defaultdict(dict)
-        self._init_deploy_keys = defaultdict(dict)
-        self._init_secrets = defaultdict(dict)
-        self._init_environments = defaultdict(dict)
-        self._init_labels = defaultdict(dict)
-        self._init_pages = {}
+        for fld in fields(self):
+            if fld.name != "base_url":
+                setattr(self, fld.name, fld.default_factory())
+        self.snapshot()
 
     def restore(self):
-        self.orgs = deepcopy(self._init_orgs)
-        self.users = deepcopy(self._init_users)
-        self.repos = deepcopy(self._init_repos)
-        self.members = deepcopy(self._init_members)
-        self.teams = deepcopy(self._init_teams)
-        self.rulesets_org = deepcopy(self._init_rulesets_org)
-        self.rulesets_repo = deepcopy(self._init_rulesets_repo)
-        self.milestones = deepcopy(self._init_milestones)
-        self.issues = deepcopy(self._init_issues)
-        self.pulls = deepcopy(self._init_pulls)
-        self.deploy_keys = deepcopy(self._init_deploy_keys)
-        self.secrets = deepcopy(self._init_secrets)
-        self.environments = deepcopy(self._init_environments)
-        self.labels = deepcopy(self._init_labels)
-        self.pages = deepcopy(self._init_pages)
+        for name, value in self._snapshot.items():
+            setattr(self, name, deepcopy(value))
 
     def _next_issue_number(self, repo_id: RepoId) -> int:
         # Issues and pull requests share one number sequence per repo.
@@ -199,112 +150,61 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
             raise exc(f"Requested nonexistent repo {resolved.name=} from org {resolved.owner=}")
         return Repo(self, self.repos[resolved])
 
-    def add(self, entity: EntityData | Entity):  # pylint: disable=too-many-return-statements
-        if isinstance(entity, Entity):
-            data = entity.data
-        else:
-            data = entity
+    def add(self, entity: EntityData | Entity):
+        data = entity.data if isinstance(entity, Entity) else entity
 
-        if isinstance(data, RepoData):
-            self.repos[data.repo_id] = data
-            return Repo(self, data)
-        if isinstance(data, MemberData):
-            self.members[(data.org, data.login)] = data
-            return Member(self, data)
-        if isinstance(data, TeamData):
-            self.teams[(data.org, data.slug)] = data
-            return Team(self, data)
-        if isinstance(data, RepoRulesetData):
-            assert data.source in self.repos
-            self.rulesets_repo[data.source][data.id] = data
-            return Ruleset(self, data)
-        if isinstance(data, OrgRulesetData):
-            assert data.source in self.orgs
-            self.rulesets_org.setdefault(data.source, {})[data.id] = data
-            return Ruleset(self, data)
-        if isinstance(data, DeployKeyData):
-            assert data.repo in self.repos
-            self.deploy_keys[data.repo][data.id] = data
-            return DeployKey(self, data)
-        if isinstance(data, SecretData):
-            assert data.repo in self.repos
-            self.secrets[data.repo][data.name] = data
-            return Secret(self, data)
-        if isinstance(data, EnvironmentData):
-            assert data.repo in self.repos
-            self.environments[data.repo][data.name] = data
-            return Environment(self, data)
-        if isinstance(data, LabelData):
-            assert data.repo in self.repos
-            self.labels[data.repo][data.name] = data
-            return Label(self, data)
-        if isinstance(data, PagesData):
-            assert data.repo in self.repos
-            self.pages[data.repo] = data
-            return Pages(self, data)
-        if isinstance(data, MilestoneData):
-            if data.number < 0:
-                data = data.with_(number=len(self.milestones[data.repo]) + 1)
-            self.milestones[data.repo][data.number] = data
-            return Milestone(self, data)
-        if isinstance(data, IssueData):
-            if data.number < 0:
-                data = data.with_(number=self._next_issue_number(data.repo))
-            self.issues[data.repo][data.number] = data
-            return Issue(self, data)
-        if isinstance(data, PullRequestData):
-            if data.number < 0:
-                data = data.with_(number=self._next_issue_number(data.repo))
-            self.pulls[data.repo][data.number] = data
-            return PullRequest(self, data)
-        if isinstance(data, UserData):
-            self.users[data.login] = data
-            return User(self, data)
-        if isinstance(data, OrganizationData):
-            self.orgs[data.login] = data
-            return Organization(self, data)
-        raise TypeError(f"Unknown object: {data=}")
+        # Auto-numbering for issue-like entities
+        if isinstance(data, MilestoneData) and data.number < 0:
+            data = data.with_(number=len(self.milestones[data.repo]) + 1)
+        elif isinstance(data, (IssueData, PullRequestData)) and data.number < 0:
+            data = data.with_(number=self._next_issue_number(data.repo))
+
+        spec = _STORES.get(type(data))
+        if spec is None:
+            raise TypeError(f"Unknown object: {data=}")
+        entity_cls, store_name, outer_key, inner_key, parent_store = spec
+        if parent_store is not None:
+            assert outer_key(data) in getattr(self, parent_store)
+        store = getattr(self, store_name)
+        if inner_key is None:
+            store[outer_key(data)] = data
+        else:
+            store[outer_key(data)][inner_key(data)] = data
+        return entity_cls(self, data)
 
     def replace(self, old: EntityData | Entity, new: EntityData | Entity):
-        if isinstance(old, Entity):
-            old_data = old.data
-        else:
-            old_data = old
-        if isinstance(new, Entity):
-            new_data = new.data
-        else:
-            new_data = new
+        old_data = old.data if isinstance(old, Entity) else old
+        new_data = new.data if isinstance(new, Entity) else new
         assert type(old_data) is type(new_data)
-        if isinstance(old_data, RepoData):
-            self.repos.pop(old_data.repo_id)
-        elif isinstance(old_data, MemberData):
-            self.members.pop((old_data.org, old_data.login))
-        elif isinstance(old_data, TeamData):
-            self.teams.pop((old_data.org, old_data.slug))
-        elif isinstance(old_data, RepoRulesetData):
-            self.rulesets_repo[old_data.source].pop(old_data.id)
-        elif isinstance(old_data, OrgRulesetData):
-            self.rulesets_org[old_data.source].pop(old_data.id)
-        elif isinstance(old_data, DeployKeyData):
-            self.deploy_keys[old_data.repo].pop(old_data.id)
-        elif isinstance(old_data, SecretData):
-            self.secrets[old_data.repo].pop(old_data.name)
-        elif isinstance(old_data, EnvironmentData):
-            self.environments[old_data.repo].pop(old_data.name)
-        elif isinstance(old_data, LabelData):
-            self.labels[old_data.repo].pop(old_data.name)
-        elif isinstance(old_data, PagesData):
-            self.pages.pop(old_data.repo)
-        elif isinstance(old_data, MilestoneData):
-            self.milestones[old_data.repo].pop(old_data.number)
-        elif isinstance(old_data, IssueData):
-            self.issues[old_data.repo].pop(old_data.number)
-        elif isinstance(old_data, PullRequestData):
-            self.pulls[old_data.repo].pop(old_data.number)
-        elif isinstance(old_data, UserData):
-            self.users.pop(old_data.login)
-        elif isinstance(old_data, OrganizationData):
-            self.orgs.pop(old_data.login)
-        else:
+        spec = _STORES.get(type(old_data))
+        if spec is None:
             raise TypeError(f"Unknown object: {old_data=}")
+        _, store_name, outer_key, inner_key, _ = spec
+        store = getattr(self, store_name)
+        if inner_key is None:
+            store.pop(outer_key(old_data))
+        else:
+            store[outer_key(old_data)].pop(inner_key(old_data))
         return self.add(new_data)
+
+
+# EntityData type -> (entity class, store attribute, outer key, inner key,
+# store the outer key must exist in). Two-level stores are scoped by the
+# outer key, flat ones use it directly.
+_STORES = {
+    OrganizationData: (Organization, "orgs", lambda d: d.login, None, None),
+    UserData: (User, "users", lambda d: d.login, None, None),
+    RepoData: (Repo, "repos", lambda d: d.repo_id, None, None),
+    MemberData: (Member, "members", lambda d: (d.org, d.login), None, None),
+    TeamData: (Team, "teams", lambda d: (d.org, d.slug), None, None),
+    OrgRulesetData: (Ruleset, "rulesets_org", lambda d: d.source, lambda d: d.id, "orgs"),
+    RepoRulesetData: (Ruleset, "rulesets_repo", lambda d: d.source, lambda d: d.id, "repos"),
+    MilestoneData: (Milestone, "milestones", lambda d: d.repo, lambda d: d.number, "repos"),
+    IssueData: (Issue, "issues", lambda d: d.repo, lambda d: d.number, "repos"),
+    PullRequestData: (PullRequest, "pulls", lambda d: d.repo, lambda d: d.number, "repos"),
+    DeployKeyData: (DeployKey, "deploy_keys", lambda d: d.repo, lambda d: d.id, "repos"),
+    SecretData: (Secret, "secrets", lambda d: d.repo, lambda d: d.name, "repos"),
+    EnvironmentData: (Environment, "environments", lambda d: d.repo, lambda d: d.name, "repos"),
+    LabelData: (Label, "labels", lambda d: d.repo, lambda d: d.name, "repos"),
+    PagesData: (Pages, "pages", lambda d: d.repo, None, "repos"),
+}

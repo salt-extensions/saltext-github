@@ -10,8 +10,6 @@ from saltext.github.utils.gh import client
 
 log = logging.getLogger(__name__)
 
-UNSET = ...
-
 
 def _path(conn, repo_name, *suffix):
     # Environment names can contain characters that are invalid in URL paths
@@ -28,7 +26,7 @@ def normalize(env):
     ``protection_rules`` entries.
 
     env
-        The environment payload to normalize.
+        Environment payload to normalize.
     """
     ret = {
         "wait_timer": 0,
@@ -53,10 +51,10 @@ def list_all(conn, repo_name):
     Return all environments of a repository.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
     """
     return client.query(conn, _path(conn, repo_name), per_page=100)["environments"]
 
@@ -66,13 +64,13 @@ def get(conn, repo_name, name):
     Return the data of a single environment.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     name
-        The name of the environment.
+        Environment name.
 
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the environment does not exist.
@@ -88,36 +86,37 @@ def set_(
     wait_timer=None,
     prevent_self_review=None,
     reviewers=None,
-    deployment_branch_policy=UNSET,
+    deployment_branch_policy=None,
 ):
     """
-    Create or update an environment. Returns the data of the environment.
+    Create or update an environment, replacing its whole configuration.
+    Unspecified settings are reset to their defaults.
+    Returns the data of the environment.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     name
-        The name of the environment.
+        Environment name.
 
     wait_timer
-        The amount of time to delay a job after the job is initially
-        triggered, in minutes.
+        Amount of time to delay a job after it is initially triggered,
+        in minutes.
 
     prevent_self_review
-        Whether or not a user who created the job is prevented from
-        approving their own job.
+        Prevent a user who created a job from approving it.
 
     reviewers
-        The people or teams that may review jobs that reference the
+        People or teams that may review jobs that reference the
         environment, as a list of mappings with ``type`` (``User`` or
         ``Team``) and ``id``.
 
     deployment_branch_policy
-        The type of deployment branch policy for this environment, either
-        ``None`` to allow all branches or a mapping with
+        Type of deployment branch policy for this environment, either
+        ``None`` (default) to allow all branches or a mapping with
         ``protected_branches`` and ``custom_branch_policies`` booleans.
         Branch name patterns for custom policies are managed separately,
         see :func:`create_branch_policy`.
@@ -129,8 +128,7 @@ def set_(
             "reviewers": reviewers,
         }
     )
-    if deployment_branch_policy is not UNSET:
-        data["deployment_branch_policy"] = deployment_branch_policy
+    data["deployment_branch_policy"] = deployment_branch_policy
     return client.query(conn, _path(conn, repo_name, name), method="PUT", data=data)
 
 
@@ -139,13 +137,13 @@ def delete(conn, repo_name, name):
     Delete an environment from a repository.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     name
-        The name of the environment.
+        Environment name.
     """
     client.query(conn, _path(conn, repo_name, name), method="DELETE")
 
@@ -155,13 +153,13 @@ def list_branch_policies(conn, repo_name, environment):
     Return all deployment branch policies of an environment.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     environment
-        The name of the environment.
+        Environment name.
     """
     return client.query(
         conn,
@@ -179,20 +177,20 @@ def create_branch_policy(conn, repo_name, environment, name, *, type_="branch"):
     ``custom_branch_policies`` enabled.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     environment
-        The name of the environment.
+        Environment name.
 
     name
-        The name pattern that branches (or tags) must match in order
-        to deploy to the environment.
+        Name pattern that branches (or tags) must match in order to
+        deploy to the environment.
 
     type\_
-        Whether this rule targets a ``branch`` or ``tag``.
+        Target of this rule, either ``branch`` or ``tag``.
         Defaults to ``branch``.
     """
     return client.query(
@@ -208,16 +206,16 @@ def delete_branch_policy(conn, repo_name, environment, policy_id):
     Remove a deployment branch policy from an environment.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     environment
-        The name of the environment.
+        Environment name.
 
     policy_id
-        The ID of the branch policy.
+        Branch policy ID.
     """
     client.query(
         conn,

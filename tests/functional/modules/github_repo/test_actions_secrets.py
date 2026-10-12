@@ -4,9 +4,9 @@ from salt.exceptions import CommandExecutionError
 
 def test_list_actions_secrets(github_repo):
     ret = github_repo.list_actions_secrets()
-    assert [secret["name"] for secret in ret] == ["EXISTING_SECRET"]
+    assert list(ret) == ["EXISTING_SECRET"]
     # Secret values are write-only
-    assert "value" not in ret[0]
+    assert "value" not in ret["EXISTING_SECRET"]
 
 
 def test_get_actions_secret(github_repo):

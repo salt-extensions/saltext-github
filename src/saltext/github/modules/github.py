@@ -3,14 +3,15 @@ Module for interacting with the GitHub v3 API.
 
 :depends: PyGithub python module
 
-.. deprecated:: 1.1.0
+.. note::
 
-    Managing organization- and repository-scoped resources via this module
-    is deprecated. Use the :py:mod:`github_org
+    All organization- and repository-related functions in this module are
+    deprecated in favor of the :py:mod:`github_org
     <saltext.github.modules.github_org>` and :py:mod:`github_repo
-    <saltext.github.modules.github_repo>` modules instead, which raise
-    errors instead of logging and returning ``False``. This module retains
-    functionality that is not tied to a single organization.
+    <saltext.github.modules.github_repo>` modules, which raise errors
+    instead of logging and returning ``False``. This module remains the
+    namespace for functionality that is not tied to a single organization,
+    e.g. looking up arbitrary users.
 
 Configuration
 -------------
@@ -71,13 +72,13 @@ from saltext.github.utils import filter_unset
 
 try:
     from saltext.github.utils.gh import issues as gh_issues
+    from saltext.github.utils.gh import members as gh_members
     from saltext.github.utils.gh import milestones as gh_milestones
     from saltext.github.utils.gh import profile as gh_profile
     from saltext.github.utils.gh import pulls as gh_pulls
     from saltext.github.utils.gh import repos as gh_repos
     from saltext.github.utils.gh import rulesets as gh_rulesets
     from saltext.github.utils.gh import teams as gh_teams
-    from saltext.github.utils.gh import users as gh_users
     from saltext.github.utils.gh.exceptions import GitHubApiError
     from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
@@ -99,20 +100,6 @@ def __virtual__():
     )
 
 
-def _get_config_value(profile, config_name):
-    """
-    Helper function that returns a profile's configuration value based on
-    the supplied configuration name.
-
-    profile
-        The profile name that contains configuration information.
-
-    config_name
-        The configuration item's name to use to return configuration values.
-    """
-    return gh_profile.get_config_value(profile, config_name, salt=__salt__, context=__context__)
-
-
 def _get_conn(profile):
     """
     Return the GitHub connection, cached into __context__ for performance
@@ -120,32 +107,15 @@ def _get_conn(profile):
     return gh_profile.get_conn(profile, salt=__salt__, context=__context__)
 
 
-def list_users(profile="github", ignore_cache=False):
-    """
-    List all users within the organization.
-
-    .. deprecated:: 1.1.0
-        Use :py:func:`github_org.list_members <saltext.github.modules.github_org.list_members>` instead.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    ignore_cache
-        Bypasses the use of cached users.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.list_users
-        salt myminion github.list_users profile='my-github-profile'
-    """
-    return gh_users.list_members(_get_conn(profile), ignore_cache=ignore_cache)
-
-
 def get_user(name, profile="github", user_details=False):
     """
     Get a GitHub user by name.
+
+    .. deprecated:: 1.1.0
+        Despite its name, this function looks up the user's membership in
+        the profile's organization, not a generic user account. Use
+        :py:func:`github_org.get_member <saltext.github.modules.github_org.get_member>`
+        instead.
 
     name
         The user for which to obtain information.
@@ -172,10 +142,51 @@ def get_user(name, profile="github", user_details=False):
         return True
 
     try:
-        return gh_users.get_user_info(_get_conn(profile), name)
+        return gh_members.get_info(_get_conn(profile), name)
     except GitHubNotFoundError:
         log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
+
+
+# Anything below here is deprecated. Replacement functions are in github_org/github_repo.
+# This module is intended for non-org/non-repo functionality now.
+
+
+def _get_config_value(profile, config_name):
+    """
+    Helper function that returns a profile's configuration value based on
+    the supplied configuration name.
+
+    profile
+        The profile name that contains configuration information.
+
+    config_name
+        The configuration item's name to use to return configuration values.
+    """
+    return gh_profile.get_config_value(profile, config_name, salt=__salt__, context=__context__)
+
+
+def list_users(profile="github", ignore_cache=False):
+    """
+    List all users within the organization.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_members <saltext.github.modules.github_org.list_members>` instead.
+
+    profile
+        The name of the profile configuration to use. Defaults to ``github``.
+
+    ignore_cache
+        Bypasses the use of cached users.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion github.list_users
+        salt myminion github.list_users profile='my-github-profile'
+    """
+    return gh_members.list_all(_get_conn(profile), ignore_cache=ignore_cache)
 
 
 def add_user(name, profile="github"):
@@ -199,7 +210,7 @@ def add_user(name, profile="github"):
     """
 
     try:
-        return gh_users.invite_member(_get_conn(profile), name)
+        return gh_members.invite(_get_conn(profile), name)
     except GitHubNotFoundError:
         log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
@@ -226,7 +237,7 @@ def remove_user(name, profile="github"):
     """
 
     try:
-        return gh_users.remove_member(_get_conn(profile), name)
+        return gh_members.remove(_get_conn(profile), name)
     except GitHubNotFoundError:
         log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
@@ -608,7 +619,15 @@ def get_repo_info(repo_name, profile="github", ignore_cache=False):
         salt myminion github.get_repo_info salt
         salt myminion github.get_repo_info salt profile='my-github-profile'
     """
-    return gh_repos.get_info(_get_conn(profile), repo_name, ignore_cache=ignore_cache)
+    info = gh_repos.get_info(_get_conn(profile), repo_name, ignore_cache=ignore_cache)
+    # The legacy output contained GitHub's deprecated alias fields
+    return {
+        **info,
+        "watchers_count": info["stargazers_count"],
+        "watchers": info["stargazers_count"],
+        "forks": info["forks_count"],
+        "open_issues": info["open_issues_count"],
+    }
 
 
 def get_repo_teams(repo_name, profile="github"):
@@ -1195,7 +1214,9 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
     List all members (in lower case) without MFA turned on.
 
     .. deprecated:: 1.1.0
-        Use :py:func:`github_org.list_members_without_mfa <saltext.github.modules.github_org.list_members_without_mfa>` instead.
+        Deprecated without replacement, along with the per-team MFA
+        enforcement of the ``github.team_present`` state. Require 2FA
+        organization-wide in the GitHub settings instead.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -1209,7 +1230,7 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
 
         salt myminion github.list_members_without_mfa
     """
-    return gh_users.list_members_without_mfa(_get_conn(profile), ignore_cache=ignore_cache)
+    return gh_members.list_without_mfa(_get_conn(profile), ignore_cache=ignore_cache)
 
 
 def is_team_member(name, team_name, profile="github"):

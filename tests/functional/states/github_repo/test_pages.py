@@ -3,7 +3,7 @@ def test_pages_present_enable(github_repo, fake_github, fake_org, testmode):
     ret = github_repo.pages_present(name="repo-a", build_type="workflow", test=testmode)
     assert ret.result is not False
     assert (ret.result is None) is testmode
-    assert ret.changes["old"] is None
+    assert ret.changes == {"created": "repo-a"}
     assert (len(fake_github.mutations()) == before) is testmode
     pages = fake_org.get_repo("repo-a").pages
     if testmode:
@@ -56,12 +56,23 @@ def test_pages_present_source_drift(github_repo, fake_org, testmode):
     assert fake_org.get_repo("repo-b").pages.source["branch"] == expected
 
 
+def test_pages_present_cname(github_repo, fake_github, fake_org, testmode):
+    before = len(fake_github.mutations())
+    ret = github_repo.pages_present(name="repo-b", cname="docs.example.com", test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
+    assert ret.changes == {"old": {"cname": None}, "new": {"cname": "docs.example.com"}}
+    assert (len(fake_github.mutations()) == before) is testmode
+    expected = None if testmode else "docs.example.com"
+    assert fake_org.get_repo("repo-b").pages.cname == expected
+
+
 def test_pages_present_missing_repo(github_repo):
     # A missing repo is indistinguishable from a missing Pages site (404),
     # so the failure surfaces during the creation attempt
     ret = github_repo.pages_present(name="ghost")
     assert ret.result is False
-    assert "Failed to enable Pages" in ret.comment
+    assert "Not Found" in ret.comment
 
 
 def test_pages_absent(github_repo, fake_github, fake_org, testmode):
@@ -69,7 +80,7 @@ def test_pages_absent(github_repo, fake_github, fake_org, testmode):
     ret = github_repo.pages_absent(name="repo-b", test=testmode)
     assert ret.result is not False
     assert (ret.result is None) is testmode
-    assert ret.changes
+    assert ret.changes == {"deleted": "repo-b"}
     assert (len(fake_github.mutations()) == before) is testmode
     assert (fake_org.get_repo("repo-b").pages is not None) is testmode
     if not testmode:

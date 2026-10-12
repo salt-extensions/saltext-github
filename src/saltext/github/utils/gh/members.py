@@ -12,12 +12,12 @@ log = logging.getLogger(__name__)
 
 
 @api_request
-def list_members(conn, ignore_cache=False):
+def list_all(conn, ignore_cache=False):
     """
     Return the logins of all members of the organization (cached).
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ignore_cache
         Bypass the cached member list.
@@ -28,16 +28,16 @@ def list_members(conn, ignore_cache=False):
 
 
 @api_request
-def get_user_info(conn, login):
+def get_info(conn, login):
     """
     Return information about a user, including their organization
     membership state.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     login
-        The login of the user to look up.
+        User handle to look up.
 
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the user does not exist.
@@ -70,16 +70,16 @@ def get_user_info(conn, login):
 
 
 @api_request
-def invite_member(conn, login):
+def invite(conn, login):
     """
     Invite a user into the organization. Returns whether the resulting
     membership state is ``pending``.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     login
-        The login of the user to invite.
+        User handle to invite.
 
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the user does not exist.
@@ -95,16 +95,15 @@ def invite_member(conn, login):
 
 
 @api_request
-def remove_member(conn, login):
+def remove(conn, login):
     """
-    Remove a user from the organization. Returns whether the user is no
-    longer a member afterwards.
+    Remove a user from the organization (if they are a member).
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     login
-        The login of the user to remove.
+        User handle to remove.
 
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the user does not exist.
@@ -114,17 +113,17 @@ def remove_member(conn, login):
     if conn.org.has_in_members(user):
         conn.org.remove_from_members(user)
 
-    return not conn.org.has_in_members(user)
+    return True
 
 
 @api_request
-def list_members_without_mfa(conn, ignore_cache=False):
+def list_without_mfa(conn, ignore_cache=False):
     """
     Return the logins (lowercase) of all organization members without
     MFA turned on (cached).
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ignore_cache
         Bypass the cached member list.

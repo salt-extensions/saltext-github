@@ -20,10 +20,10 @@ def build_source(branch=None, path=None):
     when both are unset.
 
     branch
-        The repository branch to publish from.
+        Repository branch to publish from.
 
     path
-        The repository directory to publish from, either ``/`` or ``/docs``.
+        Repository directory to publish from, either ``/`` or ``/docs``.
     """
     source = filter_unset({"branch": branch, "path": path})
     return source or None
@@ -34,10 +34,10 @@ def get(conn, repo_name):
     Return information about the GitHub Pages site of a repository.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the repository has no Pages site.
@@ -51,13 +51,13 @@ def create(conn, repo_name, *, build_type=None, source=None):
     Returns the data of the created site.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     build_type
-        The process by which the site is built, either ``legacy``
+        Process by which the site is built, either ``legacy``
         (deploy from a branch) or ``workflow`` (GitHub Actions).
 
     source
@@ -77,13 +77,13 @@ def update(conn, repo_name, *, build_type=None, source=None, cname=..., https_en
     Update the GitHub Pages site configuration of a repository.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     build_type
-        The process by which the site is built, either ``legacy``
+        Process by which the site is built, either ``legacy``
         (deploy from a branch) or ``workflow`` (GitHub Actions).
 
     source
@@ -91,11 +91,11 @@ def update(conn, repo_name, *, build_type=None, source=None, cname=..., https_en
         ``branch`` and ``path``.
 
     cname
-        The custom domain for the site. Pass ``None`` explicitly
+        Custom domain for the site. Pass ``None`` explicitly
         to remove it.
 
     https_enforced
-        Whether HTTPS is enforced for the site.
+        Enforce HTTPS for the site.
     """
     data = filter_unset(
         {"build_type": build_type, "source": source, "https_enforced": https_enforced}
@@ -110,9 +110,9 @@ def delete(conn, repo_name):
     Delete the GitHub Pages site of a repository.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
     """
     client.query(conn, _path(conn, repo_name), method="DELETE")

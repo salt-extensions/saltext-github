@@ -6,18 +6,18 @@ from tests.support.github import NotFound
 def test_team_present_create(github_org, fake_github, fake_org, testmode):
     before = len(fake_github.mutations())
     ret = github_org.team_present(
-        name="team-b", description="Team B", privacy="closed", members={"user1": {}}, test=testmode
+        name="team-b", description="Team B", privacy="closed", members=["user1"], test=testmode
     )
     assert ret.result is not False
     assert (ret.result is None) is testmode
     assert (len(fake_github.mutations()) == before) is testmode
-    assert "team" in ret.changes
+    assert ret.changes["created"] == "team-b"
+    # member additions are projected even for new teams
+    assert ret.changes["members_added"] == ["user1"]
     if testmode:
-        # member changes are not projected for new teams
-        assert "set to be created" in ret.comment
+        assert "would have been created" in ret.comment
         assert "team-b" not in fake_org.teams
     else:
-        assert "user1" in ret.changes
         created = fake_org.get_team("team-b")
         assert set(created.data.members) == {"user1"}
 
@@ -28,9 +28,18 @@ def test_team_present_idempotent(github_org, fake_github, testmode):
         description="Awesome Team: Team A",
         privacy="closed",
         permission="pull",
-        members={"user1": {}},
+        members=["user1"],
         test=testmode,
     )
+    assert ret.result is True
+    assert not ret.changes
+    assert not fake_github.mutations()
+
+
+def test_team_present_unspecified_settings_unmanaged(github_org, fake_github, testmode):
+    # Without explicit privacy/permission/members/repo_names, only
+    # existence is ensured
+    ret = github_org.team_present(name="Team A", test=testmode)
     assert ret.result is True
     assert not ret.changes
     assert not fake_github.mutations()
@@ -43,40 +52,44 @@ def test_team_present_converges_drift(github_org, fake_github, fake_org, testmod
         description="Updated A",
         privacy="closed",
         permission="pull",
-        members={"user2": {}},
+        members=["user2"],
         test=testmode,
     )
     assert ret.result is not False
     assert (ret.result is None) is testmode
     assert (len(fake_github.mutations()) == before) is testmode
-    assert "team" in ret.changes
-    assert "user1" in ret.changes  # removed (managed members)
-    assert "user2" in ret.changes  # added
+    assert ret.changes["old"] == {"description": "Awesome Team: Team A"}
+    assert ret.changes["new"] == {"description": "Updated A"}
+    assert ret.changes["members_added"] == ["user2"]
+    assert ret.changes["members_removed"] == ["user1"]
     team = fake_org.get_team("team-a")
     if testmode:
-        assert "set to be edited" in ret.comment
-        assert "User user2 set to be added" in ret.comment
-        assert "User user1 set to be removed" in ret.comment
+        assert "would have been updated" in ret.comment
         assert team.description == "Awesome Team: Team A"
         assert set(team.data.members) == {"user1"}
     else:
         assert team.description == "Updated A"
         assert set(team.data.members) == {"user2"}
 
+        rerun = github_org.team_present(
+            name="Team A",
+            description="Updated A",
+            privacy="closed",
+            permission="pull",
+            members=["user2"],
+        )
+        assert rerun.result is True
+        assert not rerun.changes
+
 
 def test_team_present_permission_privacy_drift(github_org, fake_github, fake_org, testmode):
     before = len(fake_github.mutations())
-    ret = github_org.team_present(
-        name="Team A",
-        description="Awesome Team: Team A",
-        privacy="secret",
-        permission="push",
-        test=testmode,
-    )
+    ret = github_org.team_present(name="Team A", privacy="secret", permission="push", test=testmode)
     assert ret.result is not False
     assert (ret.result is None) is testmode
     assert (len(fake_github.mutations()) == before) is testmode
-    assert "team" in ret.changes
+    assert ret.changes["old"] == {"privacy": "closed", "permission": "pull"}
+    assert ret.changes["new"] == {"privacy": "secret", "permission": "push"}
     team = fake_org.get_team("team-a")
     if testmode:
         assert team.permission == "pull"
@@ -86,32 +99,26 @@ def test_team_present_permission_privacy_drift(github_org, fake_github, fake_org
         assert team.privacy == "secret"
 
 
-def test_team_present_create_failure(github_org):
-    # "team a" is not in the team cache (keyed by name), but its slug
-    # collides with the existing "Team A" on creation
-    ret = github_org.team_present(name="team a")
-    assert ret.result is False
-    assert "Failed to create team" in ret.comment
+def test_team_present_name_case_insensitive(github_org, fake_github, testmode):
+    # "team a" resolves to the existing "Team A" since team identity
+    # (the slug) is case-insensitive
+    ret = github_org.team_present(name="team a", test=testmode)
+    assert ret.result is True
+    assert not ret.changes
+    assert not fake_github.mutations()
 
 
 def test_team_present_manages_repos(github_org, fake_github, fake_org, testmode):
     before = len(fake_github.mutations())
-    ret = github_org.team_present(
-        name="Team A",
-        description="Awesome Team: Team A",
-        privacy="closed",
-        repo_names=["repo-b"],
-        test=testmode,
-    )
+    ret = github_org.team_present(name="Team A", repo_names=["repo-b"], test=testmode)
     assert ret.result is not False
     assert (ret.result is None) is testmode
     assert (len(fake_github.mutations()) == before) is testmode
-    assert "repo-b" in ret.changes  # added
-    assert "repo-a" in ret.changes  # removed (not listed)
+    assert ret.changes["repos_added"] == ["repo-b"]
+    assert ret.changes["repos_removed"] == ["repo-a"]
     team = fake_org.get_team("team-a")
     if testmode:
-        assert "repos added" in ret.comment
-        assert "repos removed" in ret.comment
+        assert "would have been updated" in ret.comment
         assert "repo-a" in team.repos
         assert "repo-b" not in team.repos
     else:
@@ -119,84 +126,26 @@ def test_team_present_manages_repos(github_org, fake_github, fake_org, testmode)
         assert "repo-a" not in team.repos
 
 
+def test_team_present_repos_case_insensitive(github_org, fake_github, testmode):
+    # Repository names are compared case-insensitively
+    ret = github_org.team_present(name="Team A", repo_names=["Repo-A"], test=testmode)
+    assert ret.result is True
+    assert not ret.changes
+    assert not fake_github.mutations()
+
+
 def test_team_present_add_repo_failure(github_org):
-    ret = github_org.team_present(
-        name="Team A",
-        description="Awesome Team: Team A",
-        privacy="closed",
-        repo_names=["ghost"],
-    )
+    ret = github_org.team_present(name="Team A", repo_names=["ghost"])
     assert ret.result is False
-    assert "Failed to add repo ghost" in ret.comment
+    assert not ret.changes
+    assert "Not Found" in ret.comment
 
 
 def test_team_present_add_member_failure(github_org):
-    ret = github_org.team_present(
-        name="Team A",
-        description="Awesome Team: Team A",
-        privacy="closed",
-        members={"user1": {}, "ghost": {}},
-    )
+    ret = github_org.team_present(name="Team A", members=["user1", "ghost"])
     assert ret.result is False
-    assert "Failed to add user ghost" in ret.comment
-
-
-def test_team_present_enforce_mfa_blocks_addition(github_org, fake_github, fake_org, testmode):
-    # user2 has no MFA and is not in the team: they are not added, which
-    # test mode explains in a comment
-    before = len(fake_github.mutations())
-    ret = github_org.team_present(
-        name="Team A",
-        description="Awesome Team: Team A",
-        privacy="closed",
-        permission="pull",
-        members={"user1": {}, "user2": {}},
-        enforce_mfa=True,
-        test=testmode,
-    )
-    assert ret.result is True  # nothing else changes in either mode
-    assert len(fake_github.mutations()) == before
-    assert set(fake_org.get_team("team-a").data.members) == {"user1"}
-    assert ("will not be added to the team because they do not have MFA" in ret.comment) is testmode
-
-
-def test_team_present_enforce_mfa_removal(github_org, fake_github, fake_org, testmode):
-    # user2 has no MFA and is already in the team
-    fake_org.get_team("team-a").add_member("user2")
-    before = len(fake_github.mutations())
-    ret = github_org.team_present(
-        name="Team A",
-        description="Awesome Team: Team A",
-        privacy="closed",
-        permission="pull",
-        members={"user1": {}, "user2": {}},
-        enforce_mfa=True,
-        test=testmode,
-    )
-    assert ret.result is not False
-    assert (ret.result is None) is testmode
-    assert (len(fake_github.mutations()) == before) is testmode
-    assert "due to MFA violation" in ret.changes["user2"]["new"]
-    team = fake_org.get_team("team-a")
-    if testmode:
-        assert "set to be removed from the team because they do not have MFA" in ret.comment
-        assert "user2" in team.members
-    else:
-        assert "user2" not in team.members
-
-
-def test_team_present_mfa_exempt_member(github_org, fake_org):
-    # mfa_exempt members are added even when MFA is enforced
-    ret = github_org.team_present(
-        name="Team A",
-        description="Awesome Team: Team A",
-        privacy="closed",
-        members={"user1": {}, "user2": {"mfa_exempt": True}},
-        enforce_mfa=True,
-    )
-    assert ret.result is True
-    assert "user2" in ret.changes
-    assert "user2" in fake_org.get_team("team-a").members
+    assert not ret.changes
+    assert "Not Found" in ret.comment
 
 
 def test_team_absent(github_org, fake_github, fake_org, testmode):
@@ -205,7 +154,7 @@ def test_team_absent(github_org, fake_github, fake_org, testmode):
     assert ret.result is not False
     assert (ret.result is None) is testmode
     assert (len(fake_github.mutations()) == before) is testmode
-    assert ret.changes == {"old": "Team Team A exists", "new": "Team Team A deleted"}
+    assert ret.changes == {"deleted": "Team A"}
     if testmode:
         assert "would have been deleted" in ret.comment
         fake_org.get_team("team-a")

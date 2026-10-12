@@ -1,0 +1,1 @@
+The ``github_repo`` execution module and its states can manage user-owned repositories by pointing the profile's ``org_name`` at the user login (except repository creation and team management, which are organization-only)

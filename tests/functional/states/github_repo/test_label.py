@@ -5,7 +5,7 @@ def test_label_present_create(github_repo, fake_github, fake_org, testmode):
     )
     assert ret.result is not False
     assert (ret.result is None) is testmode
-    assert ret.changes["old"] is None
+    assert ret.changes == {"created": "release"}
     assert (len(fake_github.mutations()) == before) is testmode
     repo = fake_org.get_repo("repo-a")
     if testmode:
@@ -67,7 +67,7 @@ def test_label_present_missing_repo(github_repo):
     # so the failure surfaces during the creation attempt
     ret = github_repo.label_present(name="bug", repo_name="ghost")
     assert ret.result is False
-    assert "Failed to create label" in ret.comment
+    assert "Not Found" in ret.comment
 
 
 def test_label_absent(github_repo, fake_github, fake_org, testmode):
@@ -75,7 +75,7 @@ def test_label_absent(github_repo, fake_github, fake_org, testmode):
     ret = github_repo.label_absent(name="bug", test=testmode)
     assert ret.result is not False
     assert (ret.result is None) is testmode
-    assert ret.changes
+    assert ret.changes == {"deleted": "bug"}
     assert (len(fake_github.mutations()) == before) is testmode
     assert ("bug" in fake_org.get_repo("repo-a").labels) is testmode
     if not testmode:

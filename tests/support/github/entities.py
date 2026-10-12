@@ -731,6 +731,7 @@ class Repo(Entity):
             "watchers_count": 1,
             "watchers": 1,
             "forks": 0,
+            "forks_count": 0,
             "open_issues": 0,
             "open_issues_count": 0,
         }

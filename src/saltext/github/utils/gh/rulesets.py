@@ -16,19 +16,19 @@ def build_path(ruleset_type, *, owner=None, repo_name=None, org_name=None, rules
     Build the API path for ruleset operations.
 
     ruleset_type
-        The type of ruleset. ``repo`` or ``org``.
+        Ruleset type, either ``repo`` or ``org``.
 
     owner
-        The account owner of the repository. Required for ``repo`` rulesets.
+        Owner of the repository. Required for ``repo`` rulesets.
 
     repo_name
-        The name of the repository. Required for ``repo`` rulesets.
+        Repo name. Required for ``repo`` rulesets.
 
     org_name
-        The name of the organization. Required for ``org`` rulesets.
+        Org name. Required for ``org`` rulesets.
 
     ruleset_id
-        The ID of a specific ruleset to address.
+        ID of a specific ruleset to address.
     """
     if ruleset_type == "repo":
         path = ["repos", owner, repo_name, "rulesets"]
@@ -47,10 +47,10 @@ def check_params(ruleset_params, required=None):
     required keys.
 
     ruleset_params
-        The payload to check.
+        Payload to check.
 
     required
-        An optional set of parameter names that must be present.
+        Optional set of parameter names that must be present.
     """
     if not isinstance(ruleset_params, dict):
         raise CommandExecutionError("ruleset_params need to be a dict")
@@ -67,7 +67,7 @@ def list_all(
     Return all rulesets of a repository or organization.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     Other parameters as described in :func:`build_path`. ``headers`` is a
     mapping of extra headers to send.
@@ -81,10 +81,10 @@ def get(conn, ruleset_id, ruleset_type, *, owner=None, repo_name=None, org_name=
     Return the data of a specific ruleset.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ruleset_id
-        The ID of the ruleset to retrieve.
+        ID of the ruleset to retrieve.
 
     Other parameters as described in :func:`build_path`. ``headers`` is a
     mapping of extra headers to send.
@@ -102,11 +102,10 @@ def create(
     Create a new ruleset. Returns the data of the created ruleset.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ruleset_params
-        The ruleset definition. Must contain at least ``name`` and
-        ``enforcement``.
+        Ruleset definition. Must contain at least ``name`` and ``enforcement``.
 
     Other parameters as described in :func:`build_path`. ``headers`` is a
     mapping of extra headers to send.
@@ -131,13 +130,13 @@ def update(
     Update an existing ruleset. Returns the data of the updated ruleset.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ruleset_id
-        The ID of the ruleset to update.
+        ID of the ruleset to update.
 
     ruleset_params
-        The updated ruleset definition.
+        Updated ruleset definition.
 
     Other parameters as described in :func:`build_path`. ``headers`` is a
     mapping of extra headers to send.
@@ -156,10 +155,10 @@ def delete(
     Delete a ruleset.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ruleset_id
-        The ID of the ruleset to delete.
+        ID of the ruleset to delete.
 
     Other parameters as described in :func:`build_path`. ``headers`` is a
     mapping of extra headers to send.

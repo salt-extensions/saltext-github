@@ -38,6 +38,16 @@ def test_update_pages_https(github_repo, fake_org):
     assert fake_org.get_repo("repo-b").pages.https_enforced is True
 
 
+def test_update_pages_cname(github_repo, fake_org):
+    assert github_repo.update_pages(cname="docs.example.com", repo_name="repo-b") is True
+    assert fake_org.get_repo("repo-b").pages.cname == "docs.example.com"
+    # Passing None removes the custom domain, omitting it leaves it alone
+    assert github_repo.update_pages(https_enforced=True, repo_name="repo-b") is True
+    assert fake_org.get_repo("repo-b").pages.cname == "docs.example.com"
+    assert github_repo.update_pages(cname=None, repo_name="repo-b") is True
+    assert fake_org.get_repo("repo-b").pages.cname is None
+
+
 def test_update_pages_missing(github_repo):
     with pytest.raises(CommandExecutionError, match="Not Found"):
         github_repo.update_pages(build_type="workflow")

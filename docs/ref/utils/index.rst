@@ -18,6 +18,7 @@ _________
     utils.gh.exceptions
     utils.gh.issues
     utils.gh.labels
+    utils.gh.members
     utils.gh.milestones
     utils.gh.pages
     utils.gh.profile
@@ -25,4 +26,3 @@ _________
     utils.gh.repos
     utils.gh.rulesets
     utils.gh.teams
-    utils.gh.users

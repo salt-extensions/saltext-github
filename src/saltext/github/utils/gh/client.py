@@ -34,10 +34,10 @@ class GitHubConnection:
         Personal access token to authenticate with.
 
     org_name
-        The name of the organization this connection is scoped to.
+        Organization name this connection is scoped to.
 
     api_url
-        The base URL of the GitHub API. Set this when targeting a GitHub
+        Base URL of the GitHub API. Set this when targeting a GitHub
         Enterprise Server instance. Defaults to the public GitHub API.
     """
 
@@ -52,7 +52,7 @@ class GitHubConnection:
     @property
     def org(self):
         """
-        The PyGithub ``Organization`` object this connection is scoped to (cached).
+        PyGithub ``Organization`` object this connection is scoped to (cached).
         """
         if "org" not in self.cache:
             self.cache["org"] = self.client.get_organization(self.org_name)
@@ -92,11 +92,11 @@ def query(conn, path, *, params=None, method="GET", headers=None, data=None, per
     Make a direct call to the GitHub API, transparently following pagination.
 
     conn
-        The :class:`GitHubConnection` to run the request through (honoring
+        :class:`GitHubConnection` to run the request through (honoring
         its ``api_url``, authentication and retry handling).
 
     path
-        The URL path to query, either as a string or a list of segments.
+        URL path to query, either as a string or a list of segments.
 
     params
         Mapping of query parameters.
@@ -150,7 +150,7 @@ def query(conn, path, *, params=None, method="GET", headers=None, data=None, per
         log.debug("GitHub Response Status Code: %s", status)
         decoded = json.loads(text) if text else None
 
-        if status not in (200, 201, 204):
+        if not 200 <= status < 300:
             exc_type = GitHubNotFoundError if status == 404 else GitHubApiError
             raise exc_type(_error_message(status, decoded, text), status=status, data=decoded)
 

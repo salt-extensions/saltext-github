@@ -7,7 +7,7 @@ def test_deploy_key_present_create(github_repo, fake_github, fake_org, testmode)
     ret = github_repo.deploy_key_present(name="autorelease", key=DEPLOY_KEY_B, test=testmode)
     assert ret.result is not False
     assert (ret.result is None) is testmode
-    assert ret.changes["old"] is None
+    assert ret.changes == {"created": "autorelease"}
     assert (len(fake_github.mutations()) == before) is testmode
     repo = fake_org.get_repo("repo-a")
     added = [key for key in repo.deploy_keys if key.title == "autorelease"]
@@ -75,7 +75,7 @@ def test_deploy_key_present_replaces_changed_read_only(
 def test_deploy_key_present_missing_repo(github_repo):
     ret = github_repo.deploy_key_present(name="autorelease", key=DEPLOY_KEY_B, repo_name="ghost")
     assert ret.result is False
-    assert "Failed to list deploy keys" in ret.comment
+    assert "Not Found" in ret.comment
 
 
 def test_deploy_key_absent(github_repo, fake_github, fake_org, testmode):
@@ -83,7 +83,7 @@ def test_deploy_key_absent(github_repo, fake_github, fake_org, testmode):
     ret = github_repo.deploy_key_absent(name="existing-key", test=testmode)
     assert ret.result is not False
     assert (ret.result is None) is testmode
-    assert ret.changes
+    assert ret.changes == {"deleted": "existing-key"}
     assert (len(fake_github.mutations()) == before) is testmode
     assert bool(fake_org.get_repo("repo-a").deploy_keys) is testmode
     if not testmode:

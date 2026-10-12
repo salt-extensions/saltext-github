@@ -1,17 +1,15 @@
 import pytest
 from salt.exceptions import CommandExecutionError
 
-from tests.support.github import Team
-
 
 def test_list_teams(github_org):
     ret = github_org.list_teams()
-    assert "Team A" in ret
+    assert set(ret) == {"Team A"}
     assert ret["Team A"]["slug"] == "team-a"
 
 
 def test_list_teams_uses_cache(github_org, fake_org):
-    assert "Team A" in github_org.list_teams()
+    assert set(github_org.list_teams()) == {"Team A"}
     fake_org.add_team("Team B")
     # Cached result is returned until the cache is bypassed
     assert "Team B" not in github_org.list_teams()
@@ -20,8 +18,25 @@ def test_list_teams_uses_cache(github_org, fake_org):
 
 def test_get_team(github_org):
     ret = github_org.get_team("Team A")
+    assert ret["name"] == "Team A"
     assert ret["slug"] == "team-a"
     assert ret["description"] == "Awesome Team: Team A"
+
+
+def test_get_team_excludes_internal_caches(github_org):
+    github_org.list_team_repos("Team A")
+    github_org.list_team_members("Team A")
+    ret = github_org.get_team("Team A")
+    assert "repos" not in ret
+    assert "members" not in ret
+
+
+def test_get_team_by_slug(github_org):
+    assert github_org.get_team("team-a")["name"] == "Team A"
+
+
+def test_get_team_name_case_insensitive(github_org):
+    assert github_org.get_team("team a")["name"] == "Team A"
 
 
 def test_get_team_missing(github_org):
@@ -30,14 +45,17 @@ def test_get_team_missing(github_org):
 
 
 def test_add_team(github_org, fake_org):
-    assert github_org.add_team("Team B", description="Team B", privacy="closed") is True
+    ret = github_org.add_team("Team B", description="Team B", privacy="closed")
+    # The created team's details are returned
+    assert ret["slug"] == "team-b"
+    assert ret["description"] == "Team B"
     assert fake_org.get_team("team-b").description == "Team B"
     # add_team refreshes the team cache itself
     assert github_org.get_team("Team B")
 
 
 def test_add_team_with_repos(github_org, fake_org):
-    assert github_org.add_team("Team B", repo_names=["testorg/repo-b"]) is True
+    assert github_org.add_team("Team B", repo_names=["testorg/repo-b"])["slug"] == "team-b"
     assert fake_org.get_team("team-b").repos["repo-b"] == "pull"
 
 
@@ -48,14 +66,16 @@ def test_add_team_duplicate(github_org):
 
 
 def test_edit_team(github_org, fake_org):
-    assert (
-        github_org.edit_team("Team A", description="Renovated", privacy="secret", permission="push")
-        is True
+    ret = github_org.edit_team(
+        "Team A", description="Renovated", privacy="secret", permission="push"
     )
+    # The refreshed team details are returned and the cache is updated
+    assert ret["description"] == "Renovated"
     team = fake_org.get_team("team-a")
     assert team.description == "Renovated"
     assert team.privacy == "secret"
     assert team.permission == "push"
+    assert github_org.get_team("Team A")["description"] == "Renovated"
 
 
 def test_edit_team_missing(github_org):
@@ -83,7 +103,7 @@ def test_remove_team_stale_cache(github_org, fake_org):
 
 def test_list_team_repos(github_org):
     ret = github_org.list_team_repos("Team A")
-    assert set(ret) == {"repo-a"}
+    assert list(ret) == ["repo-a"]
     assert ret["repo-a"]["permission"] == "pull"
 
 
@@ -93,13 +113,17 @@ def test_list_team_repos_missing_team(github_org):
 
 
 def test_list_team_repos_uses_cache(github_org, fake_org):
-    assert set(github_org.list_team_repos("Team A")) == {"repo-a"}
+    assert list(github_org.list_team_repos("Team A")) == ["repo-a"]
     fake_org.get_team("team-a").add_repo("repo-b", "admin")
     # Cached result is returned until the cache is bypassed
-    assert set(github_org.list_team_repos("Team A")) == {"repo-a"}
+    assert list(github_org.list_team_repos("Team A")) == ["repo-a"]
     refreshed = github_org.list_team_repos("Team A", ignore_cache=True)
     assert set(refreshed) == {"repo-a", "repo-b"}
     assert refreshed["repo-b"]["permission"] == "admin"
+
+
+def test_list_team_repos_fields(github_org):
+    assert github_org.list_team_repos("Team A", fields="permission") == {"repo-a": "pull"}
 
 
 def test_add_team_repo(github_org, fake_org):
@@ -163,10 +187,3 @@ def test_add_team_member_missing_user(github_org):
 def test_remove_team_member(github_org, fake_org):
     assert github_org.remove_team_member("user1", "Team A") is True
     assert "user1" not in fake_org.get_team("team-a").members
-
-
-def test_remove_team_member_not_removed(github_org, monkeypatch):
-    # The API reports success, but the member is still present afterwards
-    monkeypatch.setattr(Team, "remove_member", lambda *args, **kwargs: None)
-    with pytest.raises(CommandExecutionError, match="Failed to remove member"):
-        github_org.remove_team_member("user1", "Team A")

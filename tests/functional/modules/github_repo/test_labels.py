@@ -4,7 +4,12 @@ from salt.exceptions import CommandExecutionError
 
 def test_list_labels(github_repo):
     ret = github_repo.list_labels()
-    assert [label["name"] for label in ret] == ["bug"]
+    assert list(ret) == ["bug"]
+    assert ret["bug"]["color"] == "d73a4a"
+
+
+def test_list_labels_fields(github_repo):
+    assert github_repo.list_labels(fields="color") == {"bug": "d73a4a"}
 
 
 def test_get_label(github_repo):

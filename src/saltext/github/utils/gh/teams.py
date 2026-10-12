@@ -8,8 +8,6 @@ in the (cached) mapping returned by :func:`list_all`. Team-scoped caches
 
 import logging
 
-from github.GithubException import UnknownObjectException
-
 from saltext.github.utils import filter_unset
 from saltext.github.utils.gh.client import api_request
 
@@ -23,7 +21,7 @@ def list_all(conn, ignore_cache=False):
     team details (cached).
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ignore_cache
         Bypass the cached team list.
@@ -36,6 +34,7 @@ def list_all(conn, ignore_cache=False):
             # here since each one would trigger a separate request per team.
             teams[team.name] = {
                 "id": team.id,
+                "name": team.name,
                 "slug": team.slug,
                 "description": team.description,
                 "permission": team.permission,
@@ -51,10 +50,10 @@ def get(conn, name):
     not exist.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
-        The name of the team.
+        Team name.
     """
     return list_all(conn).get(name)
 
@@ -65,13 +64,23 @@ def create(conn, name, *, description=None, repo_names=None, privacy=None, permi
     Create a new team in the organization.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
-        The name of the team to create.
+        Name of team to create.
 
-    Other parameters as described in
-    :py:func:`github.add_team <saltext.github.modules.github.add_team>`.
+    description
+        Team description.
+
+    repo_names
+        List of repository names to add the team to.
+
+    privacy
+        Privacy level for the team, either ``secret`` or ``closed``.
+
+    permission
+        Default permission for new repositories added to the team, either
+        ``pull``, ``push`` or ``admin``.
     """
     parameters = filter_unset(
         {
@@ -96,16 +105,23 @@ def update(conn, team_info, name, *, description=None, privacy=None, permission=
     Update an existing team.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
-        The team's entry from :func:`list_all`.
+        Team's entry from :func:`list_all`.
 
     name
-        The name of the team.
+        Team name.
 
-    Other parameters as described in
-    :py:func:`github.edit_team <saltext.github.modules.github.edit_team>`.
+    description
+        Team description.
+
+    privacy
+        Privacy level for the team, either ``secret`` or ``closed``.
+
+    permission
+        Default permission for new repositories added to the team, either
+        ``pull``, ``push`` or ``admin``.
     """
     team = conn.org.get_team_by_slug(team_info["slug"])
     team.edit(
@@ -118,6 +134,7 @@ def update(conn, team_info, name, *, description=None, privacy=None, permission=
             }
         ),
     )
+    list_all(conn, ignore_cache=True)  # Refresh cache
 
 
 @api_request
@@ -126,10 +143,10 @@ def delete(conn, team_info):
     Delete a team from the organization.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
-        The team's entry from :func:`list_all`.
+        Team's entry from :func:`list_all`.
     """
     team = conn.org.get_team_by_slug(team_info["slug"])
     team.delete()
@@ -143,10 +160,10 @@ def list_repos(conn, team_info, ignore_cache=False):
     name to repository details (cached).
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
-        The team's entry from :func:`list_all`.
+        Team's entry from :func:`list_all`.
 
     ignore_cache
         Bypass the cached team repositories.
@@ -163,7 +180,7 @@ def list_repos(conn, team_info, ignore_cache=False):
         elif repo.permissions.push:
             permission = "push"
 
-        repos[repo.name.lower()] = {"permission": permission}
+        repos[repo.name.lower()] = {"name": repo.name, "permission": permission}
     team_info["repos"] = repos
     return repos
 
@@ -175,18 +192,17 @@ def add_repo(conn, team_info, repo_name, permission=None):
     on it. Returns false if updating the permission failed.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
-        The team's entry from :func:`list_all`.
+        Team's entry from :func:`list_all`.
 
     repo_name
-        The name of the repository to add.
+        Repository name to add.
 
     permission
-        The permission for team members within the repository, can be ``pull``,
-        ``push`` or ``admin``. If not specified, the default permission specified
-        on the team will be used.
+        Permission for team members within the repository. Either ``pull``,
+        ``push`` or ``admin``. Defaults to the default permission on the team.
     """
     team = conn.org.get_team_by_slug(team_info["slug"])
     repo = conn.org.get_repo(repo_name)
@@ -201,22 +217,23 @@ def add_repo(conn, team_info, repo_name, permission=None):
 @api_request
 def remove_repo(conn, team_info, repo_name):
     """
-    Remove a repository from a team. Returns whether the repository is no
-    longer associated with the team afterwards.
+    Remove a repository from a team.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
-        The team's entry from :func:`list_all`.
+        Team's entry from :func:`list_all`.
 
     repo_name
-        The name of the repository to remove.
+        Repository name to remove.
     """
     team = conn.org.get_team_by_slug(team_info["slug"])
     repo = conn.org.get_repo(repo_name)
     team.remove_from_repos(repo)
-    return repo_name not in list_repos(conn, team_info, ignore_cache=True)
+    if team_info.get("repos"):
+        team_info["repos"].pop(repo_name.lower(), None)
+    return True
 
 
 @api_request
@@ -225,10 +242,10 @@ def list_members(conn, team_info, ignore_cache=False):
     Return the (lowercase) logins of a team's members (cached).
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
-        The team's entry from :func:`list_all`.
+        Team's entry from :func:`list_all`.
 
     ignore_cache
         Bypass the cached team members.
@@ -247,13 +264,13 @@ def add_member(conn, team_info, login):
     Add an organization member to a team.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
-        The team's entry from :func:`list_all`.
+        Team's entry from :func:`list_all`.
 
     login
-        The login of the user to add.
+        User handle to invite.
     """
     team = conn.org.get_team_by_slug(team_info["slug"])
     member = conn.client.get_user(login)
@@ -263,17 +280,16 @@ def add_member(conn, team_info, login):
 @api_request
 def remove_member(conn, team_info, login):
     """
-    Remove a member from a team. Returns whether the user is no longer
-    a member of the team afterwards.
+    Remove a member from a team.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
-        The team's entry from :func:`list_all`.
+        Team's entry from :func:`list_all`.
 
     login
-        The login of the user to remove.
+        User handle to remove.
 
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the team or user does not exist.
@@ -281,9 +297,6 @@ def remove_member(conn, team_info, login):
     team = conn.org.get_team_by_slug(team_info["slug"])
     member = conn.client.get_user(login)
     team.remove_membership(member)
-    try:
-        # There is no non-deprecated endpoint for checking plain membership
-        team.get_team_membership(member)
-    except UnknownObjectException:
-        return True
-    return False
+    if team_info.get("members"):
+        team_info["members"] = [mem for mem in team_info["members"] if mem != login.lower()]
+    return True

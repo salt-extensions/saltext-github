@@ -27,7 +27,8 @@ def test_get_info_uses_cache(github_repo, fake_org):
 
 def test_get_teams(github_repo):
     ret = github_repo.get_teams()
-    assert [team["name"] for team in ret] == ["Team A"]
+    assert list(ret) == ["Team A"]
+    assert ret["Team A"]["permission"] == "pull"
 
 
 def test_get_teams_missing_repo(github_repo):

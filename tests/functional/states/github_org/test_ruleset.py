@@ -29,8 +29,7 @@ def test_ruleset_present_converges_drift(github_org, fake_github, fake_org, test
     )
     assert ret.result is not False
     assert (ret.result is None) is testmode
-    assert ret.changes["old"] == {"enforcement": "active"}
-    assert ret.changes["new"] == {"enforcement": "evaluate"}
+    assert ret.changes == {"old": {"enforcement": "active"}, "new": {"enforcement": "evaluate"}}
     assert (len(fake_github.mutations()) == before) is testmode
     expected = "active" if testmode else "evaluate"
     assert fake_org.rulesets["org-rules"].enforcement == expected
@@ -51,7 +50,7 @@ def test_ruleset_present_create(github_org, fake_github, fake_org, testmode):
     )
     assert ret.result is not False
     assert (ret.result is None) is testmode
-    assert ret.changes["old"] is None
+    assert ret.changes == {"created": "new-rules"}
     assert (len(fake_github.mutations()) == before) is testmode
     assert ("new-rules" in fake_org.rulesets) is not testmode
 
@@ -61,7 +60,7 @@ def test_ruleset_present_create_failure(github_org):
         name="fresh-rules", ruleset_params={"enforcement": "active", "bogus_param": True}
     )
     assert ret.result is False
-    assert "Failed to create ruleset" in ret.comment
+    assert "422" in ret.comment
     assert not ret.changes
 
 
@@ -71,7 +70,7 @@ def test_ruleset_present_update_failure(github_org):
         name="org-rules", ruleset_params={"enforcement": "evaluate", "bogus_param": True}
     )
     assert ret.result is False
-    assert "Failed to update ruleset" in ret.comment
+    assert "422" in ret.comment
     assert not ret.changes
 
 
@@ -82,7 +81,7 @@ def test_ruleset_absent(github_org, fake_github, fake_org, testmode):
     assert (ret.result is None) is testmode
     assert (len(fake_github.mutations()) == before) is testmode
     assert bool(list(fake_org.rulesets)) is testmode
-    assert ret.changes == {"old": "Ruleset org-rules exists", "new": "Ruleset org-rules deleted"}
+    assert ret.changes == {"deleted": "org-rules"}
     if testmode:
         assert "would have been deleted" in ret.comment
     else:

@@ -25,13 +25,33 @@ def list_all(
     search options.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository whose pull requests to list.
+        Repository whose pull requests to list.
 
-    Other parameters as described in
-    :py:func:`github.get_prs <saltext.github.modules.github.get_prs>`.
+    state
+        Filter returned pull requests by their state. Can be either
+        ``open``, ``closed``, or ``all``. Default is ``open``.
+
+    head
+        Filter pull requests by head user and branch name in the format
+        ``user:ref-name``.
+
+    base
+        Filter pulls by base branch name, e.g. ``gh-pages``.
+
+    sort
+        Field to sort results by. Either ``created``, ``updated``,
+        ``popularity`` (comment count), or ``long-running`` (age,
+        filtering by pull requests updated within the last month).
+        Default is ``created``.
+
+    direction
+        Sort direction. Either ``asc`` or ``desc``. Default is ``desc``.
+
+    per_page
+        Pagination size, maximum 100.
     """
     params = {}
 
@@ -59,8 +79,10 @@ def format_pr(pr_):
     Format API return information into a more manageable
     and useful dictionary for pull request information.
 
+    Legacy function, only used by deprecated callers.
+
     pr\_
-        The pull request to format.
+        Pull request to format.
     """
     ret = {
         "id": pr_.get("id"),

@@ -9,7 +9,7 @@ def test_member_present_invites_user(github_org, fake_github, fake_org, testmode
     assert ret.result is not False
     assert (ret.result is None) is testmode
     assert (len(fake_github.mutations()) == before) is testmode
-    assert ret.changes["old"] is None
+    assert ret.changes == {"invited": "newuser"}
     if testmode:
         assert "would have been invited" in ret.comment
         with pytest.raises(NotFound):
@@ -43,7 +43,7 @@ def test_member_absent_removes_member(github_org, fake_github, fake_org, testmod
     assert ret.result is not False
     assert (ret.result is None) is testmode
     assert (len(fake_github.mutations()) == before) is testmode
-    assert ret.changes
+    assert ret.changes == {"removed": "user2"}
     if testmode:
         assert "would have been removed" in ret.comment
         fake_org.get_member("user2")

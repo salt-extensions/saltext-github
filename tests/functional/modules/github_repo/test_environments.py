@@ -6,7 +6,8 @@ CUSTOM_POLICY = {"protected_branches": False, "custom_branch_policies": True}
 
 def test_list_environments(github_repo):
     ret = github_repo.list_environments()
-    assert [env["name"] for env in ret] == ["release"]
+    assert list(ret) == ["release"]
+    assert ret["release"]["deployment_branch_policy"] == CUSTOM_POLICY
 
 
 def test_get_environment(github_repo):
@@ -28,18 +29,11 @@ def test_set_environment_create(github_repo, fake_org):
     assert env.deployment_branch_policy is None
 
 
-def test_set_environment_carries_over_policy(github_repo, fake_org):
-    # A PUT replaces the whole config, the wrapper is expected to carry
-    # over the current branch policy when it is not specified.
+def test_set_environment_replaces_configuration(github_repo, fake_org):
+    # A PUT replaces the whole config, unspecified settings are reset
     github_repo.set_environment("release", wait_timer=10)
     env = fake_org.get_repo("repo-a").get_environment("release")
     assert env.wait_timer == 10
-    assert env.deployment_branch_policy == CUSTOM_POLICY
-
-
-def test_set_environment_reset_policy(github_repo, fake_org):
-    github_repo.set_environment("release", deployment_branch_policy=None)
-    env = fake_org.get_repo("repo-a").get_environment("release")
     assert env.deployment_branch_policy is None
 
 

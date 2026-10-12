@@ -5,12 +5,6 @@ from salt.exceptions import CommandExecutionError
 def test_list_milestones(github_repo):
     ret = github_repo.list_milestones()
     assert [milestone["title"] for milestone in ret] == ["v1.0", "v2.0"]
-    # min output drops presentation fields
-    assert "creator" not in ret[0]
-
-
-def test_list_milestones_full_output(github_repo):
-    ret = github_repo.list_milestones(output="full")
     assert ret[0]["creator"]["login"] == "user1"
 
 

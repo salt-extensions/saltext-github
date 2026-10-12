@@ -14,13 +14,13 @@ def get(conn, repo_name, number):
     Return the raw data of a single milestone.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository the milestone belongs to.
+        Repository the milestone belongs to.
 
     number
-        The number of the milestone to retrieve.
+        Milestone number to retrieve.
     """
     return client.query(conn, ["repos", conn.org_name, repo_name, "milestones", str(number)])
 
@@ -39,13 +39,24 @@ def list_all(
     search options.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository whose milestones to list.
+        Repository whose milestones to list.
 
-    Other parameters as described in
-    :py:func:`github.get_milestones <saltext.github.modules.github.get_milestones>`.
+    state
+        Filter milestones by their state. Either ``open``, ``closed``,
+        or ``all``. Default is ``open``.
+
+    sort
+        Field to sort results by. Either ``due_on`` or ``completeness``.
+        Default is ``due_on``.
+
+    direction
+        Sort direction. Either ``asc`` or ``desc``. Default is ``asc``.
+
+    per_page
+        Pagination size, maximum 100.
     """
     params = {}
 
@@ -68,7 +79,7 @@ def format_milestone(milestone):
     Trim milestone data to the fields that are useful in (CLI) output.
 
     milestone
-        The milestone to format.
+        Milestone to format.
     """
     return {
         key: value

@@ -73,4 +73,4 @@ def test_workflow_permissions_managed_missing_repo(github_repo):
         name="ghost", default_workflow_permissions="read"
     )
     assert ret.result is False
-    assert "Failed to get workflow permissions" in ret.comment
+    assert "Not Found" in ret.comment

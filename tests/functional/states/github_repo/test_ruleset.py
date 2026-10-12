@@ -52,7 +52,7 @@ def test_ruleset_present_create(github_repo, fake_github, fake_org, testmode):
     )
     assert ret.result is not False
     assert (ret.result is None) is testmode
-    assert ret.changes["old"] is None
+    assert ret.changes == {"created": "new-rules"}
     assert (len(fake_github.mutations()) == before) is testmode
     assert ("new-rules" in fake_org.get_repo("repo-b").rulesets) is not testmode
 
@@ -62,7 +62,7 @@ def test_ruleset_present_list_error(github_repo):
         name="x", repo_name="ghost", ruleset_params={"enforcement": "active"}
     )
     assert ret.result is False
-    assert "Failed to list rulesets" in ret.comment
+    assert "Not Found" in ret.comment
 
 
 def test_ruleset_present_update_failure(github_repo):
@@ -71,7 +71,7 @@ def test_ruleset_present_update_failure(github_repo):
         name="repo-rules", ruleset_params={"enforcement": "active", "bogus_param": True}
     )
     assert ret.result is False
-    assert "Failed to update ruleset" in ret.comment
+    assert "422" in ret.comment
     assert not ret.changes
 
 
@@ -82,7 +82,7 @@ def test_ruleset_absent(github_repo, fake_github, fake_org, testmode):
     assert (ret.result is None) is testmode
     assert (len(fake_github.mutations()) == before) is testmode
     assert bool(list(fake_org.get_repo("repo-a").rulesets)) is testmode
-    assert ret.changes == {"old": "Ruleset repo-rules exists", "new": "Ruleset repo-rules deleted"}
+    assert ret.changes == {"deleted": "repo-rules"}
     if not testmode:
         rerun = github_repo.ruleset_absent(name="repo-rules")
         assert rerun.result is True
@@ -99,4 +99,4 @@ def test_ruleset_absent_missing(github_repo, fake_github, testmode):
 def test_ruleset_absent_list_error(github_repo):
     ret = github_repo.ruleset_absent(name="x", repo_name="ghost")
     assert ret.result is False
-    assert "Failed to list rulesets" in ret.comment
+    assert "Not Found" in ret.comment

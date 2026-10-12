@@ -4,6 +4,7 @@ shared between the ``github``, ``github_org`` and ``github_repo``
 execution modules.
 """
 
+import hashlib
 import logging
 
 from salt.exceptions import CommandExecutionError
@@ -21,16 +22,16 @@ def get_config_value(profile, config_name, *, salt, context):
     (resolving SDB URIs) and cached in ``context``.
 
     profile
-        The profile name that contains configuration information.
+        Profile name that contains configuration information.
 
     config_name
-        The configuration item's name to use to return configuration values.
+        Configuration item name to look up.
 
     salt
-        The ``__salt__`` dunder of the calling module.
+        ``__salt__`` dunder of the calling module.
 
     context
-        The ``__context__`` dunder of the calling module.
+        ``__context__`` dunder of the calling module.
     """
     if "gh_profile" not in context or profile not in context["gh_profile"]:
         if not salt["config.get"](profile):
@@ -59,13 +60,13 @@ def get_api_url(profile, *, salt, context):
     Return the configured GitHub API base URL, defaulting to the public one.
 
     profile
-        The profile name that contains configuration information.
+        Profile name that contains configuration information.
 
     salt
-        The ``__salt__`` dunder of the calling module.
+        ``__salt__`` dunder of the calling module.
 
     context
-        The ``__context__`` dunder of the calling module.
+        ``__context__`` dunder of the calling module.
     """
     try:
         return get_config_value(profile, "api_url", salt=salt, context=context).rstrip("/")
@@ -79,18 +80,20 @@ def get_conn(profile, *, salt, context):
     for a profile, cached in ``context`` for performance.
 
     profile
-        The profile name that contains configuration information.
+        Profile name that contains configuration information.
 
     salt
-        The ``__salt__`` dunder of the calling module.
+        ``__salt__`` dunder of the calling module.
 
     context
-        The ``__context__`` dunder of the calling module.
+        ``__context__`` dunder of the calling module.
     """
     token = get_config_value(profile, "token", salt=salt, context=context)
     org_name = get_config_value(profile, "org_name", salt=salt, context=context)
     api_url = get_api_url(profile, salt=salt, context=context)
-    key = f"github.{token}:{org_name}:{api_url}"
+    # Hash the token to keep the secret out of context dumps
+    token_hash = hashlib.sha256(token.encode()).hexdigest()[:16]
+    key = f"github.{token_hash}:{org_name}:{api_url}"
 
     if key not in context:
         context[key] = GitHubConnection(token, org_name, api_url=api_url)

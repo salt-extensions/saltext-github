@@ -18,10 +18,10 @@ def list_all(conn, repo_name):
     Return all deploy keys of a repository.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
     """
     return client.query(conn, _path(conn, repo_name))
 
@@ -31,13 +31,13 @@ def get(conn, repo_name, key_id):
     Return the data of a single deploy key.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     key_id
-        The ID of the deploy key.
+        Deploy key ID.
 
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the deploy key does not exist.
@@ -52,16 +52,16 @@ def create(conn, repo_name, title, key, *, read_only=False):
     Note that deploy keys are immutable, they can only be replaced.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     title
-        The display title of the deploy key.
+        Display title of the deploy key.
 
     key
-        The SSH public key.
+        SSH public key.
 
     read_only
         Deny write access to the repository for this key. Defaults to false.
@@ -79,12 +79,12 @@ def delete(conn, repo_name, key_id):
     Remove a deploy key from a repository.
 
     conn
-        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
-        The name of the repository.
+        Repository name.
 
     key_id
-        The ID of the deploy key.
+        Deploy key ID.
     """
     client.query(conn, _path(conn, repo_name, key_id), method="DELETE")

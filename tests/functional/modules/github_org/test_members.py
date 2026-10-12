@@ -60,11 +60,3 @@ def test_remove_member_not_a_member(github_org):
 def test_remove_member_unknown_user(github_org):
     with pytest.raises(CommandExecutionError, match="Not Found"):
         github_org.remove_member("ghost")
-
-
-def test_list_members_without_mfa(github_org, fake_state):
-    assert github_org.list_members_without_mfa() == ["user2"]
-    fake_state.get_user("user1").data.two_factor_authentication = False
-    # Cached result is returned until the cache is bypassed
-    assert github_org.list_members_without_mfa() == ["user2"]
-    assert sorted(github_org.list_members_without_mfa(ignore_cache=True)) == ["user1", "user2"]
