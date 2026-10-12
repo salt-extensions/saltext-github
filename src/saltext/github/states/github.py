@@ -236,7 +236,7 @@ def team_present(
                     ret["comment"] = "Failed to update team properties."
                     return ret
 
-        current_repos = set(__salt__["github.list_team_repos"](name, profile=profile).keys())
+        current_repos = set(__salt__["github.list_team_repos"](name, profile=profile))
         repo_names = set(repo_names or [])
 
         repos_to_add = repo_names - current_repos
@@ -318,13 +318,13 @@ def team_present(
     members_no_mfa = __salt__["github.list_members_without_mfa"](profile=profile)
 
     members_lower = {}
-    for member_name, info in members or {}.items():
+    for member_name, info in (members or {}).items():
         members_lower[member_name.lower()] = info
 
     member_change = False
     current_members = __salt__["github.list_team_members"](name, profile=profile)
 
-    for member, member_info in members or {}.items():
+    for member, member_info in (members or {}).items():
         log.info("Checking member %s in team %s", member, name)
 
         if member.lower() not in current_members:
@@ -582,7 +582,7 @@ def repo_present(
         else:
             add_params = dict(given_params)
             add_params.update(kwargs)
-            result = __salt__["github.add_repo"](name, **add_params)
+            result = __salt__["github.add_repo"](name, profile=profile, **add_params)
 
             if not result:
                 ret["result"] = False
@@ -810,8 +810,6 @@ def ruleset_absent(
 
     ret["comment"] = f"Ruleset {name} does not exist"
     ret["result"] = True
-    if __opts__["test"]:
-        ret["result"] = None
     return ret
 
 
@@ -881,40 +879,44 @@ def ruleset_present(
             if ruleset["name"] == name:
                 kwargs.update({"ruleset_id": ruleset["id"]})
                 ruleset_info = __salt__["github.get_ruleset"](profile, **kwargs)
-                if ruleset_info.get("id"):
-                    for key in ruleset_info and ruleset_params:
-                        if ruleset_info.get(key) != ruleset_params.get(key):
-                            changes = {
-                                "old": f"Ruleset properties were {ruleset_info}",
-                                "new": f"Ruleset properties (that changed) are {ruleset_params}",
-                            }
-                            ret["changes"] = changes
-                            ret["comment"] = "ruleset updated"
-                            if __opts__["test"]:
-                                ret["changes"] = {}
-                                ret["result"] = None
-                                ret["comment"] = "ruleset will be updated"
-                            else:
-                                kwargs.update({"ruleset_params": ruleset_params})
-                                result = __salt__["github.update_ruleset"](profile, **kwargs)
-                                if not result.get("id"):
-                                    ret["changes"] = {}
-                                    ret["comment"] = "Could not update ruleset"
-                            return ret
-                    ret["comment"] = "ruleset present"
-                    if __opts__["test"]:
-                        ret["result"] = None
-                        ret["changes"] = {}
-                    return ret
-                else:
+                if not ruleset_info.get("id"):
                     ret["comment"] = "Could not get ruleset"
                     ret["result"] = False
                     return ret
 
-    changes = {"old": "No existing ruleset found", "new": "Ruleset created"}
-    ret["changes"] = changes
+                # Only diff the parameters that are being managed. The server
+                # response carries additional server-populated fields (id,
+                # timestamps, source, ...) that must not register as drift.
+                diff = {
+                    key: value
+                    for key, value in ruleset_params.items()
+                    if ruleset_info.get(key) != value
+                }
+                if not diff:
+                    ret["comment"] = "ruleset present"
+                    return ret
+
+                ret["changes"] = {
+                    "old": {key: ruleset_info.get(key) for key in diff},
+                    "new": diff,
+                }
+                if __opts__["test"]:
+                    ret["result"] = None
+                    ret["comment"] = "ruleset will be updated"
+                    return ret
+
+                kwargs.update({"ruleset_params": ruleset_params})
+                result = __salt__["github.update_ruleset"](profile, **kwargs)
+                if result.get("id"):
+                    ret["comment"] = "ruleset updated"
+                else:
+                    ret["changes"] = {}
+                    ret["result"] = False
+                    ret["comment"] = "Could not update ruleset"
+                return ret
+
+    ret["changes"] = {"old": "No existing ruleset found", "new": "Ruleset created"}
     if __opts__["test"]:
-        ret["changes"] = {}
         ret["result"] = None
         ret["comment"] = "ruleset will be added"
     else:

@@ -4,6 +4,8 @@ import shutil
 import pytest
 from saltfactories.utils.functional import Loaders
 
+from tests.support.github import FakeGitHubAPI
+
 log = logging.getLogger(__name__)
 
 
@@ -31,12 +33,17 @@ def state_tree_prod(tmp_path_factory):  # pragma: no cover
 
 
 @pytest.fixture(scope="module")
-def minion_config_defaults():  # pragma: no cover
+def minion_config_defaults(github_profile):  # pragma: no cover
     """
     Functional test modules can provide this fixture to tweak the default
     configuration dictionary passed to the minion factory
     """
-    return {}
+    noprivacy = dict(github_profile)
+    noprivacy.pop("allow_repo_privacy_changes")
+    return {
+        "github": github_profile,
+        "github_noprivacy": noprivacy,
+    }
 
 
 @pytest.fixture(scope="module")
@@ -148,3 +155,74 @@ def modules(loaders):  # pragma: no cover
 @pytest.fixture(scope="module")
 def states(loaders):  # pragma: no cover
     return loaders.states
+
+
+@pytest.fixture(scope="module")
+def github_profile(fake_github, fake_org):
+    return {
+        "token": fake_github.token,
+        "org_name": fake_org.data.login,
+        "api_url": fake_github.url,
+        "allow_repo_privacy_changes": True,
+    }
+
+
+@pytest.fixture(scope="session")
+def fake_github():
+    """
+    Mock API implementation for functional tests
+    """
+    api = FakeGitHubAPI()
+    with api.serve():
+        yield api
+
+
+@pytest.fixture(scope="session")
+def fake_state(fake_github):
+    return fake_github.state
+
+
+@pytest.fixture(scope="module")
+def fake_org(fake_state, fake_setup):
+    """
+    Fake organization named ``testorg``. Ensure ``fake_setup`` creates it.
+    """
+    return fake_state.get_org("testorg")
+
+
+@pytest.fixture(autouse=True)
+def _restore_fake_state(fake_github):
+    """
+    Before each test, reset the state to the module's defaults as specified in
+    ``fake_setup``. Also, clear the request log.
+    """
+    fake_github.reset()
+
+
+@pytest.fixture(scope="module")
+def fake_setup(fake_state):
+    """
+    Default setup for fake_state. Override this per module, if necessary.
+    """
+    user1 = fake_state.add_user("user1")
+    user2 = fake_state.add_user("user2", two_factor_authentication=False)
+    fake_state.add_user("newuser")
+    org = fake_state.add_org("testorg")
+    org.add_member(user1)
+    org.add_member(user2)
+    repo_a = org.add_repo("repo-a")
+    org.add_repo("repo-b", private=True)
+    org.add_ruleset("org-rules")
+    team_a = org.add_team("Team A")
+    repo_a.add_ruleset("repo-rules", enforcement="disabled")
+    team_a.add_member(user1)
+    team_a.add_repo(repo_a, "pull")
+    repo_a.add_milestone("v1.0", user1)
+    repo_a.add_milestone("v2.0", user1)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def fake_state_setup(fake_state, request):
+    fake_state.reset()
+    request.getfixturevalue("fake_setup")
+    fake_state.snapshot()

@@ -1,8 +1,6 @@
 """
 Module for interacting with the GitHub v3 API.
 
-.. versionadded:: 2016.3.0
-
 :depends: PyGithub python module
 
 Configuration
@@ -27,19 +25,27 @@ For example:
       # optional: it can be dangerous to change the privacy of a repository
       # in an automated way. set this to True to allow privacy modifications
       allow_repo_privacy_changes: False
+
+      # optional: the base URL of the GitHub API. Set this when targeting
+      # a GitHub Enterprise Server instance, e.g.
+      # https://github.example.com/api/v3
+      api_url: https://api.github.com
 """
 
 import logging
+import re
 
-import salt.utils.http
 import salt.utils.json
 from salt.exceptions import CommandExecutionError
+
+from saltext.github.utils import filter_unset
 
 try:
     # pylint: disable=no-name-in-module
     import github
     import github.NamedUser
     import github.PaginatedList
+    import github.Repository
     from github.GithubException import UnknownObjectException
 
     # pylint: enable=no-name-in-module
@@ -48,6 +54,8 @@ except ImportError:
     HAS_LIBS = False
 
 log = logging.getLogger(__name__)
+
+API_URL_DEFAULT = "https://api.github.com"
 
 __virtualname__ = "github"
 
@@ -75,13 +83,15 @@ def _get_config_value(profile, config_name):
     config_name
         The configuration item's name to use to return configuration values.
     """
-    config = __salt__["config.option"](profile)
-    if not config:
-        raise CommandExecutionError(
-            f"Authentication information could not be found for the '{profile}' profile."
-        )
+    if "gh_profile" not in __context__ or profile not in __context__["gh_profile"]:
+        config = __salt__["config.option"](profile)
+        if not config:
+            raise CommandExecutionError(
+                f"Authentication information could not be found for the '{profile}' profile."
+            )
+        __context__.setdefault("gh_profile", {})[profile] = config
 
-    config_value = config.get(config_name)
+    config_value = __context__["gh_profile"][profile].get(config_name)
     if config_value is None:
         raise CommandExecutionError(
             f"The '{config_name}' parameter was not found in the '{profile}' profile."
@@ -90,17 +100,30 @@ def _get_config_value(profile, config_name):
     return config_value
 
 
-def _get_client(profile):
+def _get_api_url(profile):
+    """
+    Return the configured GitHub API base URL, defaulting to the public one.
+    """
+    try:
+        return _get_config_value(profile, "api_url").rstrip("/")
+    except CommandExecutionError:  # pragma: no cover
+        return API_URL_DEFAULT
+
+
+def _get_client(profile) -> github.Github:
     """
     Return the GitHub client, cached into __context__ for performance
     """
     token = _get_config_value(profile, "token")
-    key = "github.{}:{}".format(  # pylint: disable=consider-using-f-string
-        token, _get_config_value(profile, "org_name")
+    api_url = _get_api_url(profile)
+    key = "github.{}:{}:{}".format(  # pylint: disable=consider-using-f-string
+        token, _get_config_value(profile, "org_name"), api_url
     )
 
     if key not in __context__:
-        __context__[key] = github.Github(token, per_page=100)
+        __context__[key] = github.Github(
+            auth=github.Auth.Token(token), base_url=api_url, per_page=100
+        )
     return __context__[key]
 
 
@@ -158,8 +181,6 @@ def list_users(profile="github", ignore_cache=False):
     ignore_cache
         Bypasses the use of cached users.
 
-        .. versionadded:: 2016.11.0
-
     CLI Example:
 
     .. code-block:: bash
@@ -198,7 +219,6 @@ def get_user(name, profile="github", user_details=False):
 
         salt myminion github.get_user github-handle
         salt myminion github.get_user github-handle user_details=true
-
     """
 
     if not user_details and name in list_users(profile):
@@ -309,8 +329,6 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
     """
     Return information about a single issue in a named repository.
 
-    .. versionadded:: 2016.11.0
-
     issue_number
         The number of the issue to retrieve.
 
@@ -358,8 +376,6 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
 def get_issue_comments(issue_number, repo_name=None, profile="github", since=None, output="min"):
     """
     Return information about the comments for a given issue in a named repository.
-
-    .. versionadded:: 2016.11.0
 
     issue_number
         The number of the issue for which to retrieve comments.
@@ -433,8 +449,6 @@ def get_issues(
 ):
     """
     Returns information for all issues in a given repository, based on the search options.
-
-    .. versionadded:: 2016.11.0
 
     repo_name
         The name of the repository for which to list issues. This argument is
@@ -561,8 +575,6 @@ def get_milestones(
     """
     Return information about milestones for a given repository.
 
-    .. versionadded:: 2016.11.0
-
     repo_name
         The name of the repository for which to list issues. This argument is
         required, either passed via the CLI, or defined in the configured
@@ -597,7 +609,6 @@ def get_milestones(
     .. code-block:: bash
 
         salt myminion github.get_milestones
-
     """
     org_name = _get_config_value(profile, "org_name")
     if repo_name is None:
@@ -625,9 +636,9 @@ def get_milestones(
         if output == "full":
             ret[milestone_id] = milestone
         else:
-            milestone.pop("creator")
-            milestone.pop("html_url")
-            milestone.pop("labels_url")
+            milestone.pop("creator", None)
+            milestone.pop("html_url", None)
+            milestone.pop("labels_url", None)
             ret[milestone_id] = milestone
 
     return ret
@@ -636,8 +647,6 @@ def get_milestones(
 def get_milestone(number=None, name=None, repo_name=None, profile="github", output="min"):
     """
     Return information about a single milestone in a named repository.
-
-    .. versionadded:: 2016.11.0
 
     number
         The number of the milestone to retrieve. If provided, this option
@@ -665,7 +674,6 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github", outp
 
         salt myminion github.get_milestone 72
         salt myminion github.get_milestone name=my_milestone
-
     """
     ret = {}
 
@@ -686,9 +694,9 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github", outp
             if output.lower() == "full":
                 ret[milestone_id] = milestone_data
             else:
-                milestone_data.pop("creator")
-                milestone_data.pop("html_url")
-                milestone_data.pop("labels_url")
+                milestone_data.pop("creator", None)
+                milestone_data.pop("html_url", None)
+                milestone_data.pop("labels_url", None)
                 ret[milestone_id] = milestone_data
             return ret
 
@@ -731,8 +739,6 @@ def _repo_to_dict(repo):
 def get_repo_info(repo_name, profile="github", ignore_cache=False):
     """
     Return information for a given repo.
-
-    .. versionadded:: 2016.11.0
 
     repo_name
         The name of the repository.
@@ -778,8 +784,6 @@ def get_repo_teams(repo_name, profile="github"):
     """
     Return teams belonging to a repository.
 
-    .. versionadded:: 2017.7.0
-
     repo_name
         The name of the repository from which to retrieve teams.
 
@@ -820,8 +824,6 @@ def list_repos(profile="github"):
     repositories within the organization Dependent upon the access rights of
     the profile token.
 
-    .. versionadded:: 2016.11.0
-
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -839,8 +841,6 @@ def list_private_repos(profile="github"):
     """
     List private repositories within the organization. Dependent upon the access
     rights of the profile token.
-
-    .. versionadded:: 2016.11.0
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -862,8 +862,6 @@ def list_private_repos(profile="github"):
 def list_public_repos(profile="github"):
     """
     List public repositories within the organization.
-
-    .. versionadded:: 2016.11.0
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -937,27 +935,24 @@ def add_repo(
     .. code-block:: bash
 
         salt myminion github.add_repo 'repo_name'
-
-    .. versionadded:: 2016.11.0
     """
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        given_params = {
-            "description": description,
-            "homepage": homepage,
-            "private": private,
-            "has_issues": has_issues,
-            "has_wiki": has_wiki,
-            "has_downloads": has_downloads,
-            "auto_init": auto_init,
-            "gitignore_template": gitignore_template,
-            "license_template": license_template,
-        }
-        parameters = {"name": name}
-        for param_name, param_value in given_params.items():
-            if param_value is not None:
-                parameters[param_name] = param_value
+        parameters = filter_unset(
+            {
+                "description": description,
+                "homepage": homepage,
+                "private": private,
+                "has_issues": has_issues,
+                "has_wiki": has_wiki,
+                "has_downloads": has_downloads,
+                "auto_init": auto_init,
+                "gitignore_template": gitignore_template,
+                "license_template": license_template,
+            }
+        )
+        parameters["name"] = name
 
         organization._requester.requestJsonAndCheck(
             "POST", organization.url + "/repos", input=parameters
@@ -1011,8 +1006,6 @@ def edit_repo(
     .. code-block:: bash
 
         salt myminion github.add_repo 'repo_name'
-
-    .. versionadded:: 2016.11.0
     """
 
     try:
@@ -1066,11 +1059,10 @@ def remove_repo(name, profile="github"):
     .. code-block:: bash
 
         salt myminion github.remove_repo 'my-repo'
-
-    .. versionadded:: 2016.11.0
     """
-    repo_info = get_repo_info(name, profile=profile)
-    if not repo_info:
+    try:
+        get_repo_info(name, profile=profile)
+    except CommandExecutionError:
         log.error("Repo %s to be removed does not exist.", name)
         return False
     try:
@@ -1140,8 +1132,6 @@ def add_team(
     .. code-block:: bash
 
         salt myminion github.add_team 'team_name'
-
-    .. versionadded:: 2016.11.0
     """
     try:
         client = _get_client(profile)
@@ -1161,7 +1151,7 @@ def add_team(
         organization._requester.requestJsonAndCheck(
             "POST", organization.url + "/teams", input=parameters
         )
-        list_teams(ignore_cache=True)  # Refresh cache
+        list_teams(ignore_cache=True, profile=profile)  # Refresh cache
         return True
     except github.GithubException:
         log.exception("Error creating a team")
@@ -1193,8 +1183,6 @@ def edit_team(name, description=None, privacy=None, permission=None, profile="gi
     .. code-block:: bash
 
         salt myminion github.edit_team 'team_name' description='Team description'
-
-    .. versionadded:: 2016.11.0
     """
     team = get_team(name, profile=profile)
     if not team:
@@ -1237,8 +1225,6 @@ def remove_team(name, profile="github"):
     .. code-block:: bash
 
         salt myminion github.remove_team 'team_name'
-
-    .. versionadded:: 2016.11.0
     """
     team_info = get_team(name, profile=profile)
     if not team_info:
@@ -1274,8 +1260,6 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
     .. code-block:: bash
 
         salt myminion github.list_team_repos 'team_name'
-
-    .. versionadded:: 2016.11.0
     """
     cached_team = get_team(team_name, profile=profile)
     if not cached_team:
@@ -1284,7 +1268,7 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
 
     # Return from cache if available
     if cached_team.get("repos") and not ignore_cache:
-        return cached_team.get("repos")
+        return cached_team["repos"]
 
     try:
         client = _get_client(profile)
@@ -1292,6 +1276,7 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
         team = organization.get_team(cached_team["id"])
     except UnknownObjectException:
         log.exception("Resource not found: %s", cached_team["id"])
+        return {}
     try:
         repos = {}
         for repo in team.get_repos():
@@ -1306,7 +1291,7 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
         return repos
     except UnknownObjectException:
         log.exception("Resource not found: %s", cached_team["id"])
-        return []
+        return {}
 
 
 def add_team_repo(repo_name, team_name, profile="github", permission=None):
@@ -1327,27 +1312,23 @@ def add_team_repo(repo_name, team_name, profile="github", permission=None):
         'push' or 'admin'. If not specified, the default permission specified on
         the team will be used.
 
-        .. versionadded:: 2017.7.0
-
     CLI Example:
 
     .. code-block:: bash
 
         salt myminion github.add_team_repo 'my_repo' 'team_name'
-
-    .. versionadded:: 2016.11.0
     """
-    team = get_team(team_name, profile=profile)
-    if not team:
+    team_info = get_team(team_name, profile=profile)
+    if not team_info:
         log.error("Team %s does not exist", team_name)
         return False
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(team["id"])
+        team = organization.get_team(team_info["id"])
         repo = organization.get_repo(repo_name)
     except UnknownObjectException:
-        log.exception("Resource not found: %s", team["id"])
+        log.exception("Resource not found: %s", team_info["id"])
         return False
     params = None
     if permission is not None:
@@ -1377,20 +1358,18 @@ def remove_team_repo(repo_name, team_name, profile="github"):
     .. code-block:: bash
 
         salt myminion github.remove_team_repo 'my_repo' 'team_name'
-
-    .. versionadded:: 2016.11.0
     """
-    team = get_team(team_name, profile=profile)
-    if not team:
+    team_info = get_team(team_name, profile=profile)
+    if not team_info:
         log.error("Team %s does not exist", team_name)
         return False
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(team["id"])
+        team = organization.get_team(team_info["id"])
         repo = organization.get_repo(repo_name)
     except UnknownObjectException:
-        log.exception("Resource not found: %s", team["id"])
+        log.exception("Resource not found: %s", team_info["id"])
         return False
     team.remove_from_repos(repo)
     return repo_name not in list_team_repos(team_name, profile=profile, ignore_cache=True)
@@ -1414,8 +1393,6 @@ def list_team_members(team_name, profile="github", ignore_cache=False):
     .. code-block:: bash
 
         salt myminion github.list_team_members 'team_name'
-
-    .. versionadded:: 2016.11.0
     """
     cached_team = get_team(team_name, profile=profile)
     if not cached_team:
@@ -1423,7 +1400,7 @@ def list_team_members(team_name, profile="github", ignore_cache=False):
         return False
     # Return from cache if available
     if cached_team.get("members") and not ignore_cache:
-        return cached_team.get("members")
+        return cached_team["members"]
 
     try:
         client = _get_client(profile)
@@ -1431,6 +1408,7 @@ def list_team_members(team_name, profile="github", ignore_cache=False):
         team = organization.get_team(cached_team["id"])
     except UnknownObjectException:
         log.exception("Resource not found: %s", cached_team["id"])
+        return []
     try:
         cached_team["members"] = [member.login.lower() for member in team.get_members()]
         return cached_team["members"]
@@ -1454,8 +1432,6 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
     .. code-block:: bash
 
         salt myminion github.list_members_without_mfa
-
-    .. versionadded:: 2016.11.0
     """
     key = "github.{}:non_mfa_users".format(  # pylint: disable=consider-using-f-string
         _get_config_value(profile, "org_name")
@@ -1465,14 +1441,8 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
 
-        filter_key = "filter"
-        # Silly hack to see if we're past PyGithub 1.26.0, where the name of
-        # the filter kwarg changed
-        if hasattr(github.Team.Team, "membership"):
-            filter_key = "filter_"
-
         __context__[key] = [
-            m.login.lower() for m in _get_members(organization, {filter_key: "2fa_disabled"})
+            m.login.lower() for m in _get_members(organization, {"filter": "2fa_disabled"})
         ]
     return __context__[key]
 
@@ -1496,8 +1466,6 @@ def is_team_member(name, team_name, profile="github"):
     .. code-block:: bash
 
         salt myminion github.is_team_member 'user_name' 'team_name'
-
-    .. versionadded:: 2016.11.0
     """
     return name.lower() in list_team_members(team_name, profile=profile)
 
@@ -1520,20 +1488,18 @@ def add_team_member(name, team_name, profile="github"):
     .. code-block:: bash
 
         salt myminion github.add_team_member 'user_name' 'team_name'
-
-    .. versionadded:: 2016.11.0
     """
-    team = get_team(team_name, profile=profile)
-    if not team:
+    team_info = get_team(team_name, profile=profile)
+    if not team_info:
         log.error("Team %s does not exist", team_name)
         return False
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(team["id"])
+        team = organization.get_team(team_info["id"])
         member = client.get_user(name)
     except UnknownObjectException:
-        log.exception("Resource not found: %s", team["id"])
+        log.exception("Resource not found: %s", team_info["id"])
         return False
 
     try:
@@ -1569,30 +1535,27 @@ def remove_team_member(name, team_name, profile="github"):
     .. code-block:: bash
 
         salt myminion github.remove_team_member 'user_name' 'team_name'
-
-    .. versionadded:: 2016.11.0
     """
-    team = get_team(team_name, profile=profile)
-    if not team:
+    team_info = get_team(team_name, profile=profile)
+    if not team_info:
         log.error("Team %s does not exist", team_name)
         return False
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(team["id"])
+        team = organization.get_team(team_info["id"])
         member = client.get_user(name)
 
     except UnknownObjectException:
-        log.exception("Resource not found: %s", team["id"])
+        log.exception("Resource not found: %s", team_info["id"])
         return False
 
-    if not hasattr(team, "remove_from_members"):
-        return (
-            False,
-            "PyGithub 1.26.0 or greater is required for team management, please upgrade.",
-        )
+    try:
+        remove = team.remove_membership
+    except AttributeError:
+        remove = team.remove_from_members
 
-    team.remove_from_members(member)
+    remove(member)
     return not team.has_in_members(member)
 
 
@@ -1611,8 +1574,6 @@ def list_teams(profile="github", ignore_cache=False):
     .. code-block:: bash
 
         salt myminion github.list_teams
-
-    .. versionadded:: 2016.11.0
     """
     key = "github.{}:teams".format(  # pylint: disable=consider-using-f-string
         _get_config_value(profile, "org_name")
@@ -1654,8 +1615,6 @@ def get_prs(
     """
     Returns information for all pull requests in a given repository, based on
     the search options provided.
-
-    .. versionadded:: 2017.7.0
 
     repo_name
         The name of the repository for which to list pull requests. This
@@ -1799,6 +1758,25 @@ def _format_issue(issue):
     return ret
 
 
+def _next_page_number(headers):
+    """
+    Extract the next page number from a GitHub ``Link`` response header.
+
+    Returns ``None`` when there is no further page.
+    """
+    link = None
+    for key, val in (headers or {}).items():
+        if key.lower() == "link":
+            link = val
+            break
+    if not link:
+        return None
+    match = re.search(r'<[^>]*[?&]page=(\d+)[^>]*>\s*;\s*rel="next"', link)
+    if match:
+        return match.group(1)
+    return None
+
+
 def _query(
     profile,
     action=None,
@@ -1807,152 +1785,146 @@ def _query(
     method="GET",
     header_dict=None,
     data=None,
-    url="https://api.github.com/",
     per_page=None,
 ):
     """
     Make a web call to the GitHub API and deal with paginated results.
+
+    Requests are dispatched through the PyGithub client (honoring the
+    profile's ``api_url``, authentication and retry handling).
     """
     if not isinstance(args, dict):
         args = {}
 
-    if action:
-        url += action
+    path_segments = (([action] if isinstance(action, str) else action) or []) + (
+        ([command] if isinstance(command, str) else command) or []
+    )
+    url = "/" + "/".join(str(segment) for segment in path_segments)
 
-    if command:
-        url += f"/{command}"
+    log.debug("GitHub API path: %s", url)
 
-    log.debug("GitHub URL: %s", url)
-
-    if header_dict is None:
-        header_dict = {}
-
-    if not header_dict.get("Authorization"):
-        header_dict["Authorization"] = f"Bearer {_get_config_value(profile, 'token')}"
-    if per_page and "per_page" not in args.keys():
+    if per_page and "per_page" not in args:
         args["per_page"] = per_page
 
-    header_dict["Accept"] = "application/vnd.github+json"
+    if isinstance(data, str):
+        data = salt.utils.json.loads(data)
 
-    decode = True
-    if method == "DELETE":
-        decode = False
+    requester = _get_client(profile).requester
 
-    # GitHub paginates all queries when returning many items.
-    # Gather all data using multiple queries and handle pagination.
-    ret = {}
     complete_result = []
-    next_page = True
-    page_number = ""
-    while next_page is True:
-        if page_number:
-            args["page"] = page_number
-        result = salt.utils.http.query(
-            url,
-            method,
-            params=args,
-            data=data,
-            header_dict=header_dict,
-            decode=decode,
-            decode_type="json",
-            headers=True,
-            status=True,
-            text=True,
-            hide_fields=None,
-            opts=__opts__,
-        )
-        log.debug("GitHub Response Status Code: %s", result.get("status"))
-
-        if result.get("status") in [200, 201]:
-
-            if isinstance(result["dict"], dict):
-                # If only querying for one item, such as a single issue
-                # The GitHub API returns a single dictionary, instead of
-                # A list of dictionaries. In that case, we can return.
-                return result
-
-            ret = result
-            complete_result = complete_result + result["dict"]
-            ret["dict"] = complete_result
-
-        else:
-            if result:
-                return result
-            raise CommandExecutionError
-
+    next_page = None
+    while True:
+        if next_page:
+            args["page"] = next_page
         try:
-            link_info = result.get("headers").get("Link").split(",")[0]
-        except AttributeError:
-            # Only one page of data was returned; exit the loop.
-            next_page = False
-            continue
+            status, headers, text = requester.requestJson(
+                method, url, parameters=args or None, headers=header_dict, input=data
+            )
+        except github.GithubException as err:
+            return {"status": err.status, "error": str(err)}
+        except Exception as err:  # pylint: disable=broad-except
+            raise CommandExecutionError(f"GitHub API request failed: {err}") from err
+        log.debug("GitHub Response Status Code: %s", status)
+        decoded = salt.utils.json.loads(text) if text else None
 
-        if "next" in link_info:
-            # Get the 'next' page number from the Link header.
-            page_number = link_info.split(">")[0].split("&page=")[1]
-        else:
-            # Last page already processed; break the loop.
-            next_page = False
+        if status not in (200, 201, 204):
+            message = decoded.get("message", text) if isinstance(decoded, dict) else text
+            return {"status": status, "error": f"{status} {message}".strip(), "dict": decoded}
+
+        if not isinstance(decoded, list):
+            # If only querying for one item, such as a single issue
+            # The GitHub API returns a single dictionary, instead of
+            # A list of dictionaries. In that case, we can return.
+            return {"status": status, "headers": headers, "dict": decoded}
+
+        complete_result += decoded
+        ret = {"status": status, "headers": headers, "dict": complete_result}
+
+        next_page = _next_page_number(headers)
+        if next_page is None:
+            break
 
     return ret
 
 
-def _check_ruleset_params(profile, rule_id=False, rule_params=False, **kwargs):
+def _check_ruleset_params(
+    profile,
+    require_id=False,
+    require_params=False,
+    *,
+    ruleset_type=None,
+    owner=None,
+    repo_name=None,
+    org_name=None,
+    header_dict=None,
+    ruleset_id=None,
+    ruleset_params=None,
+    **_,
+):
     """
     Helper function to check for param values on command line and in config file
 
     profile
         The name of the profile configuration to use.
 
-    ruleset_id
-        Defautls to false. If ruleset_id is required, set to True.
+    require_id
+        Require ruleset_id. Defaults to false.
 
-    ruleset_params
-        Defautls to false. If ruleset_params are required, set to True.
-
+    require_params
+        Require ruleset_params payload. Defaults to false.
+        If true, just requires that ruleset_params is set.
+        You can also pass a set of named params to require in the payload.
     """
-    if not kwargs.get("ruleset_type"):
-        kwargs["ruleset_type"] = _get_config_value(profile, "ruleset_type")
-    if kwargs["ruleset_type"] not in ["repo", "org"]:
-        raise CommandExecutionError
+    ruleset_type = ruleset_type or _get_config_value(profile, "ruleset_type")
+    if ruleset_type not in ("repo", "org"):
+        raise CommandExecutionError(f"Invalid ruleset type: {ruleset_type}")
 
-    if kwargs["ruleset_type"] == "repo":
-        if not kwargs.get("owner"):
-            kwargs["owner"] = _get_config_value(profile, "owner")
-        if not kwargs.get("repo_name"):
-            kwargs["repo_name"] = _get_config_value(profile, "repo_name")
-
-        action = "/".join(["repos", kwargs["owner"], kwargs["repo_name"], "rulesets"])
+    if ruleset_type == "repo":
+        owner = owner or _get_config_value(profile, "owner")
+        repo_name = repo_name or _get_config_value(profile, "repo_name")
+        action = ["repos", owner, repo_name, "rulesets"]
     else:
-        if not kwargs.get("org_name"):
-            kwargs["org_name"] = _get_config_value(profile, "org_name")
-
-        action = "/".join(["orgs", kwargs["org_name"], "rulesets"])
+        org_name = org_name or _get_config_value(profile, "org_name")
+        action = ["orgs", org_name, "rulesets"]
 
     # check for optional header_dict
-    if not kwargs.get("header_dict"):
-        try:
-            kwargs["header_dict"] = _get_config_value(profile, "header_dict")
-        except CommandExecutionError:
-            kwargs["header_dict"] = {}
+    try:
+        header_dict = header_dict or _get_config_value(profile, "header_dict")
+    except CommandExecutionError:
+        header_dict = {}
 
-        # verify header_dict is a dict
-        if not isinstance(kwargs["header_dict"], dict):
-            kwargs["header_dict"] = {}
+    # verify header_dict is a dict
+    if not isinstance(header_dict, dict):
+        header_dict = {}
 
     # if ruleset is required, check for ruleset_id
-    if rule_id:
-        if not kwargs.get("ruleset_id"):
-            kwargs["ruleset_id"] = _get_config_value(profile, "ruleset_id")
-
-        action = action + "/" + str(kwargs["ruleset_id"])
+    if require_id:
+        ruleset_id = ruleset_id or _get_config_value(profile, "ruleset_id")
+        action.append(ruleset_id or _get_config_value(profile, "ruleset_id"))
 
     # if ruleset_params are required, check for ruleset_params
-    if rule_params:
-        if not kwargs.get("ruleset_params"):
-            kwargs["ruleset_params"] = _get_config_value(profile, "ruleset_params")
+    if require_params:
+        ruleset_params = ruleset_params or _get_config_value(profile, "ruleset_params")
+        if not isinstance(ruleset_params, dict):
+            raise CommandExecutionError("ruleset_params need to be a dict")
+        if require_params is not True:
+            if missing := require_params.difference(ruleset_params):
+                raise CommandExecutionError(
+                    f"The following ruleset_params are required, but not defined: {', '.join(missing)}"
+                )
 
-    return kwargs, action
+    params = filter_unset(
+        {
+            "ruleset_type": ruleset_type,
+            "owner": owner,
+            "repo_name": repo_name,
+            "org_name": org_name,
+            "ruleset_id": ruleset_id,
+            "ruleset_params": ruleset_params,
+        }
+    )
+
+    return action, header_dict, params
 
 
 def get_ruleset(profile="github", **kwargs):
@@ -1961,16 +1933,22 @@ def get_ruleset(profile="github", **kwargs):
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
+
     ruleset_type
         The type of ruleset. 'repo' or 'org'.
+
     ruleset_id
         Id of the ruleset.
+
     owner
         The account owner of the repository.
+
     repo_name
         The name of the repo.
+
     org_name
         The name of the organization.
+
     header_dict
         Headers to pass to Github API.
 
@@ -1981,10 +1959,10 @@ def get_ruleset(profile="github", **kwargs):
         salt myminion github.get_ruleset
         salt myminion github.get_ruleset ruleset_id=1
     """
-    params, action = _check_ruleset_params(profile, rule_id=True, **kwargs)
+    action, header_dict, _ = _check_ruleset_params(profile, require_id=True, **kwargs)
 
     try:
-        ret = _query(profile, action, header_dict=params["header_dict"])
+        ret = _query(profile, action, header_dict=header_dict)
         if not ret.get("error"):
             return ret["dict"]
         ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
@@ -2003,16 +1981,22 @@ def delete_ruleset(profile="github", **kwargs):
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
+
     ruleset_type
         The type of ruleset. 'repo' or 'org'.
+
     owner
         The account owner of the repository.
+
     repo_name
         The name of the repo.
+
     ruleset_id
         Id of the ruleset.
+
     org_name
         The name of the organization.
+
     header_dict
         Headers to pass to Github API.
 
@@ -2023,10 +2007,10 @@ def delete_ruleset(profile="github", **kwargs):
         salt myminion github.delete_ruleset
         salt myminion github.delete_ruleset ruleset_id=1
     """
-    params, action = _check_ruleset_params(profile, rule_id=True, **kwargs)
+    action, header_dict, params = _check_ruleset_params(profile, require_id=True, **kwargs)
 
     try:
-        ret = _query(profile, action, method="DELETE", header_dict=params["header_dict"])
+        ret = _query(profile, action, method="DELETE", header_dict=header_dict)
         if ret.get("error"):
             ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
             ret["result"] = False
@@ -2045,18 +2029,25 @@ def update_ruleset(profile="github", **kwargs):
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
+
     ruleset_type
         The type of ruleset. 'repo' or 'org'.
+
     ruleset_id
         Id of the ruleset.
+
     owner
         The account owner of the repository.
+
     repo_name
         The name of the repo.
+
     org_name
         The name of the organization.
+
     header_dict
         headers to pass to Github API.
+
     ruleset_params
         number of returned results (max 100).
 
@@ -2067,15 +2058,17 @@ def update_ruleset(profile="github", **kwargs):
         salt myminion github.update_ruleset
         salt myminion github.update_ruleset ruleset_id=1
     """
-    params, action = _check_ruleset_params(profile, rule_id=True, rule_params=True, **kwargs)
+    action, header_dict, params = _check_ruleset_params(
+        profile, require_id=True, require_params=True, **kwargs
+    )
 
-    if not isinstance(params["ruleset_params"], dict):
-        raise CommandExecutionError("params need to be a dict")
-
-    ruleset_params = salt.utils.json.dumps(params["ruleset_params"])
     try:
         ret = _query(
-            profile, action, method="PUT", data=ruleset_params, header_dict=params["header_dict"]
+            profile,
+            action,
+            method="PUT",
+            data=params["ruleset_params"],
+            header_dict=header_dict,
         )
         if not ret.get("error"):
             return ret["dict"]
@@ -2096,16 +2089,22 @@ def add_ruleset(profile="github", **kwargs):
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
+
     ruleset_type
         The type of ruleset. 'repo' or 'org'.
+
     owner
         The account owner of the repository.
+
     repo_name
         The name of the repo.
+
     org_name
         The name of the organization.
+
     header_dict
         headers to pass to Github API.
+
     ruleset_params
         number of returned results (max 100).
 
@@ -2115,19 +2114,17 @@ def add_ruleset(profile="github", **kwargs):
 
         salt myminion github.add_ruleset
     """
-    params, action = _check_ruleset_params(profile, rule_params=True, **kwargs)
+    action, header_dict, params = _check_ruleset_params(
+        profile, require_params={"name", "enforcement"}, **kwargs
+    )
 
-    if not isinstance(params["ruleset_params"], dict):
-        raise CommandExecutionError("params need to be a dict")
-    if "name" not in params["ruleset_params"]:
-        raise CommandExecutionError("name is required")
-    if "enforcement" not in params["ruleset_params"]:
-        raise CommandExecutionError("enforcement is required")
-
-    ruleset_params = salt.utils.json.dumps(params["ruleset_params"])
     try:
         ret = _query(
-            profile, action, method="POST", data=ruleset_params, header_dict=params["header_dict"]
+            profile,
+            action,
+            method="POST",
+            data=params["ruleset_params"],
+            header_dict=header_dict,
         )
         if not ret.get("error"):
             return ret["dict"]
@@ -2141,22 +2138,28 @@ def add_ruleset(profile="github", **kwargs):
     return ret
 
 
-def list_rulesets(profile="github", **kwargs):
+def list_rulesets(profile="github", *, per_page=None, **kwargs):
     """
     List rulesets
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
+
     ruleset_type
         The type of ruleset. 'repo' or 'org'.
+
     owner
         The account owner of the repository.
+
     repo_name
         The name of the repo.
+
     org_name
         The name of the organization.
+
     header_dict
         headers to pass to Github API.
+
     per_page
         number of returned results (max 100).
 
@@ -2166,18 +2169,14 @@ def list_rulesets(profile="github", **kwargs):
 
         salt myminion github.list_rulesets
     """
-    params, action = _check_ruleset_params(profile, **kwargs)
-
-    if not kwargs.get("per_page"):
-        try:
-            kwargs["per_page"] = _get_config_value(profile, "per_page")
-        except CommandExecutionError:
-            kwargs["per_page"] = None
+    action, header_dict, _ = _check_ruleset_params(profile, **kwargs)
+    try:
+        per_page = per_page if per_page is not None else _get_config_value(profile, "per_page")
+    except CommandExecutionError:
+        per_page = None
 
     try:
-        ret = _query(
-            profile, action, header_dict=params["header_dict"], per_page=kwargs["per_page"]
-        )
+        ret = _query(profile, action, header_dict=header_dict, per_page=per_page)
         if not ret.get("error"):
             if ret["dict"]:
                 return {"rulesets": ret["dict"]}
