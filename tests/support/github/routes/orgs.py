@@ -17,7 +17,12 @@ class OrgRoutes(APIBase):
 
     @GET("users/<login>")
     def _get_user(self, match, _query, _body):
-        return 200, self.state.get_user(match["login"]).payload()
+        # Like the real endpoint, this also resolves organizations
+        # (distinguished via the payload's "type" field).
+        try:
+            return 200, self.state.get_user(match["login"]).payload()
+        except NotFound:
+            return 200, self.state.get_org(match["login"]).payload()
 
     @GET("orgs/<org>/members")
     def _list_members(self, match, query, _body):

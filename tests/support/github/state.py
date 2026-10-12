@@ -142,13 +142,31 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
         else:
             resolved = RepoId.from_seq(repo_id)
 
-        if resolved.owner not in self.orgs:
-            if resolved.owner in self.users:
-                raise NotImplementedError
-            raise exc(f"Requested repo from nonexistent org {resolved.owner=}")
+        if resolved.owner not in self.orgs and resolved.owner not in self.users:
+            raise exc(f"Requested repo from nonexistent owner {resolved.owner=}")
         if resolved not in self.repos:
-            raise exc(f"Requested nonexistent repo {resolved.name=} from org {resolved.owner=}")
+            raise exc(f"Requested nonexistent repo {resolved.name=} from owner {resolved.owner=}")
         return Repo(self, self.repos[resolved])
+
+    def remove_repo(self, repo_id: RepoId | Sequence[str] | str, *, exc=NotFound) -> None:
+        repo = self.get_repo(repo_id, exc=exc)
+        resolved = repo.data.repo_id
+        self.repos.pop(resolved)
+        if repo.data.owner_type == "org":
+            for team in self.get_org(resolved.owner).teams:
+                team.data.repos.pop(resolved, None)
+        for store in (
+            self.rulesets_repo,
+            self.milestones,
+            self.issues,
+            self.pulls,
+            self.deploy_keys,
+            self.secrets,
+            self.environments,
+            self.labels,
+        ):
+            store.pop(resolved, None)
+        self.pages.pop(resolved, None)
 
     def add(self, entity: EntityData | Entity):
         data = entity.data if isinstance(entity, Entity) else entity

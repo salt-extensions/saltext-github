@@ -14,11 +14,11 @@ from saltext.github.utils.gh import client
 log = logging.getLogger(__name__)
 
 
-def _secrets_path(conn, repo_name, *suffix):
-    return ["repos", conn.org_name, repo_name, "actions", "secrets", *suffix]
+def _secrets_path(conn, owner, repo_name, *suffix):
+    return ["repos", owner or conn.owner, repo_name, "actions", "secrets", *suffix]
 
 
-def list_secrets(conn, repo_name):
+def list_secrets(conn, repo_name, *, owner=None):
     """
     Return all Actions secrets of a repository. Secret values are write-only,
     so this only carries metadata (``name``, ``created_at``, ``updated_at``).
@@ -28,11 +28,14 @@ def list_secrets(conn, repo_name):
 
     repo_name
         Repository name.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, _secrets_path(conn, repo_name), per_page=100)["secrets"]
+    return client.query(conn, _secrets_path(conn, owner, repo_name), per_page=100)["secrets"]
 
 
-def get_secret(conn, repo_name, name):
+def get_secret(conn, repo_name, name, *, owner=None):
     """
     Return the metadata of a single Actions secret.
 
@@ -45,13 +48,16 @@ def get_secret(conn, repo_name, name):
     name
         Secret name.
 
+    owner
+        Owner of the repository. Defaults to the connection's owner.
+
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the secret does not exist.
     """
-    return client.query(conn, _secrets_path(conn, repo_name, name))
+    return client.query(conn, _secrets_path(conn, owner, repo_name, name))
 
 
-def get_public_key(conn, repo_name):
+def get_public_key(conn, repo_name, *, owner=None):
     """
     Return the public key used for encrypting Actions secrets of a repository,
     a mapping with ``key_id`` and (base64-encoded) ``key``.
@@ -61,8 +67,11 @@ def get_public_key(conn, repo_name):
 
     repo_name
         Repository name.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, _secrets_path(conn, repo_name, "public-key"))
+    return client.query(conn, _secrets_path(conn, owner, repo_name, "public-key"))
 
 
 def encrypt_secret(public_key, value):
@@ -81,7 +90,7 @@ def encrypt_secret(public_key, value):
     return base64.b64encode(sealed_box.encrypt(value.encode())).decode()
 
 
-def set_secret(conn, repo_name, name, value):
+def set_secret(conn, repo_name, name, value, *, owner=None):
     """
     Create or update an Actions secret. The value is encrypted to the
     repository public key before leaving this host.
@@ -97,11 +106,14 @@ def set_secret(conn, repo_name, name, value):
 
     value
         Plaintext secret value.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
-    pubkey = get_public_key(conn, repo_name)
+    pubkey = get_public_key(conn, repo_name, owner=owner)
     client.query(
         conn,
-        _secrets_path(conn, repo_name, name),
+        _secrets_path(conn, owner, repo_name, name),
         method="PUT",
         data={
             "encrypted_value": encrypt_secret(pubkey["key"], value),
@@ -110,7 +122,7 @@ def set_secret(conn, repo_name, name, value):
     )
 
 
-def delete_secret(conn, repo_name, name):
+def delete_secret(conn, repo_name, name, *, owner=None):
     """
     Remove an Actions secret from a repository.
 
@@ -122,11 +134,18 @@ def delete_secret(conn, repo_name, name):
 
     name
         Secret name.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
-    client.query(conn, _secrets_path(conn, repo_name, name), method="DELETE")
+    client.query(conn, _secrets_path(conn, owner, repo_name, name), method="DELETE")
 
 
-def get_workflow_permissions(conn, repo_name):
+def _workflow_permissions_path(conn, owner, repo_name):
+    return ["repos", owner or conn.owner, repo_name, "actions", "permissions", "workflow"]
+
+
+def get_workflow_permissions(conn, repo_name, *, owner=None):
     """
     Return the default workflow permissions granted to the ``GITHUB_TOKEN``
     in a repository, a mapping with ``default_workflow_permissions``
@@ -137,14 +156,20 @@ def get_workflow_permissions(conn, repo_name):
 
     repo_name
         Repository name.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(
-        conn, ["repos", conn.org_name, repo_name, "actions", "permissions", "workflow"]
-    )
+    return client.query(conn, _workflow_permissions_path(conn, owner, repo_name))
 
 
 def set_workflow_permissions(
-    conn, repo_name, *, default_workflow_permissions=None, can_approve_pull_request_reviews=None
+    conn,
+    repo_name,
+    *,
+    default_workflow_permissions=None,
+    can_approve_pull_request_reviews=None,
+    owner=None,
 ):
     """
     Update the default workflow permissions granted to the ``GITHUB_TOKEN``
@@ -162,10 +187,13 @@ def set_workflow_permissions(
 
     can_approve_pull_request_reviews
         Allow GitHub Actions to approve pull requests.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     client.query(
         conn,
-        ["repos", conn.org_name, repo_name, "actions", "permissions", "workflow"],
+        _workflow_permissions_path(conn, owner, repo_name),
         method="PUT",
         data=filter_unset(
             {

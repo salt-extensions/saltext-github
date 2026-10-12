@@ -18,13 +18,13 @@ SECRET_PATH = (
 
 
 class ActionsRoutes(APIBase):
-    @GET("repos/<org>/<repo>/actions/secrets/public-key")
+    @GET("repos/<owner>/<repo>/actions/secrets/public-key")
     def _secrets_public_key(self, match, _query, _body):
         self._resolve_repo(match)
         public_key = base64.b64encode(bytes(self.secrets_private_key.public_key)).decode()
         return 200, {"key_id": "568250167242549743", "key": public_key}
 
-    @GET("repos/<org>/<repo>/actions/secrets")
+    @GET("repos/<owner>/<repo>/actions/secrets")
     def _list_secrets(self, match, _query, _body):
         repo = self._resolve_repo(match)
         secrets = [secret.payload() for secret in sorted(repo.secrets, key=lambda x: x.name)]
@@ -59,7 +59,7 @@ class ActionsRoutes(APIBase):
         repo.remove_secret(match["name"])
         return 204
 
-    @GET("repos/<org>/<repo>/actions/permissions/workflow")
+    @GET("repos/<owner>/<repo>/actions/permissions/workflow")
     def _get_workflow_permissions(self, match, _query, _body):
         repo = self._resolve_repo(match)
         return 200, {
@@ -67,7 +67,7 @@ class ActionsRoutes(APIBase):
             "can_approve_pull_request_reviews": repo.data.can_approve_pull_request_reviews,
         }
 
-    @PUT("repos/<org>/<repo>/actions/permissions/workflow")
+    @PUT("repos/<owner>/<repo>/actions/permissions/workflow")
     def _set_workflow_permissions(self, match, _query, body):
         repo = self._resolve_repo(match)
         upd = {

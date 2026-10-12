@@ -1,7 +1,8 @@
 """
-Manage a single GitHub repository within an organization: settings,
-teams, issues, milestones, pull requests, rulesets, deploy keys,
-Actions secrets and settings, environments, labels and Pages.
+Manage GitHub repositories within an organization or user account:
+listing and creation as well as, per repository, settings, teams,
+issues, milestones, pull requests, rulesets, deploy keys, Actions
+secrets and settings, environments, labels and Pages.
 
 .. versionadded:: 1.1.0
 
@@ -9,25 +10,27 @@ Unlike the legacy :py:mod:`github <saltext.github.modules.github>` module,
 the functions in this module raise errors (usually subclasses of
 ``CommandExecutionError``) instead of logging them and returning ``False``.
 
-Collections with a unique natural key (teams, Actions secrets,
-environments, labels) are returned as mappings keyed by it, id-addressed
-collections (issues, pull requests, milestones, rulesets, deploy keys,
-deployment branch policies) as lists.
+Collections with a unique natural key (repositories, teams, Actions
+secrets, environments, labels) are returned as mappings keyed by it,
+id-addressed collections (issues, pull requests, milestones, rulesets,
+deploy keys, deployment branch policies) as lists.
 
 .. note::
 
-    This module also works on user-owned repositories since the
-    corresponding API endpoints are shared: set the profile's
-    ``org_name`` to the user login. Repository creation
-    (``github_org.add_repo``, the ``github_repo.present`` state)
-    and team management remain organization-only.
+    This module works on repositories of any owner (organization or
+    user): all functions accept an ``owner`` argument that defaults to
+    the profile's ``owner``. Teams always belong to the owning
+    organization, and repository creation (:py:func:`create
+    <saltext.github.modules.github_repo.create>`, the creating branch
+    of the ``github_repo.present`` state) is only supported for
+    organizations and the authenticated user, a GitHub API limitation.
 
 :depends: PyGithub python module
 
 Configuration
 -------------
 
-This module uses the same configuration profiles as the
+This module uses similar configuration profiles as the
 :py:mod:`github <saltext.github.modules.github>` module. All functions
 operate on the repository named in ``repo_name``, which is required
 unless a default is set in the profile:
@@ -36,7 +39,13 @@ unless a default is set in the profile:
 
     github:
       token: abc1234
-      org_name: my_organization
+
+      # Optional: The default owner (organization or user) whose
+      # repositories are managed. org_name is supported as a legacy
+      # alias. Defaults to the token's user, so tokens without an
+      # associated user account (e.g. GitHub App installation tokens)
+      # require it to be set.
+      owner: my_organization
 
       # optional: the default repository to operate on when no
       # repo_name is passed.
@@ -71,17 +80,143 @@ from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 log = logging.getLogger(__name__)
 
 __virtualname__ = "github_repo"
+__func_alias__ = {"list_": "list"}
 
 
 def _get_conn(profile):
-    return gh_profile.get_conn(profile, salt=__salt__, context=__context__)
+    return gh_profile.get_conn(profile, __salt__=__salt__, __context__=__context__)
 
 
 def _get_config_value(profile, config_name):
-    return gh_profile.get_config_value(profile, config_name, salt=__salt__, context=__context__)
+    return gh_profile.get_config_value(
+        profile, config_name, __salt__=__salt__, __context__=__context__
+    )
 
 
-def get_info(repo_name=None, ignore_cache=False, profile="github"):
+def list_(private=None, owner=None, fields=None, ignore_cache=False, profile="github"):
+    """
+    List all repositories of an owner the profile token can see, as a
+    mapping of repository name to details.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call github_repo.list
+        salt-call github_repo.list private=true
+
+    private
+        Only list private (``true``) or public (``false``) repositories.
+        By default, all repositories are listed.
+
+    owner
+        Owner (organization or user) whose repositories to list.
+        Defaults to the profile's ``owner``. Private repositories of
+        users other than the authenticated one are not visible.
+
+    fields
+        Only include these fields in the output. A single field name
+        reduces each entry to the field's value.
+
+    ignore_cache
+        Bypass the use of cached repositories.
+
+    profile
+        Profile configuration name to use. Defaults to ``github``.
+    """
+    return filter_fields(
+        {
+            repo.name: gh_repos.to_dict(repo)
+            for repo in gh_repos.list_all(
+                _get_conn(profile), owner=owner, ignore_cache=ignore_cache
+            )
+            if private is None or repo.private is private
+        },
+        fields,
+    )
+
+
+def create(
+    repo_name=None,
+    description=None,
+    homepage=None,
+    private=None,
+    has_issues=None,
+    has_wiki=None,
+    has_downloads=None,
+    auto_init=None,
+    gitignore_template=None,
+    license_template=None,
+    owner=None,
+    profile="github",
+):
+    """
+    Create a new repository.
+    Returns information about the created repository.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call github_repo.create my-repo
+
+    repo_name
+        Name of the repository to create. Defaults to the profile's
+        ``repo_name``.
+
+    description
+        Repository description.
+
+    homepage
+        URL with more information about the repository, e.g. rendered docs.
+
+    private
+        Repository visibility.
+
+    has_issues
+        Enable issues for this repository.
+
+    has_wiki
+        Enable the wiki for this repository.
+
+    has_downloads
+        Enable downloads for this repository.
+
+    auto_init
+        Create an initial commit with an empty README.
+
+    gitignore_template
+        Desired language or platform for a .gitignore, e.g. "Haskell".
+
+    license_template
+        Desired LICENSE template to apply, e.g. "mit" or "mozilla".
+
+    owner
+        Owner to create the repository for. Defaults to the profile's
+        ``owner``. The GitHub API only supports creating repositories
+        for organizations and the authenticated user.
+
+    profile
+        Profile configuration name to use. Defaults to ``github``.
+    """
+    repo_name = _resolve_repo_name(repo_name, profile)
+    return gh_repos.create(
+        _get_conn(profile),
+        repo_name,
+        owner=owner,
+        description=description,
+        homepage=homepage,
+        private=private,
+        has_issues=has_issues,
+        has_wiki=has_wiki,
+        has_downloads=has_downloads,
+        auto_init=auto_init,
+        gitignore_template=gitignore_template,
+        license_template=license_template,
+    )
+
+
+def get_info(repo_name=None, owner=None, ignore_cache=False, profile="github"):
     """
     Return information about a repository.
 
@@ -94,6 +229,9 @@ def get_info(repo_name=None, ignore_cache=False, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     ignore_cache
         Bypass the use of cached repository information.
 
@@ -101,10 +239,10 @@ def get_info(repo_name=None, ignore_cache=False, profile="github"):
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_repos.get_info(_get_conn(profile), repo_name, ignore_cache=ignore_cache)
+    return gh_repos.get_info(_get_conn(profile), repo_name, owner=owner, ignore_cache=ignore_cache)
 
 
-def get_teams(repo_name=None, fields=None, profile="github"):
+def get_teams(repo_name=None, owner=None, fields=None, profile="github"):
     """
     Return the teams a repository belongs to, as a mapping of team
     name to details.
@@ -118,6 +256,9 @@ def get_teams(repo_name=None, fields=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     fields
         Only include these fields in the output. A single field name
         reduces each entry to the field's value.
@@ -126,12 +267,13 @@ def get_teams(repo_name=None, fields=None, profile="github"):
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    teams = gh_repos.get_teams(_get_conn(profile), repo_name)
+    teams = gh_repos.get_teams(_get_conn(profile), repo_name, owner=owner)
     return filter_fields({team["name"]: team for team in teams}, fields)
 
 
 def update(
     repo_name=None,
+    owner=None,
     description=None,
     homepage=None,
     private=None,
@@ -153,6 +295,9 @@ def update(
 
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
+
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
 
     description
         Repository description.
@@ -187,6 +332,7 @@ def update(
     return gh_repos.update(
         _get_conn(profile),
         repo_name,
+        owner=owner,
         description=description,
         homepage=homepage,
         private=private,
@@ -198,7 +344,7 @@ def update(
     )
 
 
-def delete(repo_name=None, profile="github"):
+def delete(repo_name=None, owner=None, profile="github"):
     """
     Delete a repository.
 
@@ -211,16 +357,20 @@ def delete(repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    gh_repos.delete(_get_conn(profile), repo_name)
+    gh_repos.delete(_get_conn(profile), repo_name, owner=owner)
     return True
 
 
 def list_issues(
     repo_name=None,
+    owner=None,
     milestone=None,
     state="open",
     assignee=None,
@@ -246,6 +396,9 @@ def list_issues(
 
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
+
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
 
     milestone
         Number of a GitHub milestone, or a string of either ``*`` or ``none``.
@@ -303,11 +456,12 @@ def list_issues(
         direction=direction,
         since=since,
         per_page=per_page,
+        owner=owner,
     )
     return filter_fields(issues, fields)
 
 
-def get_issue(number, repo_name=None, profile="github"):
+def get_issue(number, repo_name=None, owner=None, profile="github"):
     """
     Return information about a single issue in the repository.
 
@@ -323,14 +477,17 @@ def get_issue(number, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_issues.get(_get_conn(profile), repo_name, number)
+    return gh_issues.get(_get_conn(profile), repo_name, number, owner=owner)
 
 
-def get_issue_comments(number, repo_name=None, since=None, profile="github"):
+def get_issue_comments(number, repo_name=None, owner=None, since=None, profile="github"):
     """
     Return the comments of an issue in the repository.
 
@@ -346,6 +503,9 @@ def get_issue_comments(number, repo_name=None, since=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     since
         Only return comments updated at or after this time. This is a
         timestamp in ISO 8601 format: ``YYYY-MM-DDTHH:MM:SSZ``.
@@ -354,11 +514,12 @@ def get_issue_comments(number, repo_name=None, since=None, profile="github"):
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_issues.get_comments(_get_conn(profile), repo_name, number, since=since)
+    return gh_issues.get_comments(_get_conn(profile), repo_name, number, since=since, owner=owner)
 
 
 def list_milestones(
     repo_name=None,
+    owner=None,
     state="open",
     sort="due_on",
     direction="asc",
@@ -377,6 +538,9 @@ def list_milestones(
 
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
+
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
 
     state
         Filter milestones by their state. Either ``open``, ``closed``, or ``all``.
@@ -407,11 +571,12 @@ def list_milestones(
         sort=sort,
         direction=direction,
         per_page=per_page,
+        owner=owner,
     )
     return filter_fields(milestones, fields)
 
 
-def get_milestone(number=None, name=None, repo_name=None, profile="github"):
+def get_milestone(number=None, name=None, repo_name=None, owner=None, profile="github"):
     """
     Return information about a single milestone in the repository.
 
@@ -431,6 +596,9 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -439,9 +607,9 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github"):
 
     repo_name = _resolve_repo_name(repo_name, profile)
     if number:
-        return gh_milestones.get(_get_conn(profile), repo_name, number)
+        return gh_milestones.get(_get_conn(profile), repo_name, number, owner=owner)
 
-    milestones = gh_milestones.list_all(_get_conn(profile), repo_name, state="all")
+    milestones = gh_milestones.list_all(_get_conn(profile), repo_name, state="all", owner=owner)
     for milestone in milestones or []:
         if milestone.get("title") == name:
             return milestone
@@ -450,6 +618,7 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github"):
 
 def list_pulls(
     repo_name=None,
+    owner=None,
     state="open",
     head=None,
     base=None,
@@ -470,6 +639,9 @@ def list_pulls(
 
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
+
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
 
     state
         Filter returned pull requests by their state. Can be either
@@ -510,11 +682,12 @@ def list_pulls(
         sort=sort,
         direction=direction,
         per_page=per_page,
+        owner=owner,
     )
     return filter_fields(pulls, fields)
 
 
-def list_rulesets(repo_name=None, per_page=None, fields=None, profile="github"):
+def list_rulesets(repo_name=None, owner=None, per_page=None, fields=None, profile="github"):
     """
     List all rulesets of the repository.
 
@@ -526,6 +699,9 @@ def list_rulesets(repo_name=None, per_page=None, fields=None, profile="github"):
 
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
+
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
 
     per_page
         Pagination size, maximum 100.
@@ -542,14 +718,14 @@ def list_rulesets(repo_name=None, per_page=None, fields=None, profile="github"):
     rulesets = gh_rulesets.list_all(
         conn,
         "repo",
-        owner=conn.org_name,
+        owner=owner,
         repo_name=repo_name,
         per_page=per_page,
     )
     return filter_fields(rulesets, fields)
 
 
-def get_ruleset(ruleset_id, repo_name=None, profile="github"):
+def get_ruleset(ruleset_id, repo_name=None, owner=None, profile="github"):
     """
     Return the data of a single repository ruleset.
 
@@ -565,15 +741,18 @@ def get_ruleset(ruleset_id, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
     conn = _get_conn(profile)
-    return gh_rulesets.get(conn, ruleset_id, "repo", owner=conn.org_name, repo_name=repo_name)
+    return gh_rulesets.get(conn, ruleset_id, "repo", owner=owner, repo_name=repo_name)
 
 
-def add_ruleset(ruleset_params, repo_name=None, profile="github"):
+def add_ruleset(ruleset_params, repo_name=None, owner=None, profile="github"):
     """
     Create a new repository ruleset.
     Returns the data of the created ruleset.
@@ -590,17 +769,18 @@ def add_ruleset(ruleset_params, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
     conn = _get_conn(profile)
-    return gh_rulesets.create(
-        conn, ruleset_params, "repo", owner=conn.org_name, repo_name=repo_name
-    )
+    return gh_rulesets.create(conn, ruleset_params, "repo", owner=owner, repo_name=repo_name)
 
 
-def update_ruleset(ruleset_id, ruleset_params, repo_name=None, profile="github"):
+def update_ruleset(ruleset_id, ruleset_params, repo_name=None, owner=None, profile="github"):
     """
     Update an existing repository ruleset.
     Returns the data of the updated ruleset.
@@ -620,6 +800,9 @@ def update_ruleset(ruleset_id, ruleset_params, repo_name=None, profile="github")
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -630,12 +813,12 @@ def update_ruleset(ruleset_id, ruleset_params, repo_name=None, profile="github")
         ruleset_id,
         ruleset_params,
         "repo",
-        owner=conn.org_name,
+        owner=owner,
         repo_name=repo_name,
     )
 
 
-def delete_ruleset(ruleset_id, repo_name=None, profile="github"):
+def delete_ruleset(ruleset_id, repo_name=None, owner=None, profile="github"):
     """
     Delete a repository ruleset.
 
@@ -651,12 +834,15 @@ def delete_ruleset(ruleset_id, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
     conn = _get_conn(profile)
-    gh_rulesets.delete(conn, ruleset_id, "repo", owner=conn.org_name, repo_name=repo_name)
+    gh_rulesets.delete(conn, ruleset_id, "repo", owner=owner, repo_name=repo_name)
     return True
 
 
@@ -669,7 +855,7 @@ def _resolve_repo_name(repo_name, profile):
     return repo_name
 
 
-def list_deploy_keys(repo_name=None, fields=None, profile="github"):
+def list_deploy_keys(repo_name=None, owner=None, fields=None, profile="github"):
     """
     List the deploy keys of a repository.
 
@@ -682,6 +868,9 @@ def list_deploy_keys(repo_name=None, fields=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     fields
         Only include these fields in the output. A single field name
         reduces each entry to the field's value.
@@ -690,10 +879,12 @@ def list_deploy_keys(repo_name=None, fields=None, profile="github"):
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    return filter_fields(gh_deploy_keys.list_all(_get_conn(profile), repo_name), fields)
+    return filter_fields(
+        gh_deploy_keys.list_all(_get_conn(profile), repo_name, owner=owner), fields
+    )
 
 
-def get_deploy_key(key_id, repo_name=None, profile="github"):
+def get_deploy_key(key_id, repo_name=None, owner=None, profile="github"):
     """
     Return the data of a single deploy key of a repository.
 
@@ -709,14 +900,17 @@ def get_deploy_key(key_id, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_deploy_keys.get(_get_conn(profile), repo_name, key_id)
+    return gh_deploy_keys.get(_get_conn(profile), repo_name, key_id, owner=owner)
 
 
-def add_deploy_key(title, key, read_only=False, repo_name=None, profile="github"):
+def add_deploy_key(title, key, read_only=False, repo_name=None, owner=None, profile="github"):
     """
     Add a deploy key to a repository. Returns the data of the created key.
 
@@ -741,16 +935,19 @@ def add_deploy_key(title, key, read_only=False, repo_name=None, profile="github"
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
     return gh_deploy_keys.create(
-        _get_conn(profile), repo_name, title, key, read_only=bool(read_only)
+        _get_conn(profile), repo_name, title, key, read_only=bool(read_only), owner=owner
     )
 
 
-def remove_deploy_key(key_id, repo_name=None, profile="github"):
+def remove_deploy_key(key_id, repo_name=None, owner=None, profile="github"):
     """
     Remove a deploy key from a repository.
 
@@ -766,15 +963,18 @@ def remove_deploy_key(key_id, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    gh_deploy_keys.delete(_get_conn(profile), repo_name, key_id)
+    gh_deploy_keys.delete(_get_conn(profile), repo_name, key_id, owner=owner)
     return True
 
 
-def list_actions_secrets(repo_name=None, fields=None, profile="github"):
+def list_actions_secrets(repo_name=None, owner=None, fields=None, profile="github"):
     """
     List the Actions secrets of a repository, as a mapping of secret
     name to metadata. Secret values are write-only, so this only returns
@@ -789,6 +989,9 @@ def list_actions_secrets(repo_name=None, fields=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     fields
         Only include these fields in the output. A single field name
         reduces each entry to the field's value.
@@ -797,11 +1000,11 @@ def list_actions_secrets(repo_name=None, fields=None, profile="github"):
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    secrets = gh_actions.list_secrets(_get_conn(profile), repo_name)
+    secrets = gh_actions.list_secrets(_get_conn(profile), repo_name, owner=owner)
     return filter_fields({secret["name"]: secret for secret in secrets}, fields)
 
 
-def get_actions_secret(name, repo_name=None, profile="github"):
+def get_actions_secret(name, repo_name=None, owner=None, profile="github"):
     """
     Return the metadata of a single Actions secret of a repository.
     The value itself is write-only and cannot be retrieved.
@@ -818,14 +1021,17 @@ def get_actions_secret(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_actions.get_secret(_get_conn(profile), repo_name, name)
+    return gh_actions.get_secret(_get_conn(profile), repo_name, name, owner=owner)
 
 
-def set_actions_secret(name, value, repo_name=None, profile="github"):
+def set_actions_secret(name, value, repo_name=None, owner=None, profile="github"):
     """
     Create or update an Actions secret of a repository. The value is
     encrypted to the repository public key before leaving the minion.
@@ -845,15 +1051,18 @@ def set_actions_secret(name, value, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    gh_actions.set_secret(_get_conn(profile), repo_name, name, value)
+    gh_actions.set_secret(_get_conn(profile), repo_name, name, value, owner=owner)
     return True
 
 
-def remove_actions_secret(name, repo_name=None, profile="github"):
+def remove_actions_secret(name, repo_name=None, owner=None, profile="github"):
     """
     Remove an Actions secret from a repository.
 
@@ -869,15 +1078,18 @@ def remove_actions_secret(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    gh_actions.delete_secret(_get_conn(profile), repo_name, name)
+    gh_actions.delete_secret(_get_conn(profile), repo_name, name, owner=owner)
     return True
 
 
-def get_workflow_permissions(repo_name=None, profile="github"):
+def get_workflow_permissions(repo_name=None, owner=None, profile="github"):
     """
     Return the default workflow permissions granted to the ``GITHUB_TOKEN``
     in a repository, a mapping with ``default_workflow_permissions``
@@ -892,17 +1104,21 @@ def get_workflow_permissions(repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_actions.get_workflow_permissions(_get_conn(profile), repo_name)
+    return gh_actions.get_workflow_permissions(_get_conn(profile), repo_name, owner=owner)
 
 
 def set_workflow_permissions(
     default_workflow_permissions=None,
     can_approve_pull_request_reviews=None,
     repo_name=None,
+    owner=None,
     profile="github",
 ):
     """
@@ -925,6 +1141,9 @@ def set_workflow_permissions(
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -934,11 +1153,12 @@ def set_workflow_permissions(
         repo_name,
         default_workflow_permissions=default_workflow_permissions,
         can_approve_pull_request_reviews=can_approve_pull_request_reviews,
+        owner=owner,
     )
     return True
 
 
-def list_environments(repo_name=None, fields=None, profile="github"):
+def list_environments(repo_name=None, owner=None, fields=None, profile="github"):
     """
     List the environments of a repository, as a mapping of environment
     name to details.
@@ -952,6 +1172,9 @@ def list_environments(repo_name=None, fields=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     fields
         Only include these fields in the output. A single field name
         reduces each entry to the field's value.
@@ -960,11 +1183,11 @@ def list_environments(repo_name=None, fields=None, profile="github"):
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    environments = gh_environments.list_all(_get_conn(profile), repo_name)
+    environments = gh_environments.list_all(_get_conn(profile), repo_name, owner=owner)
     return filter_fields({env["name"]: env for env in environments}, fields)
 
 
-def get_environment(name, repo_name=None, profile="github"):
+def get_environment(name, repo_name=None, owner=None, profile="github"):
     """
     Return the data of a single environment of a repository.
 
@@ -980,11 +1203,14 @@ def get_environment(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_environments.get(_get_conn(profile), repo_name, name)
+    return gh_environments.get(_get_conn(profile), repo_name, name, owner=owner)
 
 
 def set_environment(
@@ -994,6 +1220,7 @@ def set_environment(
     reviewers=None,
     deployment_branch_policy=None,
     repo_name=None,
+    owner=None,
     profile="github",
 ):
     """
@@ -1034,6 +1261,9 @@ def set_environment(
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -1046,10 +1276,11 @@ def set_environment(
         prevent_self_review=prevent_self_review,
         reviewers=reviewers,
         deployment_branch_policy=deployment_branch_policy,
+        owner=owner,
     )
 
 
-def remove_environment(name, repo_name=None, profile="github"):
+def remove_environment(name, repo_name=None, owner=None, profile="github"):
     """
     Remove an environment from a repository.
 
@@ -1065,15 +1296,20 @@ def remove_environment(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    gh_environments.delete(_get_conn(profile), repo_name, name)
+    gh_environments.delete(_get_conn(profile), repo_name, name, owner=owner)
     return True
 
 
-def list_deployment_branch_policies(environment, repo_name=None, fields=None, profile="github"):
+def list_deployment_branch_policies(
+    environment, repo_name=None, owner=None, fields=None, profile="github"
+):
     """
     List the deployment branch policies of an environment.
 
@@ -1089,6 +1325,9 @@ def list_deployment_branch_policies(environment, repo_name=None, fields=None, pr
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     fields
         Only include these fields in the output. A single field name
         reduces each entry to the field's value.
@@ -1098,14 +1337,17 @@ def list_deployment_branch_policies(environment, repo_name=None, fields=None, pr
     """
     repo_name = _resolve_repo_name(repo_name, profile)
     return filter_fields(
-        gh_environments.list_branch_policies(_get_conn(profile), repo_name, environment), fields
+        gh_environments.list_branch_policies(
+            _get_conn(profile), repo_name, environment, owner=owner
+        ),
+        fields,
     )
 
 
 def add_deployment_branch_policy(
-    environment, name, type_="branch", repo_name=None, profile="github"
+    environment, name, typ="branch", repo_name=None, owner=None, profile="github"
 ):
-    r"""
+    """
     Add a deployment branch (or tag) policy to an environment.
     Returns the data of the created policy.
 
@@ -1124,23 +1366,28 @@ def add_deployment_branch_policy(
         Name pattern that branches (or tags) must match in order to
         deploy to the environment.
 
-    type\_
+    typ
         Target of this rule, either ``branch`` or ``tag``.
         Defaults to ``branch``.
 
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
     return gh_environments.create_branch_policy(
-        _get_conn(profile), repo_name, environment, name, type_=type_
+        _get_conn(profile), repo_name, environment, name, typ=typ, owner=owner
     )
 
 
-def remove_deployment_branch_policy(environment, policy_id, repo_name=None, profile="github"):
+def remove_deployment_branch_policy(
+    environment, policy_id, repo_name=None, owner=None, profile="github"
+):
     """
     Remove a deployment branch policy from an environment.
 
@@ -1159,15 +1406,20 @@ def remove_deployment_branch_policy(environment, policy_id, repo_name=None, prof
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    gh_environments.delete_branch_policy(_get_conn(profile), repo_name, environment, policy_id)
+    gh_environments.delete_branch_policy(
+        _get_conn(profile), repo_name, environment, policy_id, owner=owner
+    )
     return True
 
 
-def list_labels(repo_name=None, fields=None, profile="github"):
+def list_labels(repo_name=None, owner=None, fields=None, profile="github"):
     """
     List the labels of a repository, as a mapping of label name
     to details.
@@ -1181,6 +1433,9 @@ def list_labels(repo_name=None, fields=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     fields
         Only include these fields in the output. A single field name
         reduces each entry to the field's value.
@@ -1189,11 +1444,11 @@ def list_labels(repo_name=None, fields=None, profile="github"):
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    labels = gh_labels.list_all(_get_conn(profile), repo_name)
+    labels = gh_labels.list_all(_get_conn(profile), repo_name, owner=owner)
     return filter_fields({label["name"]: label for label in labels}, fields)
 
 
-def get_label(name, repo_name=None, profile="github"):
+def get_label(name, repo_name=None, owner=None, profile="github"):
     """
     Return the data of a single label of a repository.
 
@@ -1209,14 +1464,17 @@ def get_label(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_labels.get(_get_conn(profile), repo_name, name)
+    return gh_labels.get(_get_conn(profile), repo_name, name, owner=owner)
 
 
-def add_label(name, color=None, description=None, repo_name=None, profile="github"):
+def add_label(name, color=None, description=None, repo_name=None, owner=None, profile="github"):
     """
     Create a label in a repository. Returns the data of the created label.
 
@@ -1239,16 +1497,21 @@ def add_label(name, color=None, description=None, repo_name=None, profile="githu
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
     return gh_labels.create(
-        _get_conn(profile), repo_name, name, color=color, description=description
+        _get_conn(profile), repo_name, name, color=color, description=description, owner=owner
     )
 
 
-def edit_label(name, new_name=None, color=None, description=None, repo_name=None, profile="github"):
+def edit_label(
+    name, new_name=None, color=None, description=None, repo_name=None, owner=None, profile="github"
+):
     """
     Update an existing label of a repository.
     Returns the data of the updated label.
@@ -1274,6 +1537,9 @@ def edit_label(name, new_name=None, color=None, description=None, repo_name=None
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -1285,10 +1551,11 @@ def edit_label(name, new_name=None, color=None, description=None, repo_name=None
         new_name=new_name,
         color=color,
         description=description,
+        owner=owner,
     )
 
 
-def remove_label(name, repo_name=None, profile="github"):
+def remove_label(name, repo_name=None, owner=None, profile="github"):
     """
     Delete a label from a repository.
 
@@ -1304,15 +1571,18 @@ def remove_label(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    gh_labels.delete(_get_conn(profile), repo_name, name)
+    gh_labels.delete(_get_conn(profile), repo_name, name, owner=owner)
     return True
 
 
-def get_pages(repo_name=None, profile="github"):
+def get_pages(repo_name=None, owner=None, profile="github"):
     """
     Return information about the GitHub Pages site of a repository.
 
@@ -1325,15 +1595,23 @@ def get_pages(repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_pages.get(_get_conn(profile), repo_name)
+    return gh_pages.get(_get_conn(profile), repo_name, owner=owner)
 
 
 def setup_pages(
-    build_type=None, source_branch=None, source_path=None, repo_name=None, profile="github"
+    build_type=None,
+    source_branch=None,
+    source_path=None,
+    repo_name=None,
+    owner=None,
+    profile="github",
 ):
     """
     Configure a GitHub Pages site for a repository.
@@ -1359,6 +1637,9 @@ def setup_pages(
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -1368,6 +1649,7 @@ def setup_pages(
         repo_name,
         build_type=build_type,
         source=gh_pages.build_source(source_branch, source_path),
+        owner=owner,
     )
 
 
@@ -1378,6 +1660,7 @@ def update_pages(
     cname=...,
     https_enforced=None,
     repo_name=None,
+    owner=None,
     profile="github",
 ):
     """
@@ -1410,6 +1693,9 @@ def update_pages(
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -1421,11 +1707,12 @@ def update_pages(
         source=gh_pages.build_source(source_branch, source_path),
         cname=cname,
         https_enforced=https_enforced,
+        owner=owner,
     )
     return True
 
 
-def remove_pages(repo_name=None, profile="github"):
+def remove_pages(repo_name=None, owner=None, profile="github"):
     """
     Delete the GitHub Pages site of a repository.
 
@@ -1438,9 +1725,12 @@ def remove_pages(repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     repo_name = _resolve_repo_name(repo_name, profile)
-    gh_pages.delete(_get_conn(profile), repo_name)
+    gh_pages.delete(_get_conn(profile), repo_name, owner=owner)
     return True

@@ -18,7 +18,7 @@ class RulesetRoutes(APIBase):
         org = self._resolve_org(match)
         return org.get_ruleset(match["ruleset_id"])
 
-    @GET("repos/<org>/<repo>/rulesets")
+    @GET("repos/<owner>/<repo>/rulesets")
     def _list_repo_rulesets(self, match, _query, _body):
         repo = self._resolve_repo(match)
         rulesets = [ruleset.payload() for ruleset in repo.rulesets]
@@ -30,7 +30,7 @@ class RulesetRoutes(APIBase):
         rulesets = [ruleset.payload() for ruleset in org.rulesets]
         return 200, rulesets
 
-    @POST("repos/<org>/<repo>/rulesets")
+    @POST("repos/<owner>/<repo>/rulesets")
     def _add_repo_ruleset(self, match, _query, body):
         repo = self._resolve_repo(match)
         ruleset = repo.add_ruleset(**dict(body))
@@ -42,7 +42,7 @@ class RulesetRoutes(APIBase):
         ruleset = org.add_ruleset(**dict(body))
         return 201, ruleset.payload()
 
-    @GET("repos/<org>/<repo>/rulesets/<ruleset_id>")
+    @GET("repos/<owner>/<repo>/rulesets/<ruleset_id>")
     def _get_repo_ruleset(self, match, _query, _body):
         ruleset = self._get_ruleset(match)
         return 200, ruleset.payload()
@@ -52,7 +52,7 @@ class RulesetRoutes(APIBase):
         ruleset = self._get_ruleset(match)
         return 200, ruleset.payload()
 
-    @PUT("repos/<org>/<repo>/rulesets/<ruleset_id>")
+    @PUT("repos/<owner>/<repo>/rulesets/<ruleset_id>")
     def _update_repo_ruleset(self, match, _query, body):
         ruleset = self._get_ruleset(match)
         return 200, ruleset.update(**body).payload()
@@ -62,7 +62,7 @@ class RulesetRoutes(APIBase):
         ruleset = self._get_ruleset(match)
         return 200, ruleset.update(**body).payload()
 
-    @DELETE("repos/<org>/<repo>/rulesets/<ruleset_id>")
+    @DELETE("repos/<owner>/<repo>/rulesets/<ruleset_id>")
     def _delete_repo_ruleset(self, match, _query, _body):
         repo = self._resolve_repo(match)
         repo.remove_ruleset(match["ruleset_id"])

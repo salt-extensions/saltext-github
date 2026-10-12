@@ -9,7 +9,7 @@ from saltext.github.utils.gh import client
 log = logging.getLogger(__name__)
 
 
-def get(conn, repo_name, number):
+def get(conn, repo_name, number, *, owner=None):
     """
     Return the raw data of a single milestone.
 
@@ -21,8 +21,11 @@ def get(conn, repo_name, number):
 
     number
         Milestone number to retrieve.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, ["repos", conn.org_name, repo_name, "milestones", str(number)])
+    return client.query(conn, ["repos", owner or conn.owner, repo_name, "milestones", str(number)])
 
 
 def list_all(
@@ -33,6 +36,7 @@ def list_all(
     sort="due_on",
     direction="asc",
     per_page=None,
+    owner=None,
 ):
     """
     Return the raw data of all milestones in a repository matching the
@@ -57,6 +61,9 @@ def list_all(
 
     per_page
         Pagination size, maximum 100.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     params = {}
 
@@ -71,7 +78,9 @@ def list_all(
     if direction and direction != "asc":
         params["direction"] = direction
 
-    return client.query(conn, ["repos", conn.org_name, repo_name, "milestones"], params=params)
+    return client.query(
+        conn, ["repos", owner or conn.owner, repo_name, "milestones"], params=params
+    )
 
 
 def format_milestone(milestone):

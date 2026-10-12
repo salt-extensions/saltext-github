@@ -195,6 +195,7 @@ class OrganizationData(EntityData):
     _: KW_ONLY
     login: OrgName = ""
     company: str = "Example Corp"
+    type: str = "Organization"
 
     def __post_init__(self):
         if not self.login:
@@ -268,15 +269,7 @@ class Organization(Entity):
         return self.gh.get_repo(RepoId(self.data.login, name), exc=exc)
 
     def remove_repo(self, name: RepoName, *, exc=NotFound) -> None:
-        repo_id = RepoId(self.data.login, name)
-        if repo_id not in self.gh.repos:
-            raise exc(f"Repo {repo_id=} does not exist")
-        self.gh.repos.pop(repo_id)
-        for team in self.teams:
-            team.data.repos.pop(repo_id, None)
-        for store in (self.gh.deploy_keys, self.gh.secrets, self.gh.environments, self.gh.labels):
-            store.pop(repo_id, None)
-        self.gh.pages.pop(repo_id, None)
+        self.gh.remove_repo(RepoId(self.data.login, name), exc=exc)
 
     def add_member(self, user: "User | UserData | UserName", *, exc=NotFound, **params) -> "Member":
         login = user if isinstance(user, UserName) else user.login
@@ -378,6 +371,29 @@ class User(Entity):
             | ovrr
         )
 
+    @property
+    def repos(self) -> "EntityView[RepoName, Repo]":
+        login = self.data.login
+        return EntityView(
+            {
+                repo_id.name: Repo(self.gh, repo)
+                for repo_id, repo in self.gh.repos.items()
+                if repo_id.owner == login
+            }
+        )
+
+    def add_repo(self, name: RepoName, **params) -> "Repo":
+        repo_id = RepoId(self.data.login, name)
+        assert repo_id not in self.gh.repos
+        repo = RepoData(name, self.data.login, owner_type="user", **params)
+        return self.gh.add(repo)
+
+    def get_repo(self, name: RepoName, *, exc=NotFound) -> "Repo":
+        return self.gh.get_repo(RepoId(self.data.login, name), exc=exc)
+
+    def remove_repo(self, name: RepoName, *, exc=NotFound) -> None:
+        self.gh.remove_repo(RepoId(self.data.login, name), exc=exc)
+
 
 @dataclass
 class MemberData(EntityData):
@@ -477,6 +493,8 @@ class RepoData(EntityData):
 
     def __post_init__(self):
         super().__post_init__()
+        # Names are only unique per owner, include the owner in the ID.
+        self.id = zlib.crc32(f"{type(self).__name__}/{self.full_name}".encode())
         if self.description is None:
             self.description = f"Test repo {self.name}"
 
@@ -518,9 +536,6 @@ class Repo(Entity):
         )
 
     def add_ruleset(self, name: str, **params) -> "Ruleset":
-        owner = self.owner
-        if not isinstance(owner, Organization):
-            raise NotImplementedError
         ruleset = RepoRulesetData(name, self.data.repo_id, **params)
         return self.gh.add(ruleset)
 
@@ -539,9 +554,6 @@ class Repo(Entity):
     def add_milestone(
         self, title: str, creator: User | UserData | UserName, **params
     ) -> "Milestone":
-        owner = self.owner
-        if not isinstance(owner, Organization):
-            raise NotImplementedError
         milestone = MilestoneData(
             title,
             self.data.repo_id,

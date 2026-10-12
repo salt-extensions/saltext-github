@@ -9,7 +9,7 @@ from saltext.github.utils.gh import client
 log = logging.getLogger(__name__)
 
 
-def get(conn, repo_name, number):
+def get(conn, repo_name, number, *, owner=None):
     """
     Return the raw data of a single issue.
 
@@ -21,11 +21,14 @@ def get(conn, repo_name, number):
 
     number
         Issue number to retrieve.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, ["repos", conn.org_name, repo_name, "issues", str(number)])
+    return client.query(conn, ["repos", owner or conn.owner, repo_name, "issues", str(number)])
 
 
-def get_comments(conn, repo_name, number, since=None):
+def get_comments(conn, repo_name, number, since=None, *, owner=None):
     """
     Return the raw comment data for a single issue.
 
@@ -41,12 +44,17 @@ def get_comments(conn, repo_name, number, since=None):
     since
         Only comments updated at or after this time are returned. This is a
         timestamp in ISO 8601 format: ``YYYY-MM-DDTHH:MM:SSZ``.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     params = {}
     if since:
         params["since"] = since
     return client.query(
-        conn, ["repos", conn.org_name, repo_name, "issues", str(number), "comments"], params=params
+        conn,
+        ["repos", owner or conn.owner, repo_name, "issues", str(number), "comments"],
+        params=params,
     )
 
 
@@ -64,6 +72,7 @@ def list_all(
     direction="desc",
     since=None,
     per_page=None,
+    owner=None,
 ):
     """
     Return the raw data of all issues in a repository matching the search
@@ -110,6 +119,9 @@ def list_all(
 
     per_page
         Pagination size, maximum 100.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     params = {}
 
@@ -137,7 +149,7 @@ def list_all(
     if direction and direction != "desc":
         params["direction"] = direction
 
-    issues = client.query(conn, ["repos", conn.org_name, repo_name, "issues"], params=params)
+    issues = client.query(conn, ["repos", owner or conn.owner, repo_name, "issues"], params=params)
 
     # Pull requests are included in the issue list from GitHub.
     # Let's not include those in the return.

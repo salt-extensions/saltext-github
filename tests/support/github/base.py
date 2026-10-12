@@ -42,8 +42,12 @@ class APIBase:
     via the MRO on instantiation.
     """
 
-    def __init__(self, token: str = TOKEN, state: GlobalState | None = None):
+    def __init__(
+        self, token: str = TOKEN, state: GlobalState | None = None, auth_login: str = "user1"
+    ):
         self.token = token
+        # The user the token belongs to (GET /user, /user/repos)
+        self.auth_login = auth_login
         self.base_url = None
         self.lock = threading.Lock()
         self.requests = []
@@ -90,10 +94,10 @@ class APIBase:
             groups = match.groupdict()
         else:
             groups = match
-        if "repo" not in groups:
-            raise TypeError(f"no repo specified: {groups}")  # pragma: no cover
-        org = self._resolve_org(groups)
-        return org.get_repo(groups["repo"])
+        owner = groups.get("owner") or groups.get("org")
+        if owner is None or "repo" not in groups:
+            raise TypeError(f"no owner/repo specified: {groups}")  # pragma: no cover
+        return self.state.get_repo((owner, groups["repo"]))
 
     # ------------------------------------------------------------------
     # Dispatch

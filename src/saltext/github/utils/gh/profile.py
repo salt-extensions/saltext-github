@@ -15,7 +15,7 @@ from saltext.github.utils.gh.client import GitHubConnection
 log = logging.getLogger(__name__)
 
 
-def get_config_value(profile, config_name, *, salt, context):
+def get_config_value(profile, config_name, *, __salt__, __context__):
     """
     Return a profile's configuration value based on the supplied
     configuration name. Values are rendered via ``config.get``
@@ -27,24 +27,24 @@ def get_config_value(profile, config_name, *, salt, context):
     config_name
         Configuration item name to look up.
 
-    salt
-        ``__salt__`` dunder of the calling module.
+    __salt__
+        Pass ``__salt__``.
 
-    context
-        ``__context__`` dunder of the calling module.
+    __context__
+        Pass ``__context__``.
     """
-    if "gh_profile" not in context or profile not in context["gh_profile"]:
-        if not salt["config.get"](profile):
+    if "gh_profile" not in __context__ or profile not in __context__["gh_profile"]:
+        if not __salt__["config.get"](profile):
             raise CommandExecutionError(
                 f"Authentication information could not be found for the '{profile}' profile."
             )
-        context.setdefault("gh_profile", {})[profile] = {}
+        __context__.setdefault("gh_profile", {})[profile] = {}
 
-    cache = context["gh_profile"][profile]
+    cache = __context__["gh_profile"][profile]
     if config_name not in cache:
         # Unlike config.option, config.get resolves SDB URIs in scalar values,
         # hence request each value separately and cache the rendered result.
-        cache[config_name] = salt["config.get"](f"{profile}:{config_name}", default=None)
+        cache[config_name] = __salt__["config.get"](f"{profile}:{config_name}", default=None)
 
     config_value = cache[config_name]
     if config_value is None:
@@ -55,26 +55,52 @@ def get_config_value(profile, config_name, *, salt, context):
     return config_value
 
 
-def get_api_url(profile, *, salt, context):
+def get_api_url(profile, *, __salt__, __context__):
     """
     Return the configured GitHub API base URL, defaulting to the public one.
 
     profile
         Profile name that contains configuration information.
 
-    salt
-        ``__salt__`` dunder of the calling module.
+    __salt__
+        Pass ``__salt__``.
 
-    context
-        ``__context__`` dunder of the calling module.
+    __context__
+        Pass ``__context__``.
     """
     try:
-        return get_config_value(profile, "api_url", salt=salt, context=context).rstrip("/")
+        return get_config_value(
+            profile, "api_url", __salt__=__salt__, __context__=__context__
+        ).rstrip("/")
     except CommandExecutionError:
         return API_URL_DEFAULT
 
 
-def get_conn(profile, *, salt, context):
+def get_owner(profile, *, __salt__, __context__):
+    """
+    Return the configured default repository owner: the profile's
+    ``owner``, falling back to the legacy ``org_name`` alias. Returns
+    ``None`` when neither is set, making the connection default to the
+    token's user.
+
+    profile
+        Profile name that contains configuration information.
+
+    __salt__
+        Pass ``__salt__``.
+
+    __context__
+        Pass ``__context__``.
+    """
+    for key in ("owner", "org_name"):
+        try:
+            return get_config_value(profile, key, __salt__=__salt__, __context__=__context__)
+        except CommandExecutionError:
+            continue
+    return None
+
+
+def get_conn(profile, *, __salt__, __context__):
     """
     Return a :class:`~saltext.github.utils.gh.client.GitHubConnection`
     for a profile, cached in ``context`` for performance.
@@ -83,18 +109,18 @@ def get_conn(profile, *, salt, context):
         Profile name that contains configuration information.
 
     salt
-        ``__salt__`` dunder of the calling module.
+        Pass ``__salt__``.
 
     context
-        ``__context__`` dunder of the calling module.
+        Pass ``__context__``.
     """
-    token = get_config_value(profile, "token", salt=salt, context=context)
-    org_name = get_config_value(profile, "org_name", salt=salt, context=context)
-    api_url = get_api_url(profile, salt=salt, context=context)
+    token = get_config_value(profile, "token", __salt__=__salt__, __context__=__context__)
+    owner = get_owner(profile, __salt__=__salt__, __context__=__context__)
+    api_url = get_api_url(profile, __salt__=__salt__, __context__=__context__)
     # Hash the token to keep the secret out of context dumps
     token_hash = hashlib.sha256(token.encode()).hexdigest()[:16]
-    key = f"github.{token_hash}:{org_name}:{api_url}"
+    key = f"github.{token_hash}:{owner}:{api_url}"
 
-    if key not in context:
-        context[key] = GitHubConnection(token, org_name, api_url=api_url)
-    return context[key]
+    if key not in __context__:
+        __context__[key] = GitHubConnection(token, owner, api_url=api_url)
+    return __context__[key]

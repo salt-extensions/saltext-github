@@ -19,13 +19,15 @@ def build_path(ruleset_type, *, owner=None, repo_name=None, org_name=None, rules
         Ruleset type, either ``repo`` or ``org``.
 
     owner
-        Owner of the repository. Required for ``repo`` rulesets.
+        Owner of the repository. Required for ``repo`` rulesets
+        (the calling functions default it to the connection's owner).
 
     repo_name
         Repo name. Required for ``repo`` rulesets.
 
     org_name
-        Org name. Required for ``org`` rulesets.
+        Org name. Required for ``org`` rulesets (the calling functions
+        default it to the connection's owner).
 
     ruleset_id
         ID of a specific ruleset to address.
@@ -72,7 +74,12 @@ def list_all(
     Other parameters as described in :func:`build_path`. ``headers`` is a
     mapping of extra headers to send.
     """
-    path = build_path(ruleset_type, owner=owner, repo_name=repo_name, org_name=org_name)
+    path = build_path(
+        ruleset_type,
+        owner=owner or conn.owner,
+        repo_name=repo_name,
+        org_name=org_name or conn.owner,
+    )
     return client.query(conn, path, headers=headers, per_page=per_page)
 
 
@@ -90,7 +97,11 @@ def get(conn, ruleset_id, ruleset_type, *, owner=None, repo_name=None, org_name=
     mapping of extra headers to send.
     """
     path = build_path(
-        ruleset_type, owner=owner, repo_name=repo_name, org_name=org_name, ruleset_id=ruleset_id
+        ruleset_type,
+        owner=owner or conn.owner,
+        repo_name=repo_name,
+        org_name=org_name or conn.owner,
+        ruleset_id=ruleset_id,
     )
     return client.query(conn, path, headers=headers)
 
@@ -111,7 +122,12 @@ def create(
     mapping of extra headers to send.
     """
     check_params(ruleset_params, required={"name", "enforcement"})
-    path = build_path(ruleset_type, owner=owner, repo_name=repo_name, org_name=org_name)
+    path = build_path(
+        ruleset_type,
+        owner=owner or conn.owner,
+        repo_name=repo_name,
+        org_name=org_name or conn.owner,
+    )
     return client.query(conn, path, method="POST", data=ruleset_params, headers=headers)
 
 
@@ -143,7 +159,11 @@ def update(
     """
     check_params(ruleset_params)
     path = build_path(
-        ruleset_type, owner=owner, repo_name=repo_name, org_name=org_name, ruleset_id=ruleset_id
+        ruleset_type,
+        owner=owner or conn.owner,
+        repo_name=repo_name,
+        org_name=org_name or conn.owner,
+        ruleset_id=ruleset_id,
     )
     return client.query(conn, path, method="PUT", data=ruleset_params, headers=headers)
 
@@ -164,6 +184,10 @@ def delete(
     mapping of extra headers to send.
     """
     path = build_path(
-        ruleset_type, owner=owner, repo_name=repo_name, org_name=org_name, ruleset_id=ruleset_id
+        ruleset_type,
+        owner=owner or conn.owner,
+        repo_name=repo_name,
+        org_name=org_name or conn.owner,
+        ruleset_id=ruleset_id,
     )
     client.query(conn, path, method="DELETE", headers=headers)

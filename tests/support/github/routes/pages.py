@@ -10,14 +10,14 @@ from tests.support.github.routing import PUT
 
 
 class PagesRoutes(APIBase):
-    @GET("repos/<org>/<repo>/pages")
+    @GET("repos/<owner>/<repo>/pages")
     def _get_pages(self, match, _query, _body):
         repo = self._resolve_repo(match)
         if repo.pages is None:
             return 404, {"message": "Not Found"}
         return 200, repo.pages.payload()
 
-    @POST("repos/<org>/<repo>/pages")
+    @POST("repos/<owner>/<repo>/pages")
     def _create_pages(self, match, _query, body):
         repo = self._resolve_repo(match)
         assert repo.pages is None
@@ -26,7 +26,7 @@ class PagesRoutes(APIBase):
         pages = repo.set_pages(**params)
         return 201, pages.payload()
 
-    @PUT("repos/<org>/<repo>/pages")
+    @PUT("repos/<owner>/<repo>/pages")
     def _update_pages(self, match, _query, body):
         repo = self._resolve_repo(match)
         pages = repo.pages
@@ -40,7 +40,7 @@ class PagesRoutes(APIBase):
         pages.update(**upd)
         return 204
 
-    @DELETE("repos/<org>/<repo>/pages")
+    @DELETE("repos/<owner>/<repo>/pages")
     def _delete_pages(self, match, _query, _body):
         repo = self._resolve_repo(match)
         repo.remove_pages()

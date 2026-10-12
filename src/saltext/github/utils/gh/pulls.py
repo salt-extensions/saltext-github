@@ -19,6 +19,7 @@ def list_all(
     sort="created",
     direction="desc",
     per_page=None,
+    owner=None,
 ):
     """
     Return the raw data of all pull requests in a repository matching the
@@ -52,6 +53,9 @@ def list_all(
 
     per_page
         Pagination size, maximum 100.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     params = {}
 
@@ -71,7 +75,7 @@ def list_all(
     if direction and direction != "desc":
         params["direction"] = direction
 
-    return client.query(conn, ["repos", conn.org_name, repo_name, "pulls"], params=params)
+    return client.query(conn, ["repos", owner or conn.owner, repo_name, "pulls"], params=params)
 
 
 def format_pr(pr_):

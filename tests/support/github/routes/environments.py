@@ -10,18 +10,18 @@ from tests.support.github.routing import PUT
 
 
 class EnvironmentRoutes(APIBase):
-    @GET("repos/<org>/<repo>/environments")
+    @GET("repos/<owner>/<repo>/environments")
     def _list_environments(self, match, _query, _body):
         repo = self._resolve_repo(match)
         environments = [env.payload() for env in sorted(repo.environments, key=lambda x: x.name)]
         return 200, {"total_count": len(environments), "environments": environments}
 
-    @GET("repos/<org>/<repo>/environments/<environment>")
+    @GET("repos/<owner>/<repo>/environments/<environment>")
     def _get_environment(self, match, _query, _body):
         repo = self._resolve_repo(match)
         return 200, repo.get_environment(match["environment"]).payload()
 
-    @PUT("repos/<org>/<repo>/environments/<environment>")
+    @PUT("repos/<owner>/<repo>/environments/<environment>")
     def _put_environment(self, match, _query, body):
         repo = self._resolve_repo(match)
         # Like the real API, a PUT replaces the full configuration,
@@ -40,27 +40,29 @@ class EnvironmentRoutes(APIBase):
             env = env.update(**settings)
         return 200, env.payload()
 
-    @DELETE("repos/<org>/<repo>/environments/<environment>")
+    @DELETE("repos/<owner>/<repo>/environments/<environment>")
     def _delete_environment(self, match, _query, _body):
         repo = self._resolve_repo(match)
         repo.remove_environment(match["environment"])
         return 204
 
-    @GET("repos/<org>/<repo>/environments/<environment>/deployment-branch-policies")
+    @GET("repos/<owner>/<repo>/environments/<environment>/deployment-branch-policies")
     def _list_branch_policies(self, match, _query, _body):
         repo = self._resolve_repo(match)
         env = repo.get_environment(match["environment"])
         policies = [policy.payload() for policy in sorted(env.branch_policies, key=lambda x: x.id)]
         return 200, {"total_count": len(policies), "branch_policies": policies}
 
-    @POST("repos/<org>/<repo>/environments/<environment>/deployment-branch-policies")
+    @POST("repos/<owner>/<repo>/environments/<environment>/deployment-branch-policies")
     def _create_branch_policy(self, match, _query, body):
         repo = self._resolve_repo(match)
         env = repo.get_environment(match["environment"])
         policy = env.add_branch_policy(body["name"], type=body.get("type", "branch"))
         return 200, policy.payload()
 
-    @DELETE("repos/<org>/<repo>/environments/<environment>/deployment-branch-policies/<policy_id>")
+    @DELETE(
+        "repos/<owner>/<repo>/environments/<environment>/deployment-branch-policies/<policy_id>"
+    )
     def _delete_branch_policy(self, match, _query, _body):
         repo = self._resolve_repo(match)
         env = repo.get_environment(match["environment"])

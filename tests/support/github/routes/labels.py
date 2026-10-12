@@ -10,12 +10,12 @@ from tests.support.github.routing import POST
 
 
 class LabelRoutes(APIBase):
-    @GET("repos/<org>/<repo>/labels")
+    @GET("repos/<owner>/<repo>/labels")
     def _list_labels(self, match, _query, _body):
         repo = self._resolve_repo(match)
         return 200, [label.payload() for label in sorted(repo.labels, key=lambda x: x.name)]
 
-    @POST("repos/<org>/<repo>/labels")
+    @POST("repos/<owner>/<repo>/labels")
     def _create_label(self, match, _query, body):
         repo = self._resolve_repo(match)
         assert body["name"] not in repo.labels
@@ -23,12 +23,12 @@ class LabelRoutes(APIBase):
         label = repo.add_label(body["name"], **params)
         return 201, label.payload()
 
-    @GET("repos/<org>/<repo>/labels/<name>")
+    @GET("repos/<owner>/<repo>/labels/<name>")
     def _get_label(self, match, _query, _body):
         repo = self._resolve_repo(match)
         return 200, repo.get_label(match["name"]).payload()
 
-    @PATCH("repos/<org>/<repo>/labels/<name>")
+    @PATCH("repos/<owner>/<repo>/labels/<name>")
     def _edit_label(self, match, _query, body):
         repo = self._resolve_repo(match)
         label = repo.get_label(match["name"])
@@ -37,7 +37,7 @@ class LabelRoutes(APIBase):
             upd["name"] = body["new_name"]
         return 200, label.update(**upd).payload()
 
-    @DELETE("repos/<org>/<repo>/labels/<name>")
+    @DELETE("repos/<owner>/<repo>/labels/<name>")
     def _delete_label(self, match, _query, _body):
         repo = self._resolve_repo(match)
         repo.remove_label(match["name"])

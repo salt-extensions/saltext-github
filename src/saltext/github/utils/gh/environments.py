@@ -11,9 +11,9 @@ from saltext.github.utils.gh import client
 log = logging.getLogger(__name__)
 
 
-def _path(conn, repo_name, *suffix):
+def _path(conn, owner, repo_name, *suffix):
     # Environment names can contain characters that are invalid in URL paths
-    return ["repos", conn.org_name, repo_name, "environments"] + [
+    return ["repos", owner or conn.owner, repo_name, "environments"] + [
         quote(str(segment), safe="") for segment in suffix
     ]
 
@@ -46,7 +46,7 @@ def normalize(env):
     return ret
 
 
-def list_all(conn, repo_name):
+def list_all(conn, repo_name, *, owner=None):
     """
     Return all environments of a repository.
 
@@ -55,11 +55,14 @@ def list_all(conn, repo_name):
 
     repo_name
         Repository name.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, _path(conn, repo_name), per_page=100)["environments"]
+    return client.query(conn, _path(conn, owner, repo_name), per_page=100)["environments"]
 
 
-def get(conn, repo_name, name):
+def get(conn, repo_name, name, *, owner=None):
     """
     Return the data of a single environment.
 
@@ -72,10 +75,13 @@ def get(conn, repo_name, name):
     name
         Environment name.
 
+    owner
+        Owner of the repository. Defaults to the connection's owner.
+
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the environment does not exist.
     """
-    return client.query(conn, _path(conn, repo_name, name))
+    return client.query(conn, _path(conn, owner, repo_name, name))
 
 
 def set_(
@@ -87,6 +93,7 @@ def set_(
     prevent_self_review=None,
     reviewers=None,
     deployment_branch_policy=None,
+    owner=None,
 ):
     """
     Create or update an environment, replacing its whole configuration.
@@ -120,6 +127,9 @@ def set_(
         ``protected_branches`` and ``custom_branch_policies`` booleans.
         Branch name patterns for custom policies are managed separately,
         see :func:`create_branch_policy`.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     data = filter_unset(
         {
@@ -129,10 +139,10 @@ def set_(
         }
     )
     data["deployment_branch_policy"] = deployment_branch_policy
-    return client.query(conn, _path(conn, repo_name, name), method="PUT", data=data)
+    return client.query(conn, _path(conn, owner, repo_name, name), method="PUT", data=data)
 
 
-def delete(conn, repo_name, name):
+def delete(conn, repo_name, name, *, owner=None):
     """
     Delete an environment from a repository.
 
@@ -144,11 +154,14 @@ def delete(conn, repo_name, name):
 
     name
         Environment name.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
-    client.query(conn, _path(conn, repo_name, name), method="DELETE")
+    client.query(conn, _path(conn, owner, repo_name, name), method="DELETE")
 
 
-def list_branch_policies(conn, repo_name, environment):
+def list_branch_policies(conn, repo_name, environment, *, owner=None):
     """
     Return all deployment branch policies of an environment.
 
@@ -160,16 +173,19 @@ def list_branch_policies(conn, repo_name, environment):
 
     environment
         Environment name.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     return client.query(
         conn,
-        _path(conn, repo_name, environment, "deployment-branch-policies"),
+        _path(conn, owner, repo_name, environment, "deployment-branch-policies"),
         per_page=100,
     )["branch_policies"]
 
 
-def create_branch_policy(conn, repo_name, environment, name, *, type_="branch"):
-    r"""
+def create_branch_policy(conn, repo_name, environment, name, *, typ="branch", owner=None):
+    """
     Add a deployment branch (or tag) policy to an environment.
     Returns the data of the created policy.
 
@@ -189,19 +205,22 @@ def create_branch_policy(conn, repo_name, environment, name, *, type_="branch"):
         Name pattern that branches (or tags) must match in order to
         deploy to the environment.
 
-    type\_
+    typ
         Target of this rule, either ``branch`` or ``tag``.
         Defaults to ``branch``.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     return client.query(
         conn,
-        _path(conn, repo_name, environment, "deployment-branch-policies"),
+        _path(conn, owner, repo_name, environment, "deployment-branch-policies"),
         method="POST",
-        data={"name": name, "type": type_},
+        data={"name": name, "type": typ},
     )
 
 
-def delete_branch_policy(conn, repo_name, environment, policy_id):
+def delete_branch_policy(conn, repo_name, environment, policy_id, *, owner=None):
     """
     Remove a deployment branch policy from an environment.
 
@@ -216,9 +235,12 @@ def delete_branch_policy(conn, repo_name, environment, policy_id):
 
     policy_id
         Branch policy ID.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     client.query(
         conn,
-        _path(conn, repo_name, environment, "deployment-branch-policies", policy_id),
+        _path(conn, owner, repo_name, environment, "deployment-branch-policies", policy_id),
         method="DELETE",
     )

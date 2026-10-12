@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import github as pygithub
 import pytest
@@ -84,3 +85,34 @@ def test_api_request_translates_pygithub_exceptions():
     with pytest.raises(GitHubApiError, match="502 bad gateway") as exc:
         _server_error()
     assert exc.value.status == 502
+
+
+@pytest.fixture
+def token_conn():
+    with patch("saltext.github.utils.gh.client.github.Github", autospec=True):
+        yield gh_client.GitHubConnection("token")
+
+
+def test_owner_defaults_to_token_user(token_conn):
+    token_conn.client.get_user.return_value.login = "tokenuser"
+    assert token_conn.owner == "tokenuser"
+    token_conn.client.get_user.assert_called_once_with()
+    # The resolution result is cached
+    assert token_conn.owner == "tokenuser"
+    token_conn.client.get_user.assert_called_once_with()
+
+
+def test_owner_lookup_failure_hints_at_profile_parameter(token_conn):
+    # GitHub App installation tokens are not tied to a user account
+    token_conn.client.get_user.side_effect = pygithub.GithubException(
+        403, {"message": "Resource not accessible by integration"}, None
+    )
+    with pytest.raises(CommandExecutionError, match="require the 'owner' profile parameter"):
+        token_conn.owner  # pylint: disable=pointless-statement
+
+
+def test_explicit_owner_skips_token_lookup():
+    with patch("saltext.github.utils.gh.client.github.Github", autospec=True):
+        explicit = gh_client.GitHubConnection("token", "testorg")
+    assert explicit.owner == "testorg"
+    explicit.client.get_user.assert_not_called()

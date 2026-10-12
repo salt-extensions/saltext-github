@@ -1,6 +1,5 @@
 """
-Manage a GitHub organization: members, repositories, teams and
-organization rulesets.
+Manage a GitHub organization: members, teams and organization rulesets.
 
 .. versionadded:: 1.1.0
 
@@ -8,22 +7,38 @@ Unlike the legacy :py:mod:`github <saltext.github.modules.github>` module,
 the functions in this module raise errors (usually subclasses of
 ``CommandExecutionError``) instead of logging them and returning ``False``.
 
-Collections with a unique natural key (repositories, teams) are returned
-as mappings keyed by it, id-addressed collections (rulesets) as lists.
+Collections with a unique natural key (teams, team repositories) are
+returned as mappings keyed by it, id-addressed collections (rulesets)
+as lists.
+
+.. note::
+
+    This module is organization-scoped: all functions target an
+    organization, defaulting to the profile's ``owner`` (which hence
+    must be an organization) and accepting an ``owner`` argument to
+    manage another organization. Repository listing and creation live
+    in the :py:mod:`github_repo <saltext.github.modules.github_repo>`
+    module since they also apply to user accounts.
 
 :depends: PyGithub python module
 
 Configuration
 -------------
 
-This module uses the same configuration profiles as the
+This module uses similar configuration profiles as the
 :py:mod:`github <saltext.github.modules.github>` module:
 
 .. code-block:: yaml
 
     github:
       token: abc1234
-      org_name: my_organization
+
+      # Optional: The default owner (organization or user) whose
+      # resources are managed. org_name is supported as a legacy alias.
+      # Defaults to the token's user, so organization management and
+      # tokens without an associated user account (e.g. GitHub App
+      # installation tokens) require it to be set.
+      owner: my_organization
 
       # Optional: Allow automated repository privacy modifications.
       allow_repo_privacy_changes: False
@@ -40,7 +55,6 @@ from salt.exceptions import CommandExecutionError
 from saltext.github.utils import filter_fields
 from saltext.github.utils.gh import members as gh_members
 from saltext.github.utils.gh import profile as gh_profile
-from saltext.github.utils.gh import repos as gh_repos
 from saltext.github.utils.gh import rulesets as gh_rulesets
 from saltext.github.utils.gh import teams as gh_teams
 from saltext.github.utils.gh.exceptions import GitHubNotFoundError
@@ -51,26 +65,28 @@ __virtualname__ = "github_org"
 
 
 def _get_conn(profile):
-    return gh_profile.get_conn(profile, salt=__salt__, context=__context__)
+    return gh_profile.get_conn(profile, __salt__=__salt__, __context__=__context__)
 
 
-def _get_team(conn, name):
+def _get_team(conn, name, owner=None):
     """
     Return a team's cached details, raising when it does not exist.
     Teams are matched by exact display name first, then by slug and
     case-insensitive display name since GitHub derives team identity
     (the slug) case-insensitively.
     """
-    team = gh_teams.get(conn, name)
+    team = gh_teams.get(conn, name, owner=owner)
     if team is None:
-        for candidate in gh_teams.list_all(conn).values():
+        for candidate in gh_teams.list_all(conn, owner=owner).values():
             if name == candidate["slug"] or name.lower() == candidate["name"].lower():
                 return candidate
-        raise GitHubNotFoundError(f"Team {name} does not exist in organization {conn.org_name}.")
+        raise GitHubNotFoundError(
+            f"Team {name} does not exist in organization {owner or conn.owner}."
+        )
     return team
 
 
-def list_members(ignore_cache=False, profile="github"):
+def list_members(owner=None, ignore_cache=False, profile="github"):
     """
     List the logins of all members of the organization.
 
@@ -80,16 +96,19 @@ def list_members(ignore_cache=False, profile="github"):
 
         salt-call github_org.list_members
 
+    owner
+        Organization to target. Defaults to the profile's ``owner``.
+
     ignore_cache
         Bypass the use of cached members.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    return gh_members.list_all(_get_conn(profile), ignore_cache=ignore_cache)
+    return gh_members.list_all(_get_conn(profile), owner=owner, ignore_cache=ignore_cache)
 
 
-def get_member(name, profile="github"):
+def get_member(name, owner=None, profile="github"):
     """
     Return information about a user, including their organization
     membership state (``in_org`` and ``membership_state``).
@@ -103,13 +122,16 @@ def get_member(name, profile="github"):
     name
         Login of the user.
 
+    owner
+        Organization to target. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    return gh_members.get_info(_get_conn(profile), name)
+    return gh_members.get_info(_get_conn(profile), name, owner=owner)
 
 
-def add_member(name, profile="github"):
+def add_member(name, owner=None, profile="github"):
     """
     Invite a user into the organization. Returns whether the resulting
     membership is ``pending`` (i.e. an invitation that needs to be
@@ -124,13 +146,16 @@ def add_member(name, profile="github"):
     name
         Login of the user to invite.
 
+    owner
+        Organization to target. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    return gh_members.invite(_get_conn(profile), name)
+    return gh_members.invite(_get_conn(profile), name, owner=owner)
 
 
-def remove_member(name, profile="github"):
+def remove_member(name, owner=None, profile="github"):
     """
     Remove a user from the organization.
 
@@ -143,118 +168,14 @@ def remove_member(name, profile="github"):
     name
         Login of the user to remove.
 
+    owner
+        Organization to target. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    gh_members.remove(_get_conn(profile), name)
+    gh_members.remove(_get_conn(profile), name, owner=owner)
     return True
-
-
-def list_repos(private=None, fields=None, ignore_cache=False, profile="github"):
-    """
-    List all repositories within the organization the profile token
-    can see, as a mapping of repository name to details.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt-call github_org.list_repos
-        salt-call github_org.list_repos private=true
-
-    private
-        Only list private (``true``) or public (``false``) repositories.
-        By default, all repositories are listed.
-
-    fields
-        Only include these fields in the output. A single field name
-        reduces each entry to the field's value.
-
-    ignore_cache
-        Bypass the use of cached repositories.
-
-    profile
-        Profile configuration name to use. Defaults to ``github``.
-    """
-    return filter_fields(
-        {
-            repo.name: gh_repos.to_dict(repo)
-            for repo in gh_repos.list_all(_get_conn(profile), ignore_cache=ignore_cache)
-            if private is None or repo.private is private
-        },
-        fields,
-    )
-
-
-def add_repo(
-    name,
-    description=None,
-    homepage=None,
-    private=None,
-    has_issues=None,
-    has_wiki=None,
-    has_downloads=None,
-    auto_init=None,
-    gitignore_template=None,
-    license_template=None,
-    profile="github",
-):
-    """
-    Create a new repository in the organization.
-    Returns information about the created repository.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt-call github_org.add_repo 'repo_name'
-
-    name
-        Name of the repository to create.
-
-    description
-        Repository description.
-
-    homepage
-        URL with more information about the repository, e.g. rendered docs.
-
-    private
-        Repository visibility.
-
-    has_issues
-        Enable issues for this repository.
-
-    has_wiki
-        Enable the wiki for this repository.
-
-    has_downloads
-        Enable downloads for this repository.
-
-    auto_init
-        Create an initial commit with an empty README.
-
-    gitignore_template
-        Desired language or platform for a .gitignore, e.g. "Haskell".
-
-    license_template
-        Desired LICENSE template to apply, e.g. "mit" or "mozilla".
-
-    profile
-        Profile configuration name to use. Defaults to ``github``.
-    """
-    return gh_repos.create(
-        _get_conn(profile),
-        name,
-        description=description,
-        homepage=homepage,
-        private=private,
-        has_issues=has_issues,
-        has_wiki=has_wiki,
-        has_downloads=has_downloads,
-        auto_init=auto_init,
-        gitignore_template=gitignore_template,
-        license_template=license_template,
-    )
 
 
 def _strip_team_caches(team_info):
@@ -265,7 +186,7 @@ def _strip_team_caches(team_info):
     return {key: val for key, val in team_info.items() if key not in ("repos", "members")}
 
 
-def list_teams(fields=None, ignore_cache=False, profile="github"):
+def list_teams(owner=None, fields=None, ignore_cache=False, profile="github"):
     """
     List all teams of the organization, as a mapping of team name
     to team details.
@@ -275,6 +196,9 @@ def list_teams(fields=None, ignore_cache=False, profile="github"):
     .. code-block:: bash
 
         salt-call github_org.list_teams
+
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
 
     fields
         Only include these fields in the output. A single field name
@@ -286,11 +210,11 @@ def list_teams(fields=None, ignore_cache=False, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    teams = gh_teams.list_all(_get_conn(profile), ignore_cache=ignore_cache)
+    teams = gh_teams.list_all(_get_conn(profile), owner=owner, ignore_cache=ignore_cache)
     return filter_fields({name: _strip_team_caches(team) for name, team in teams.items()}, fields)
 
 
-def get_team(name, profile="github"):
+def get_team(name, owner=None, profile="github"):
     """
     Return the details of a single team.
 
@@ -303,10 +227,13 @@ def get_team(name, profile="github"):
     name
         Name of the team.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    return _strip_team_caches(_get_team(_get_conn(profile), name))
+    return _strip_team_caches(_get_team(_get_conn(profile), name, owner=owner))
 
 
 def add_team(
@@ -315,6 +242,7 @@ def add_team(
     repo_names=None,
     privacy=None,
     permission=None,
+    owner=None,
     profile="github",
 ):
     """
@@ -343,6 +271,9 @@ def add_team(
         Default permission for new repositories added to the team, either
         ``pull``, ``push`` or ``admin``.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -354,11 +285,12 @@ def add_team(
         repo_names=repo_names,
         privacy=privacy,
         permission=permission,
+        owner=owner,
     )
-    return _strip_team_caches(_get_team(conn, name))
+    return _strip_team_caches(_get_team(conn, name, owner=owner))
 
 
-def edit_team(name, description=None, privacy=None, permission=None, profile="github"):
+def edit_team(name, description=None, privacy=None, permission=None, owner=None, profile="github"):
     """
     Update an existing team.
     Returns the refreshed team details.
@@ -382,22 +314,26 @@ def edit_team(name, description=None, privacy=None, permission=None, profile="gi
         Default permission for new repositories added to the team, either
         ``pull``, ``push`` or ``admin``.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
     gh_teams.update(
         conn,
-        _get_team(conn, name),
+        _get_team(conn, name, owner=owner),
         name,
         description=description,
         privacy=privacy,
         permission=permission,
+        owner=owner,
     )
-    return _strip_team_caches(_get_team(conn, name))
+    return _strip_team_caches(_get_team(conn, name, owner=owner))
 
 
-def remove_team(name, profile="github"):
+def remove_team(name, owner=None, profile="github"):
     """
     Remove a team from the organization.
 
@@ -410,15 +346,18 @@ def remove_team(name, profile="github"):
     name
         Name of the team to remove.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    gh_teams.delete(conn, _get_team(conn, name))
+    gh_teams.delete(conn, _get_team(conn, name, owner=owner), owner=owner)
     return True
 
 
-def list_team_repos(team_name, fields=None, ignore_cache=False, profile="github"):
+def list_team_repos(team_name, owner=None, fields=None, ignore_cache=False, profile="github"):
     """
     Return the repositories of a team, as a mapping of repository
     name to team-specific details (``permission``).
@@ -432,6 +371,9 @@ def list_team_repos(team_name, fields=None, ignore_cache=False, profile="github"
     team_name
         Name of the team from which to list repos.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     fields
         Only include these fields in the output. A single field name
         reduces each entry to the field's value.
@@ -443,11 +385,13 @@ def list_team_repos(team_name, fields=None, ignore_cache=False, profile="github"
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    repos = gh_teams.list_repos(conn, _get_team(conn, team_name), ignore_cache=ignore_cache)
+    repos = gh_teams.list_repos(
+        conn, _get_team(conn, team_name, owner=owner), owner=owner, ignore_cache=ignore_cache
+    )
     return filter_fields({repo["name"]: repo for repo in repos.values()}, fields)
 
 
-def add_team_repo(repo_name, team_name, permission=None, profile="github"):
+def add_team_repo(repo_name, team_name, permission=None, owner=None, profile="github"):
     """
     Add a repository to a team, or update the permission the team has
     on it.
@@ -468,18 +412,23 @@ def add_team_repo(repo_name, team_name, permission=None, profile="github"):
         Permission for team members within the repository, either ``pull``,
         ``push`` or ``admin``. If not specified, the team's default permission is used.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    if not gh_teams.add_repo(conn, _get_team(conn, team_name), repo_name, permission=permission):
+    if not gh_teams.add_repo(
+        conn, _get_team(conn, team_name, owner=owner), repo_name, permission=permission, owner=owner
+    ):
         raise CommandExecutionError(
             f"Failed setting permission {permission} on repo {repo_name} for team {team_name}."
         )
     return True
 
 
-def remove_team_repo(repo_name, team_name, profile="github"):
+def remove_team_repo(repo_name, team_name, owner=None, profile="github"):
     """
     Remove a repository from a team.
 
@@ -495,15 +444,18 @@ def remove_team_repo(repo_name, team_name, profile="github"):
     team_name
         Name of the team to remove the repository from.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    gh_teams.remove_repo(conn, _get_team(conn, team_name), repo_name)
+    gh_teams.remove_repo(conn, _get_team(conn, team_name, owner=owner), repo_name, owner=owner)
     return True
 
 
-def list_team_members(team_name, ignore_cache=False, profile="github"):
+def list_team_members(team_name, owner=None, ignore_cache=False, profile="github"):
     """
     Return the logins of a team's members, in lower case.
 
@@ -516,6 +468,9 @@ def list_team_members(team_name, ignore_cache=False, profile="github"):
     team_name
         Name of the team from which to list members.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     ignore_cache
         Bypass the use of cached team members.
 
@@ -523,10 +478,12 @@ def list_team_members(team_name, ignore_cache=False, profile="github"):
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    return gh_teams.list_members(conn, _get_team(conn, team_name), ignore_cache=ignore_cache)
+    return gh_teams.list_members(
+        conn, _get_team(conn, team_name, owner=owner), owner=owner, ignore_cache=ignore_cache
+    )
 
 
-def is_team_member(name, team_name, profile="github"):
+def is_team_member(name, team_name, owner=None, profile="github"):
     """
     Return whether a user is a member of a team.
 
@@ -542,13 +499,16 @@ def is_team_member(name, team_name, profile="github"):
     team_name
         Name of the team to check membership in.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    return name.lower() in list_team_members(team_name, profile=profile)
+    return name.lower() in list_team_members(team_name, owner=owner, profile=profile)
 
 
-def add_team_member(name, team_name, profile="github"):
+def add_team_member(name, team_name, owner=None, profile="github"):
     """
     Add an organization member to a team.
 
@@ -564,15 +524,18 @@ def add_team_member(name, team_name, profile="github"):
     team_name
         Name of the team to add the user to.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    gh_teams.add_member(conn, _get_team(conn, team_name), name)
+    gh_teams.add_member(conn, _get_team(conn, team_name, owner=owner), name, owner=owner)
     return True
 
 
-def remove_team_member(name, team_name, profile="github"):
+def remove_team_member(name, team_name, owner=None, profile="github"):
     """
     Remove a member from a team.
 
@@ -588,15 +551,18 @@ def remove_team_member(name, team_name, profile="github"):
     team_name
         Name of the team to remove the user from.
 
+    owner
+        Organization owning the team. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    gh_teams.remove_member(conn, _get_team(conn, team_name), name)
+    gh_teams.remove_member(conn, _get_team(conn, team_name, owner=owner), name, owner=owner)
     return True
 
 
-def list_rulesets(per_page=None, fields=None, profile="github"):
+def list_rulesets(owner=None, per_page=None, fields=None, profile="github"):
     """
     List all rulesets of the organization.
 
@@ -605,6 +571,9 @@ def list_rulesets(per_page=None, fields=None, profile="github"):
     .. code-block:: bash
 
         salt-call github_org.list_rulesets
+
+    owner
+        Organization to target. Defaults to the profile's ``owner``.
 
     per_page
         Pagination size, maximum 100.
@@ -618,11 +587,11 @@ def list_rulesets(per_page=None, fields=None, profile="github"):
     """
     conn = _get_conn(profile)
     return filter_fields(
-        gh_rulesets.list_all(conn, "org", org_name=conn.org_name, per_page=per_page), fields
+        gh_rulesets.list_all(conn, "org", org_name=owner, per_page=per_page), fields
     )
 
 
-def get_ruleset(ruleset_id, profile="github"):
+def get_ruleset(ruleset_id, owner=None, profile="github"):
     """
     Return the data of a single organization ruleset.
 
@@ -635,14 +604,17 @@ def get_ruleset(ruleset_id, profile="github"):
     ruleset_id
         ID of the ruleset.
 
+    owner
+        Organization to target. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    return gh_rulesets.get(conn, ruleset_id, "org", org_name=conn.org_name)
+    return gh_rulesets.get(conn, ruleset_id, "org", org_name=owner)
 
 
-def add_ruleset(ruleset_params, profile="github"):
+def add_ruleset(ruleset_params, owner=None, profile="github"):
     """
     Create a new organization ruleset.
     Returns the data of the created ruleset.
@@ -656,14 +628,17 @@ def add_ruleset(ruleset_params, profile="github"):
     ruleset_params
         Ruleset definition. Must contain at least ``name`` and ``enforcement``.
 
+    owner
+        Organization to target. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    return gh_rulesets.create(conn, ruleset_params, "org", org_name=conn.org_name)
+    return gh_rulesets.create(conn, ruleset_params, "org", org_name=owner)
 
 
-def update_ruleset(ruleset_id, ruleset_params, profile="github"):
+def update_ruleset(ruleset_id, ruleset_params, owner=None, profile="github"):
     """
     Update an existing organization ruleset.
     Returns the data of the updated ruleset.
@@ -680,14 +655,17 @@ def update_ruleset(ruleset_id, ruleset_params, profile="github"):
     ruleset_params
         Updated ruleset definition.
 
+    owner
+        Organization to target. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    return gh_rulesets.update(conn, ruleset_id, ruleset_params, "org", org_name=conn.org_name)
+    return gh_rulesets.update(conn, ruleset_id, ruleset_params, "org", org_name=owner)
 
 
-def delete_ruleset(ruleset_id, profile="github"):
+def delete_ruleset(ruleset_id, owner=None, profile="github"):
     """
     Delete an organization ruleset.
 
@@ -700,9 +678,12 @@ def delete_ruleset(ruleset_id, profile="github"):
     ruleset_id
         ID of the ruleset.
 
+    owner
+        Organization to target. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     conn = _get_conn(profile)
-    gh_rulesets.delete(conn, ruleset_id, "org", org_name=conn.org_name)
+    gh_rulesets.delete(conn, ruleset_id, "org", org_name=owner)
     return True

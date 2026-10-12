@@ -10,8 +10,8 @@ from saltext.github.utils.gh import client
 log = logging.getLogger(__name__)
 
 
-def _path(conn, repo_name):
-    return ["repos", conn.org_name, repo_name, "pages"]
+def _path(conn, owner, repo_name):
+    return ["repos", owner or conn.owner, repo_name, "pages"]
 
 
 def build_source(branch=None, path=None):
@@ -29,7 +29,7 @@ def build_source(branch=None, path=None):
     return source or None
 
 
-def get(conn, repo_name):
+def get(conn, repo_name, *, owner=None):
     """
     Return information about the GitHub Pages site of a repository.
 
@@ -39,13 +39,16 @@ def get(conn, repo_name):
     repo_name
         Repository name.
 
+    owner
+        Owner of the repository. Defaults to the connection's owner.
+
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the repository has no Pages site.
     """
-    return client.query(conn, _path(conn, repo_name))
+    return client.query(conn, _path(conn, owner, repo_name))
 
 
-def create(conn, repo_name, *, build_type=None, source=None):
+def create(conn, repo_name, *, build_type=None, source=None, owner=None):
     """
     Configure a GitHub Pages site for a repository.
     Returns the data of the created site.
@@ -63,16 +66,21 @@ def create(conn, repo_name, *, build_type=None, source=None):
     source
         For ``legacy`` builds, the deployment source as a mapping with
         ``branch`` and ``path``.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     return client.query(
         conn,
-        _path(conn, repo_name),
+        _path(conn, owner, repo_name),
         method="POST",
         data=filter_unset({"build_type": build_type, "source": source}),
     )
 
 
-def update(conn, repo_name, *, build_type=None, source=None, cname=..., https_enforced=None):
+def update(
+    conn, repo_name, *, build_type=None, source=None, cname=..., https_enforced=None, owner=None
+):
     """
     Update the GitHub Pages site configuration of a repository.
 
@@ -96,16 +104,19 @@ def update(conn, repo_name, *, build_type=None, source=None, cname=..., https_en
 
     https_enforced
         Enforce HTTPS for the site.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
     data = filter_unset(
         {"build_type": build_type, "source": source, "https_enforced": https_enforced}
     )
     if cname is not ...:
         data["cname"] = cname
-    client.query(conn, _path(conn, repo_name), method="PUT", data=data)
+    client.query(conn, _path(conn, owner, repo_name), method="PUT", data=data)
 
 
-def delete(conn, repo_name):
+def delete(conn, repo_name, *, owner=None):
     """
     Delete the GitHub Pages site of a repository.
 
@@ -114,5 +125,8 @@ def delete(conn, repo_name):
 
     repo_name
         Repository name.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
     """
-    client.query(conn, _path(conn, repo_name), method="DELETE")
+    client.query(conn, _path(conn, owner, repo_name), method="DELETE")

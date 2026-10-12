@@ -1,7 +1,7 @@
 """
-Manage a single GitHub repository within an organization: the repository
-itself, its rulesets, deploy keys, Actions secrets and settings,
-environments, labels and Pages.
+Manage a single GitHub repository within an organization or user
+account: the repository itself, its rulesets, deploy keys, Actions
+secrets and settings, environments, labels and Pages.
 
 .. versionadded:: 1.1.0
 
@@ -11,6 +11,14 @@ For the states managing per-repository singletons (:py:func:`present
 <saltext.github.states.github_repo.absent>`, :py:func:`pages_present
 <saltext.github.states.github_repo.pages_present>`, ...), ``name``
 doubles as the repository name instead.
+
+All states accept an ``owner`` argument (defaulting to the profile's
+``owner``) to manage repositories of other owners, including user-owned
+ones. The ``teams`` parameter of :py:func:`present
+<saltext.github.states.github_repo.present>` only applies to
+organization-owned repositories (teams belong to the owning
+organization), and repository creation is only supported for
+organizations and the authenticated user, a GitHub API limitation.
 """
 
 import logging
@@ -51,12 +59,14 @@ def _repo_settings_diff(ret, target, managed):
     return update_params
 
 
-def _repo_teams_diff(ret, name, teams, profile):
+def _repo_teams_diff(ret, name, teams, owner, profile):
     """
     Record the team association changes of an existing repository in
     ``ret`` and return them.
     """
-    current_teams = set(__salt__["github_repo.get_teams"](repo_name=name, profile=profile))
+    current_teams = set(
+        __salt__["github_repo.get_teams"](repo_name=name, owner=owner, profile=profile)
+    )
     teams_added = sorted(set(teams) - current_teams)
     teams_removed = sorted(current_teams - set(teams))
     team_permissions = {}
@@ -64,7 +74,7 @@ def _repo_teams_diff(ret, name, teams, profile):
         team_repos = {
             repo_name.lower(): repo
             for repo_name, repo in __salt__["github_org.list_team_repos"](
-                team_name, profile=profile
+                team_name, owner=owner, profile=profile
             ).items()
         }
         current_permission = team_repos.get(name.lower(), {}).get("permission")
@@ -79,14 +89,14 @@ def _repo_teams_diff(ret, name, teams, profile):
     return teams_added, teams_removed, team_permissions
 
 
-def _create_repo(name, create_params, teams, profile):
+def _create_repo(name, create_params, teams, owner, profile):
     """
     Create a repository and associate the requested teams.
     """
-    __salt__["github_org.add_repo"](name, profile=profile, **create_params)
+    __salt__["github_repo.create"](repo_name=name, owner=owner, profile=profile, **create_params)
     for team_name, permission in (teams or {}).items():
         __salt__["github_org.add_team_repo"](
-            name, team_name, permission=permission, profile=profile
+            name, team_name, permission=permission, owner=owner, profile=profile
         )
 
 
@@ -103,6 +113,7 @@ def present(
     license_template=None,
     default_branch=None,
     teams=None,
+    owner=None,
     profile="github",
 ):
     """
@@ -150,7 +161,14 @@ def present(
     teams
         Teams this repo should belong to, specified as a dict of team
         name to permission (``pull``, ``push`` or ``admin``).
-        Unlisted teams are removed from the repository.
+        Unlisted teams are removed from the repository. The teams
+        belong to the repository's owning organization, so this is
+        only supported for organization-owned repositories.
+
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+        Repository creation is only supported for organizations and
+        the authenticated user.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -163,13 +181,13 @@ def present(
     }
 
     try:
-        # This is an optimization to cache all repos in the organization up front.
+        # This is an optimization to cache all of the owner's repos up front.
         # The first use of this state will collect all of the repos and save a bunch
         # of API calls for future use.
-        __salt__["github_org.list_repos"](profile=profile)
+        __salt__["github_repo.list"](owner=owner, profile=profile)
 
         try:
-            target = __salt__["github_repo.get_info"](repo_name=name, profile=profile)
+            target = __salt__["github_repo.get_info"](repo_name=name, owner=owner, profile=profile)
         except GitHubNotFoundError:
             target = None
 
@@ -195,7 +213,7 @@ def present(
             )
             if teams is not None:
                 teams_added, teams_removed, team_permissions = _repo_teams_diff(
-                    ret, name, teams, profile
+                    ret, name, teams, owner, profile
                 )
 
         if not ret["changes"]:
@@ -222,20 +240,25 @@ def present(
                     "license_template": license_template,
                 },
                 teams,
+                owner,
                 profile,
             )
         else:
             if update_params:
-                __salt__["github_repo.update"](repo_name=name, profile=profile, **update_params)
+                __salt__["github_repo.update"](
+                    repo_name=name, owner=owner, profile=profile, **update_params
+                )
             for team_name in teams_added:
                 __salt__["github_org.add_team_repo"](
-                    name, team_name, permission=teams[team_name], profile=profile
+                    name, team_name, permission=teams[team_name], owner=owner, profile=profile
                 )
             for team_name in teams_removed:
-                __salt__["github_org.remove_team_repo"](name, team_name, profile=profile)
+                __salt__["github_org.remove_team_repo"](
+                    name, team_name, owner=owner, profile=profile
+                )
             for team_name in team_permissions:
                 __salt__["github_org.add_team_repo"](
-                    name, team_name, permission=teams[team_name], profile=profile
+                    name, team_name, permission=teams[team_name], owner=owner, profile=profile
                 )
         ret["comment"] = f"Repo {name} has been {verb}"
     except CommandExecutionError as err:
@@ -245,12 +268,15 @@ def present(
     return ret
 
 
-def absent(name, profile="github"):
+def absent(name, owner=None, profile="github"):
     """
     Ensure a repository is absent.
 
     name
-        Name of the repository in the organization.
+        Name of the repository.
+
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -259,7 +285,7 @@ def absent(name, profile="github"):
 
     try:
         try:
-            __salt__["github_repo.get_info"](repo_name=name, profile=profile)
+            __salt__["github_repo.get_info"](repo_name=name, owner=owner, profile=profile)
         except GitHubNotFoundError:
             ret["comment"] = f"Repo {name} does not exist"
             return ret
@@ -270,7 +296,7 @@ def absent(name, profile="github"):
             ret["comment"] = f"Repo {name} would have been deleted"
             return ret
 
-        __salt__["github_repo.delete"](repo_name=name, profile=profile)
+        __salt__["github_repo.delete"](repo_name=name, owner=owner, profile=profile)
         ret["comment"] = f"Repo {name} has been deleted"
     except CommandExecutionError as err:
         ret["result"] = False
@@ -279,7 +305,7 @@ def absent(name, profile="github"):
     return ret
 
 
-def ruleset_present(name, ruleset_params=None, repo_name=None, profile="github"):
+def ruleset_present(name, ruleset_params=None, repo_name=None, owner=None, profile="github"):
     """
     Ensure a repository ruleset is present and configured as specified.
     Only the parameters included in ``ruleset_params`` are compared,
@@ -308,6 +334,9 @@ def ruleset_present(name, ruleset_params=None, repo_name=None, profile="github")
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -317,7 +346,9 @@ def ruleset_present(name, ruleset_params=None, repo_name=None, profile="github")
     ruleset_params["name"] = name
 
     try:
-        rulesets = __salt__["github_repo.list_rulesets"](repo_name=repo_name, profile=profile)
+        rulesets = __salt__["github_repo.list_rulesets"](
+            repo_name=repo_name, owner=owner, profile=profile
+        )
         ruleset = next((rls for rls in rulesets or [] if rls["name"] == name), None)
 
         if ruleset is None:
@@ -327,13 +358,13 @@ def ruleset_present(name, ruleset_params=None, repo_name=None, profile="github")
                 ret["comment"] = f"Ruleset {name} would have been created"
                 return ret
             __salt__["github_repo.add_ruleset"](
-                ruleset_params, repo_name=repo_name, profile=profile
+                ruleset_params, repo_name=repo_name, owner=owner, profile=profile
             )
             ret["comment"] = f"Ruleset {name} has been created"
             return ret
 
         ruleset_info = __salt__["github_repo.get_ruleset"](
-            ruleset["id"], repo_name=repo_name, profile=profile
+            ruleset["id"], repo_name=repo_name, owner=owner, profile=profile
         )
 
         # Only diff the parameters that are being managed. The server
@@ -352,7 +383,7 @@ def ruleset_present(name, ruleset_params=None, repo_name=None, profile="github")
             return ret
 
         __salt__["github_repo.update_ruleset"](
-            ruleset["id"], ruleset_params, repo_name=repo_name, profile=profile
+            ruleset["id"], ruleset_params, repo_name=repo_name, owner=owner, profile=profile
         )
         ret["comment"] = f"Ruleset {name} has been updated"
     except CommandExecutionError as err:
@@ -362,7 +393,7 @@ def ruleset_present(name, ruleset_params=None, repo_name=None, profile="github")
     return ret
 
 
-def ruleset_absent(name, repo_name=None, profile="github"):
+def ruleset_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure a repository ruleset is absent.
 
@@ -372,13 +403,18 @@ def ruleset_absent(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     ret = {"name": name, "changes": {}, "result": True, "comment": ""}
 
     try:
-        rulesets = __salt__["github_repo.list_rulesets"](repo_name=repo_name, profile=profile)
+        rulesets = __salt__["github_repo.list_rulesets"](
+            repo_name=repo_name, owner=owner, profile=profile
+        )
         ruleset = next((rls for rls in rulesets or [] if rls["name"] == name), None)
         if ruleset is None:
             ret["comment"] = f"Ruleset {name} does not exist"
@@ -390,7 +426,9 @@ def ruleset_absent(name, repo_name=None, profile="github"):
             ret["comment"] = f"Ruleset {name} would have been deleted"
             return ret
 
-        __salt__["github_repo.delete_ruleset"](ruleset["id"], repo_name=repo_name, profile=profile)
+        __salt__["github_repo.delete_ruleset"](
+            ruleset["id"], repo_name=repo_name, owner=owner, profile=profile
+        )
         ret["comment"] = f"Ruleset {name} has been deleted"
     except CommandExecutionError as err:
         ret["result"] = False
@@ -407,7 +445,7 @@ def _key_body(key):
     return " ".join(key.split()[:2])
 
 
-def deploy_key_present(name, key, read_only=False, repo_name=None, profile="github"):
+def deploy_key_present(name, key, read_only=False, repo_name=None, owner=None, profile="github"):
     """
     Ensure a deploy key with this title and public key is present
     in a repository.
@@ -438,13 +476,18 @@ def deploy_key_present(name, key, read_only=False, repo_name=None, profile="gith
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     ret = {"name": name, "changes": {}, "result": True, "comment": ""}
 
     try:
-        keys = __salt__["github_repo.list_deploy_keys"](repo_name=repo_name, profile=profile)
+        keys = __salt__["github_repo.list_deploy_keys"](
+            repo_name=repo_name, owner=owner, profile=profile
+        )
         current = next((cur for cur in keys if cur["title"] == name), None)
 
         if current is not None:
@@ -466,10 +509,10 @@ def deploy_key_present(name, key, read_only=False, repo_name=None, profile="gith
 
         if current is not None:
             __salt__["github_repo.remove_deploy_key"](
-                current["id"], repo_name=repo_name, profile=profile
+                current["id"], repo_name=repo_name, owner=owner, profile=profile
             )
         __salt__["github_repo.add_deploy_key"](
-            name, key, read_only=read_only, repo_name=repo_name, profile=profile
+            name, key, read_only=read_only, repo_name=repo_name, owner=owner, profile=profile
         )
         ret["comment"] = f"Deploy key {name} has been {verb}"
     except CommandExecutionError as err:
@@ -479,7 +522,7 @@ def deploy_key_present(name, key, read_only=False, repo_name=None, profile="gith
     return ret
 
 
-def deploy_key_absent(name, repo_name=None, profile="github"):
+def deploy_key_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure no deploy key with this title is present in a repository.
 
@@ -489,13 +532,18 @@ def deploy_key_absent(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     ret = {"name": name, "changes": {}, "result": True, "comment": ""}
 
     try:
-        keys = __salt__["github_repo.list_deploy_keys"](repo_name=repo_name, profile=profile)
+        keys = __salt__["github_repo.list_deploy_keys"](
+            repo_name=repo_name, owner=owner, profile=profile
+        )
         current = next((cur for cur in keys if cur["title"] == name), None)
         if current is None:
             ret["comment"] = f"Deploy key {name} is already absent"
@@ -508,7 +556,7 @@ def deploy_key_absent(name, repo_name=None, profile="github"):
             return ret
 
         __salt__["github_repo.remove_deploy_key"](
-            current["id"], repo_name=repo_name, profile=profile
+            current["id"], repo_name=repo_name, owner=owner, profile=profile
         )
         ret["comment"] = f"Deploy key {name} has been removed"
     except CommandExecutionError as err:
@@ -518,7 +566,9 @@ def deploy_key_absent(name, repo_name=None, profile="github"):
     return ret
 
 
-def actions_secret_present(name, value=None, force=False, repo_name=None, profile="github"):
+def actions_secret_present(
+    name, value=None, force=False, repo_name=None, owner=None, profile="github"
+):
     """
     Ensure an Actions secret is present in a repository.
 
@@ -543,13 +593,18 @@ def actions_secret_present(name, value=None, force=False, repo_name=None, profil
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     ret = {"name": name, "changes": {}, "result": True, "comment": ""}
 
     try:
-        secrets = __salt__["github_repo.list_actions_secrets"](repo_name=repo_name, profile=profile)
+        secrets = __salt__["github_repo.list_actions_secrets"](
+            repo_name=repo_name, owner=owner, profile=profile
+        )
         current = next((sec for sec in secrets if sec.lower() == name.lower()), None)
 
         if current is not None and not force:
@@ -575,7 +630,7 @@ def actions_secret_present(name, value=None, force=False, repo_name=None, profil
             return ret
 
         __salt__["github_repo.set_actions_secret"](
-            name, value, repo_name=repo_name, profile=profile
+            name, value, repo_name=repo_name, owner=owner, profile=profile
         )
         ret["comment"] = f"Secret {name} has been {verb}"
     except CommandExecutionError as err:
@@ -585,7 +640,7 @@ def actions_secret_present(name, value=None, force=False, repo_name=None, profil
     return ret
 
 
-def actions_secret_absent(name, repo_name=None, profile="github"):
+def actions_secret_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure an Actions secret is absent from a repository.
 
@@ -596,13 +651,18 @@ def actions_secret_absent(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
     ret = {"name": name, "changes": {}, "result": True, "comment": ""}
 
     try:
-        secrets = __salt__["github_repo.list_actions_secrets"](repo_name=repo_name, profile=profile)
+        secrets = __salt__["github_repo.list_actions_secrets"](
+            repo_name=repo_name, owner=owner, profile=profile
+        )
         current = next((sec for sec in secrets if sec.lower() == name.lower()), None)
         if current is None:
             ret["comment"] = f"Secret {name} is already absent"
@@ -614,7 +674,9 @@ def actions_secret_absent(name, repo_name=None, profile="github"):
             ret["comment"] = f"Secret {name} would have been removed"
             return ret
 
-        __salt__["github_repo.remove_actions_secret"](current, repo_name=repo_name, profile=profile)
+        __salt__["github_repo.remove_actions_secret"](
+            current, repo_name=repo_name, owner=owner, profile=profile
+        )
         ret["comment"] = f"Secret {name} has been removed"
     except CommandExecutionError as err:
         ret["result"] = False
@@ -628,6 +690,7 @@ def workflow_permissions_managed(
     default_workflow_permissions=None,
     can_approve_pull_request_reviews=None,
     repo_name=None,
+    owner=None,
     profile="github",
 ):
     """
@@ -647,6 +710,9 @@ def workflow_permissions_managed(
     repo_name
         Name of the repository, if it differs from ``name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -664,7 +730,7 @@ def workflow_permissions_managed(
             raise CommandExecutionError("At least one setting to manage must be specified")
 
         current = __salt__["github_repo.get_workflow_permissions"](
-            repo_name=repo_name, profile=profile
+            repo_name=repo_name, owner=owner, profile=profile
         )
         diff = {key: val for key, val in desired.items() if current.get(key) != val}
         if not diff:
@@ -679,7 +745,7 @@ def workflow_permissions_managed(
             return ret
 
         __salt__["github_repo.set_workflow_permissions"](
-            repo_name=repo_name, profile=profile, **diff
+            repo_name=repo_name, owner=owner, profile=profile, **diff
         )
         ret["comment"] = "Workflow permissions have been updated"
     except CommandExecutionError as err:
@@ -735,6 +801,7 @@ def environment_present(
     reviewers=None,
     deployment_branches=None,
     repo_name=None,
+    owner=None,
     profile="github",
 ):
     """
@@ -764,6 +831,9 @@ def environment_present(
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -777,7 +847,7 @@ def environment_present(
     try:
         try:
             current = __salt__["github_repo.get_environment"](
-                name, repo_name=repo_name, profile=profile
+                name, repo_name=repo_name, owner=owner, profile=profile
             )
         except GitHubNotFoundError:
             current = None
@@ -808,7 +878,7 @@ def environment_present(
             if isinstance(deployment_branches, list):
                 try:
                     current_policies = __salt__["github_repo.list_deployment_branch_policies"](
-                        name, repo_name=repo_name, profile=profile
+                        name, repo_name=repo_name, owner=owner, profile=profile
                     )
                 except GitHubNotFoundError:
                     # Not found when the current policy type is not "custom"
@@ -834,16 +904,16 @@ def environment_present(
 
         if current is None or settings_diff:
             __salt__["github_repo.set_environment"](
-                name, repo_name=repo_name, profile=profile, **set_kwargs
+                name, repo_name=repo_name, owner=owner, profile=profile, **set_kwargs
             )
         for pattern in branches_added:
             __salt__["github_repo.add_deployment_branch_policy"](
-                name, pattern, repo_name=repo_name, profile=profile
+                name, pattern, repo_name=repo_name, owner=owner, profile=profile
             )
         for policy in current_policies:
             if policy["name"] in branches_removed:
                 __salt__["github_repo.remove_deployment_branch_policy"](
-                    name, policy["id"], repo_name=repo_name, profile=profile
+                    name, policy["id"], repo_name=repo_name, owner=owner, profile=profile
                 )
         ret["comment"] = f"Environment {name} has been {verb}"
     except CommandExecutionError as err:
@@ -853,7 +923,7 @@ def environment_present(
     return ret
 
 
-def environment_absent(name, repo_name=None, profile="github"):
+def environment_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure an environment is absent from a repository.
 
@@ -863,6 +933,9 @@ def environment_absent(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -870,7 +943,9 @@ def environment_absent(name, repo_name=None, profile="github"):
 
     try:
         try:
-            __salt__["github_repo.get_environment"](name, repo_name=repo_name, profile=profile)
+            __salt__["github_repo.get_environment"](
+                name, repo_name=repo_name, owner=owner, profile=profile
+            )
         except GitHubNotFoundError:
             ret["comment"] = f"Environment {name} is already absent"
             return ret
@@ -881,7 +956,9 @@ def environment_absent(name, repo_name=None, profile="github"):
             ret["comment"] = f"Environment {name} would have been removed"
             return ret
 
-        __salt__["github_repo.remove_environment"](name, repo_name=repo_name, profile=profile)
+        __salt__["github_repo.remove_environment"](
+            name, repo_name=repo_name, owner=owner, profile=profile
+        )
         ret["comment"] = f"Environment {name} has been removed"
     except CommandExecutionError as err:
         ret["result"] = False
@@ -899,7 +976,7 @@ def _normalize_color(color):
     return color.lstrip("#").lower()
 
 
-def label_present(name, color=None, description=None, repo_name=None, profile="github"):
+def label_present(name, color=None, description=None, repo_name=None, owner=None, profile="github"):
     """
     Ensure a label is present in a repository and configured as
     specified. Unspecified settings are left unmanaged.
@@ -917,6 +994,9 @@ def label_present(name, color=None, description=None, repo_name=None, profile="g
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -924,7 +1004,9 @@ def label_present(name, color=None, description=None, repo_name=None, profile="g
 
     try:
         try:
-            current = __salt__["github_repo.get_label"](name, repo_name=repo_name, profile=profile)
+            current = __salt__["github_repo.get_label"](
+                name, repo_name=repo_name, owner=owner, profile=profile
+            )
         except GitHubNotFoundError:
             current = None
 
@@ -935,7 +1017,12 @@ def label_present(name, color=None, description=None, repo_name=None, profile="g
                 ret["comment"] = f"Label {name} would have been created"
                 return ret
             __salt__["github_repo.add_label"](
-                name, color=color, description=description, repo_name=repo_name, profile=profile
+                name,
+                color=color,
+                description=description,
+                repo_name=repo_name,
+                owner=owner,
+                profile=profile,
             )
             ret["comment"] = f"Label {name} has been created"
             return ret
@@ -957,7 +1044,9 @@ def label_present(name, color=None, description=None, repo_name=None, profile="g
             ret["comment"] = f"Label {name} would have been updated"
             return ret
 
-        __salt__["github_repo.edit_label"](name, repo_name=repo_name, profile=profile, **diff)
+        __salt__["github_repo.edit_label"](
+            name, repo_name=repo_name, owner=owner, profile=profile, **diff
+        )
         ret["comment"] = f"Label {name} has been updated"
     except CommandExecutionError as err:
         ret["result"] = False
@@ -966,7 +1055,7 @@ def label_present(name, color=None, description=None, repo_name=None, profile="g
     return ret
 
 
-def label_absent(name, repo_name=None, profile="github"):
+def label_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure a label is absent from a repository.
 
@@ -976,6 +1065,9 @@ def label_absent(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository. Defaults to the profile's ``repo_name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -983,7 +1075,9 @@ def label_absent(name, repo_name=None, profile="github"):
 
     try:
         try:
-            __salt__["github_repo.get_label"](name, repo_name=repo_name, profile=profile)
+            __salt__["github_repo.get_label"](
+                name, repo_name=repo_name, owner=owner, profile=profile
+            )
         except GitHubNotFoundError:
             ret["comment"] = f"Label {name} is already absent"
             return ret
@@ -994,7 +1088,9 @@ def label_absent(name, repo_name=None, profile="github"):
             ret["comment"] = f"Label {name} would have been removed"
             return ret
 
-        __salt__["github_repo.remove_label"](name, repo_name=repo_name, profile=profile)
+        __salt__["github_repo.remove_label"](
+            name, repo_name=repo_name, owner=owner, profile=profile
+        )
         ret["comment"] = f"Label {name} has been removed"
     except CommandExecutionError as err:
         ret["result"] = False
@@ -1011,6 +1107,7 @@ def pages_present(
     cname=None,
     https_enforced=None,
     repo_name=None,
+    owner=None,
     profile="github",
 ):
     """
@@ -1040,6 +1137,9 @@ def pages_present(
     repo_name
         Name of the repository, if it differs from ``name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -1048,7 +1148,9 @@ def pages_present(
 
     try:
         try:
-            current = __salt__["github_repo.get_pages"](repo_name=repo_name, profile=profile)
+            current = __salt__["github_repo.get_pages"](
+                repo_name=repo_name, owner=owner, profile=profile
+            )
         except GitHubNotFoundError:
             current = None
 
@@ -1063,13 +1165,16 @@ def pages_present(
                 source_branch=source_branch,
                 source_path=source_path,
                 repo_name=repo_name,
+                owner=owner,
                 profile=profile,
             )
             if cname is not None or https_enforced is not None:
                 extra = {"https_enforced": https_enforced}
                 if cname is not None:
                     extra["cname"] = cname
-                __salt__["github_repo.update_pages"](repo_name=repo_name, profile=profile, **extra)
+                __salt__["github_repo.update_pages"](
+                    repo_name=repo_name, owner=owner, profile=profile, **extra
+                )
             ret["comment"] = f"Pages have been enabled for {repo_name}"
             return ret
 
@@ -1109,7 +1214,9 @@ def pages_present(
             # unchanged half
             update_kwargs.setdefault("source_branch", current_flat["source_branch"])
             update_kwargs.setdefault("source_path", current_flat["source_path"])
-        __salt__["github_repo.update_pages"](repo_name=repo_name, profile=profile, **update_kwargs)
+        __salt__["github_repo.update_pages"](
+            repo_name=repo_name, owner=owner, profile=profile, **update_kwargs
+        )
         ret["comment"] = f"Pages configuration for {repo_name} has been updated"
     except CommandExecutionError as err:
         ret["result"] = False
@@ -1118,7 +1225,7 @@ def pages_present(
     return ret
 
 
-def pages_absent(name, repo_name=None, profile="github"):
+def pages_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure GitHub Pages are disabled for a repository.
 
@@ -1128,6 +1235,9 @@ def pages_absent(name, repo_name=None, profile="github"):
     repo_name
         Name of the repository, if it differs from ``name``.
 
+    owner
+        Owner of the repository. Defaults to the profile's ``owner``.
+
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
@@ -1136,7 +1246,7 @@ def pages_absent(name, repo_name=None, profile="github"):
 
     try:
         try:
-            __salt__["github_repo.get_pages"](repo_name=repo_name, profile=profile)
+            __salt__["github_repo.get_pages"](repo_name=repo_name, owner=owner, profile=profile)
         except GitHubNotFoundError:
             ret["comment"] = f"Pages are already disabled for {repo_name}"
             return ret
@@ -1147,7 +1257,7 @@ def pages_absent(name, repo_name=None, profile="github"):
             ret["comment"] = f"Pages would have been disabled for {repo_name}"
             return ret
 
-        __salt__["github_repo.remove_pages"](repo_name=repo_name, profile=profile)
+        __salt__["github_repo.remove_pages"](repo_name=repo_name, owner=owner, profile=profile)
         ret["comment"] = f"Pages have been disabled for {repo_name}"
     except CommandExecutionError as err:
         ret["result"] = False

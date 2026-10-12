@@ -104,7 +104,7 @@ def _get_conn(profile):
     """
     Return the GitHub connection, cached into __context__ for performance
     """
-    return gh_profile.get_conn(profile, salt=__salt__, context=__context__)
+    return gh_profile.get_conn(profile, __salt__=__salt__, __context__=__context__)
 
 
 def get_user(name, profile="github", user_details=False):
@@ -163,7 +163,9 @@ def _get_config_value(profile, config_name):
     config_name
         The configuration item's name to use to return configuration values.
     """
-    return gh_profile.get_config_value(profile, config_name, salt=__salt__, context=__context__)
+    return gh_profile.get_config_value(
+        profile, config_name, __salt__=__salt__, __context__=__context__
+    )
 
 
 def list_users(profile="github", ignore_cache=False):
