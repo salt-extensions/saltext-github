@@ -184,7 +184,7 @@ def fake_state(fake_github):
 
 
 @pytest.fixture(scope="module")
-def fake_org(fake_state, fake_setup):
+def fake_org(fake_state, fake_setup):  # pylint: disable=unused-argument
     """
     Fake organization named ``testorg``. Ensure ``fake_setup`` creates it.
     """

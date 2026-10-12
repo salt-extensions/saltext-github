@@ -102,7 +102,10 @@ recursive=no
 # source root is an absolute path or a path relative to the current working
 # directory used to determine a package namespace for modules located under the
 # source root.
-source-roots=
+# Resolve the saltext namespace package correctly. Without this, pylint
+# considers `github` (i.e. saltext.github) a top-level package, which
+# shadows PyGithub's module during static analysis (=> no-member errors).
+source-roots=src
 
 # Allow loading of arbitrary C extensions. Extensions are imported into the
 # active Python interpreter and may run arbitrary code.
@@ -433,32 +436,17 @@ confidence=HIGH,
 # --enable=similarities". If you want to run only the classes checker, but have
 # no Warning level messages displayed, use "--disable=all --enable=classes
 # --disable=W".
-disable=consider-using-f-string,
-        duplicate-code,
+disable=duplicate-code,
         fixme,
-        inconsistent-return-statements,
         keyword-arg-before-vararg,
         line-too-long,
         logging-fstring-interpolation,
         missing-class-docstring,
         missing-function-docstring,
         missing-module-docstring,
-        no-else-return,
-        no-member,
         protected-access,
-        redefined-argument-from-local,
-        redefined-builtin,
-        redefined-outer-name,
         too-few-public-methods,
-        too-many-boolean-expressions,
-        too-many-branches,
-        too-many-instance-attributes,
-        too-many-lines,
-        too-many-locals,
-        too-many-nested-blocks,
         too-many-positional-arguments,
-        too-many-return-statements,
-        too-many-statements,
         ungrouped-imports,
         wrong-import-position
 

@@ -24,7 +24,8 @@ def test_get_issues(github, repo_a):
     assert formatted["milestone"] == "v1.0"
 
 
-def test_get_issues_all_states(github, repo_a):
+@pytest.mark.usefixtures("repo_a")
+def test_get_issues_all_states(github):
     ret = github.get_issues("repo-a", state="all")
     assert {issue["title"] for issue in ret.values()} == {"Found a bug", "Stale issue"}
 

@@ -41,11 +41,9 @@ from salt.exceptions import CommandExecutionError
 from saltext.github.utils import filter_unset
 
 try:
-    # pylint: disable=no-name-in-module
-    import github
+    import github  # pylint: disable=import-self
     from github.GithubException import UnknownObjectException
 
-    # pylint: enable=no-name-in-module
     HAS_LIBS = True
 except ImportError:  # pragma: no cover
     HAS_LIBS = False
@@ -2034,13 +2032,10 @@ def update_ruleset(profile="github", **kwargs):
         )
         if not ret.get("error"):
             return ret["dict"]
-        else:
-            ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
-            ret["result"] = False
-    except CommandExecutionError:
-        ret = {}
+        ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
         ret["result"] = False
-        ret["comment"] = "Error updating ruleset"
+    except CommandExecutionError:
+        ret = {"result": False, "comment": "Error updating ruleset"}
 
     return ret
 
@@ -2090,13 +2085,10 @@ def add_ruleset(profile="github", **kwargs):
         )
         if not ret.get("error"):
             return ret["dict"]
-        else:
-            ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
-            ret["result"] = False
-    except CommandExecutionError:
-        ret = {}
+        ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
         ret["result"] = False
-        ret["comment"] = "Error adding ruleset"
+    except CommandExecutionError:
+        ret = {"result": False, "comment": "Error adding ruleset"}
     return ret
 
 
@@ -2140,14 +2132,9 @@ def list_rulesets(profile="github", *, per_page=None, **kwargs):
     try:
         ret = _query(profile, action, header_dict=header_dict, per_page=per_page)
         if not ret.get("error"):
-            if ret["dict"]:
-                return {"rulesets": ret["dict"]}
-            return {"rulesets": None}
-        else:
-            ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
-            ret["result"] = False
-    except CommandExecutionError:
-        ret = {}
+            return {"rulesets": ret["dict"] or None}
+        ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
         ret["result"] = False
-        ret["comment"] = "Error getting rulesets"
+    except CommandExecutionError:
+        ret = {"result": False, "comment": "Error getting rulesets"}
     return ret

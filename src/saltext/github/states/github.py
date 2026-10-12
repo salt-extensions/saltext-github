@@ -10,13 +10,15 @@ from salt.exceptions import CommandExecutionError
 
 log = logging.getLogger(__name__)
 
+__virtualname__ = "github"
+
 
 def __virtual__():
     """
     Only load if the github module is available in __salt__
     """
     if "github.list_users" in __salt__:
-        return "github"
+        return __virtualname__
     return (False, "github module could not be loaded")  # pragma: no cover
 
 
@@ -124,7 +126,7 @@ def absent(name, profile="github", **kwargs):
     return ret
 
 
-def team_present(
+def team_present(  # pylint: disable=too-many-statements
     name,
     description=None,
     repo_names=None,
@@ -428,24 +430,23 @@ def team_absent(name, profile="github", **kwargs):
         ret["comment"] = f"Team {name} does not exist"
         ret["result"] = True
         return ret
+    if __opts__["test"]:
+        ret["comment"] = f"Team {name} will be deleted"
+        ret["changes"]["old"] = f"Team {name} exists"
+        ret["changes"]["new"] = f"Team {name} deleted"
+        ret["result"] = None
+        return ret
+
+    result = __salt__["github.remove_team"](name, profile=profile, **kwargs)
+
+    if result:
+        ret["comment"] = f"Deleted team {name}"
+        ret["changes"].setdefault("old", f"Team {name} exists")
+        ret["changes"].setdefault("new", f"Team {name} deleted")
+        ret["result"] = True
     else:
-        if __opts__["test"]:
-            ret["comment"] = f"Team {name} will be deleted"
-            ret["changes"]["old"] = f"Team {name} exists"
-            ret["changes"]["new"] = f"Team {name} deleted"
-            ret["result"] = None
-            return ret
-
-        result = __salt__["github.remove_team"](name, profile=profile, **kwargs)
-
-        if result:
-            ret["comment"] = f"Deleted team {name}"
-            ret["changes"].setdefault("old", f"Team {name} exists")
-            ret["changes"].setdefault("new", f"Team {name} deleted")
-            ret["result"] = True
-        else:
-            ret["comment"] = f"Failed to delete {name}"
-            ret["result"] = False
+        ret["comment"] = f"Failed to delete {name}"
+        ret["result"] = False
     return ret
 
 
@@ -615,23 +616,23 @@ def repo_present(
 
         # First remove any teams that aren't present
         for team_name in current_team_names:
-            if team_name not in teams:
-                team_change = {
-                    "old": f"Repo {name} is in team {team_name}",
-                    "new": f"Repo {name} is not in team {team_name}",
-                }
+            if team_name in teams:
+                continue
+            team_change = {
+                "old": f"Repo {name} is in team {team_name}",
+                "new": f"Repo {name} is not in team {team_name}",
+            }
 
-                if __opts__["test"]:
-                    ret["changes"][team_name] = team_change
-                    ret["result"] = None
-                else:
-                    result = __salt__["github.remove_team_repo"](name, team_name, profile=profile)
-                    if result:
-                        ret["changes"][team_name] = team_change
-                    else:
-                        ret["result"] = False
-                        ret["comment"] = f"Failed to remove repo {name} from team {team_name}."
-                        return ret
+            if __opts__["test"]:
+                ret["changes"][team_name] = team_change
+                ret["result"] = None
+            else:
+                result = __salt__["github.remove_team_repo"](name, team_name, profile=profile)
+                if not result:
+                    ret["result"] = False
+                    ret["comment"] = f"Failed to remove repo {name} from team {team_name}."
+                    return ret
+                ret["changes"][team_name] = team_change
 
         # Next add or modify any necessary teams
         for team_name, permission in teams.items():
@@ -647,12 +648,11 @@ def repo_present(
                     result = __salt__["github.add_team_repo"](
                         name, team_name, profile=profile, permission=permission
                     )
-                    if result:
-                        ret["changes"][team_name] = team_change
-                    else:
+                    if not result:
                         ret["result"] = False
                         ret["comment"] = f"Failed to add repo {name} to team {team_name}."
                         return ret
+                    ret["changes"][team_name] = team_change
             else:
                 current_permission = (
                     __salt__["github.list_team_repos"](team_name, profile=profile)
@@ -665,26 +665,26 @@ def repo_present(
                         f"Failed to determine current permission for team {team_name} in repo {name}"
                     )
                     return ret
-                if current_permission != permission:
-                    team_change = {
-                        "old": f"Repo {name} in team {team_name} has permission {current_permission}",
-                        "new": f"Repo {name} in team {team_name} has permission {permission}",
-                    }
-                    if __opts__["test"]:
-                        ret["changes"][team_name] = team_change
-                        ret["result"] = None
-                    else:
-                        result = __salt__["github.add_team_repo"](
-                            name, team_name, profile=profile, permission=permission
+                if current_permission == permission:
+                    continue
+                team_change = {
+                    "old": f"Repo {name} in team {team_name} has permission {current_permission}",
+                    "new": f"Repo {name} in team {team_name} has permission {permission}",
+                }
+                if __opts__["test"]:
+                    ret["changes"][team_name] = team_change
+                    ret["result"] = None
+                else:
+                    result = __salt__["github.add_team_repo"](
+                        name, team_name, profile=profile, permission=permission
+                    )
+                    if not result:
+                        ret["result"] = False
+                        ret["comment"] = (
+                            f"Failed to set permission on repo {name} from team {team_name} to {permission}."
                         )
-                        if result:
-                            ret["changes"][team_name] = team_change
-                        else:
-                            ret["result"] = False
-                            ret["comment"] = (
-                                f"Failed to set permission on repo {name} from team {team_name} to {permission}."
-                            )
-                            return ret
+                        return ret
+                    ret["changes"][team_name] = team_change
     return ret
 
 
@@ -714,26 +714,27 @@ def repo_absent(name, profile="github", **kwargs):
         ret["comment"] = f"Repo {name} does not exist"
         ret["result"] = True
         return ret
-    else:
-        if __opts__["test"]:
-            ret["comment"] = f"Repo {name} will be deleted"
-            ret["changes"]["old"] = f"Repo {name} exists"
-            ret["changes"]["new"] = f"Repo {name} deleted"
-            ret["result"] = None
-            return ret
 
-        result = __salt__["github.remove_repo"](name, profile=profile, **kwargs)
+    if __opts__["test"]:
+        ret["comment"] = f"Repo {name} will be deleted"
+        ret["changes"]["old"] = f"Repo {name} exists"
+        ret["changes"]["new"] = f"Repo {name} deleted"
+        ret["result"] = None
+        return ret
 
-        if result:
-            ret["comment"] = f"Deleted repo {name}"
-            ret["changes"].setdefault("old", f"Repo {name} exists")
-            ret["changes"].setdefault("new", f"Repo {name} deleted")
-            ret["result"] = True
-        else:
-            ret["comment"] = (
-                f"Failed to delete repo {name}. Ensure the delete_repo scope is enabled if using OAuth."
-            )
-            ret["result"] = False
+    result = __salt__["github.remove_repo"](name, profile=profile, **kwargs)
+
+    if result:
+        ret["comment"] = f"Deleted repo {name}"
+        ret["changes"].setdefault("old", f"Repo {name} exists")
+        ret["changes"].setdefault("new", f"Repo {name} deleted")
+        ret["result"] = True
+        return ret
+
+    ret["comment"] = (
+        f"Failed to delete repo {name}. Ensure the delete_repo scope is enabled if using OAuth."
+    )
+    ret["result"] = False
     return ret
 
 
@@ -780,33 +781,34 @@ def ruleset_absent(
         ret["comment"] = "error listing rulesets"
         return ret
 
-    if rulesets["rulesets"]:
-        for ruleset in rulesets["rulesets"]:
-            if ruleset["name"] == name:
-                if __opts__["test"]:
-                    ret["comment"] = f"Ruleset {name} will be deleted"
-                    ret["changes"]["old"] = f"ruleset {name} exists"
-                    ret["changes"]["new"] = f"ruleset {name} deleted"
-                    ret["result"] = None
-                    return ret
+    ruleset = next(
+        (ruleset for ruleset in (rulesets.get("rulesets") or []) if ruleset["name"] == name), None
+    )
+    if ruleset is None:
+        ret["comment"] = f"Ruleset {name} does not exist"
+        ret["result"] = True
+        return ret
 
-                kwargs.update({"ruleset_id": ruleset["id"]})
-                result = __salt__["github.delete_ruleset"](profile, **kwargs)
+    if __opts__["test"]:
+        ret["comment"] = f"Ruleset {name} will be deleted"
+        ret["changes"]["old"] = f"ruleset {name} exists"
+        ret["changes"]["new"] = f"ruleset {name} deleted"
+        ret["result"] = None
+        return ret
 
-                # delete_ruleset returns a (truthy) dict with result: False on failure
-                if result.get("result") is not False:
-                    ret["comment"] = f"Deleted ruleset {name}"
-                    ret["changes"]["old"] = f"ruleset {name} exists"
-                    ret["changes"]["new"] = f"ruleset {name} deleted"
-                    ret["result"] = True
-                    return ret
-                else:
-                    ret["comment"] = f"Failed to delete ruleset {name}"
-                    ret["result"] = False
-                return ret
+    kwargs.update({"ruleset_id": ruleset["id"]})
+    result = __salt__["github.delete_ruleset"](profile, **kwargs)
 
-    ret["comment"] = f"Ruleset {name} does not exist"
-    ret["result"] = True
+    # delete_ruleset returns a (truthy) dict with result: False on failure
+    if result.get("result") is not False:
+        ret["comment"] = f"Deleted ruleset {name}"
+        ret["changes"]["old"] = f"ruleset {name} exists"
+        ret["changes"]["new"] = f"ruleset {name} deleted"
+        ret["result"] = True
+        return ret
+
+    ret["comment"] = f"Failed to delete ruleset {name}"
+    ret["result"] = False
     return ret
 
 
@@ -870,56 +872,53 @@ def ruleset_present(
         ret["comment"] = "error listing rulesets"
         return ret
 
-    if rulesets["rulesets"]:
-        for ruleset in rulesets["rulesets"]:
-            if ruleset["name"] == name:
-                kwargs.update({"ruleset_id": ruleset["id"]})
-                ruleset_info = __salt__["github.get_ruleset"](profile, **kwargs)
-                if not ruleset_info.get("id"):
-                    ret["comment"] = "Could not get ruleset"
-                    ret["result"] = False
-                    return ret
-
-                # Only diff the parameters that are being managed. The server
-                # response carries additional server-populated fields (id,
-                # timestamps, source, ...) that must not register as drift.
-                diff = {
-                    key: value
-                    for key, value in ruleset_params.items()
-                    if ruleset_info.get(key) != value
-                }
-                if not diff:
-                    ret["comment"] = "ruleset present"
-                    return ret
-
-                ret["changes"] = {
-                    "old": {key: ruleset_info.get(key) for key in diff},
-                    "new": diff,
-                }
-                if __opts__["test"]:
-                    ret["result"] = None
-                    ret["comment"] = "ruleset will be updated"
-                    return ret
-
-                kwargs.update({"ruleset_params": ruleset_params})
-                result = __salt__["github.update_ruleset"](profile, **kwargs)
-                if result.get("id"):
-                    ret["comment"] = "ruleset updated"
-                else:
-                    ret["changes"] = {}
-                    ret["result"] = False
-                    ret["comment"] = "Could not update ruleset"
-                return ret
-
-    ret["changes"] = {"old": "No existing ruleset found", "new": "Ruleset created"}
-    if __opts__["test"]:
-        ret["result"] = None
-        ret["comment"] = "ruleset will be added"
-    else:
+    ruleset = next(
+        (ruleset for ruleset in (rulesets.get("rulesets") or []) if ruleset["name"] == name), None
+    )
+    if ruleset is None:
+        ret["changes"] = {"old": "No existing ruleset found", "new": "Ruleset created"}
+        if __opts__["test"]:
+            ret["result"] = None
+            ret["comment"] = "ruleset will be added"
+            return ret
         result = __salt__["github.add_ruleset"](profile, ruleset_params=ruleset_params, **kwargs)
         ret["comment"] = "ruleset added"
         if not result.get("id"):
             ret["changes"] = {}
             ret["result"] = False
             ret["comment"] = "ruleset could not be added"
+        return ret
+
+    kwargs.update({"ruleset_id": ruleset["id"]})
+    ruleset_info = __salt__["github.get_ruleset"](profile, **kwargs)
+    if not ruleset_info.get("id"):
+        ret["comment"] = "Could not get ruleset"
+        ret["result"] = False
+        return ret
+
+    # Only diff the parameters that are being managed. The server
+    # response carries additional server-populated fields (id,
+    # timestamps, source, ...) that must not register as drift.
+    diff = {key: value for key, value in ruleset_params.items() if ruleset_info.get(key) != value}
+    if not diff:
+        ret["comment"] = "ruleset present"
+        return ret
+
+    ret["changes"] = {
+        "old": {key: ruleset_info.get(key) for key in diff},
+        "new": diff,
+    }
+    if __opts__["test"]:
+        ret["result"] = None
+        ret["comment"] = "ruleset will be updated"
+        return ret
+
+    kwargs.update({"ruleset_params": ruleset_params})
+    result = __salt__["github.update_ruleset"](profile, **kwargs)
+    if result.get("id"):
+        ret["comment"] = "ruleset updated"
+    else:
+        ret["changes"] = {}
+        ret["result"] = False
+        ret["comment"] = "Could not update ruleset"
     return ret

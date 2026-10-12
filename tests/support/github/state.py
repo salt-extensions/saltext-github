@@ -39,7 +39,7 @@ from tests.support.github.entities import UserName
 
 
 @dataclass
-class GlobalState:
+class GlobalState:  # pylint: disable=too-many-instance-attributes
     base_url: str = field(init=False, default="")
     orgs: dict[OrgName, OrganizationData] = field(default_factory=dict)
     users: dict[UserName, UserData] = field(default_factory=dict)
