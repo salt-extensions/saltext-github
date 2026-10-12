@@ -1,0 +1,1 @@
+Profile configuration values containing SDB URIs (e.g. `token: sdb://osenv/GITHUB_TOKEN`) are now rendered on access via `config.get`. Salt itself only renders them inside the minion/master configuration during startup, so this makes them work in pillar-sourced profiles as well.
