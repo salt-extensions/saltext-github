@@ -20,6 +20,7 @@ _________
     utils.gh.labels
     utils.gh.milestones
     utils.gh.pages
+    utils.gh.profile
     utils.gh.pulls
     utils.gh.repos
     utils.gh.rulesets

@@ -3,6 +3,15 @@ Module for interacting with the GitHub v3 API.
 
 :depends: PyGithub python module
 
+.. deprecated:: 1.1.0
+
+    Managing organization- and repository-scoped resources via this module
+    is deprecated. Use the :py:mod:`github_org
+    <saltext.github.modules.github_org>` and :py:mod:`github_repo
+    <saltext.github.modules.github_repo>` modules instead, which raise
+    errors instead of logging and returning ``False``. This module retains
+    functionality that is not tied to a single organization.
+
 Configuration
 -------------
 
@@ -61,14 +70,9 @@ from salt.exceptions import CommandExecutionError
 from saltext.github.utils import filter_unset
 
 try:
-    from saltext.github.utils.gh import actions as gh_actions
-    from saltext.github.utils.gh import client as gh_client
-    from saltext.github.utils.gh import deploy_keys as gh_deploy_keys
-    from saltext.github.utils.gh import environments as gh_environments
     from saltext.github.utils.gh import issues as gh_issues
-    from saltext.github.utils.gh import labels as gh_labels
     from saltext.github.utils.gh import milestones as gh_milestones
-    from saltext.github.utils.gh import pages as gh_pages
+    from saltext.github.utils.gh import profile as gh_profile
     from saltext.github.utils.gh import pulls as gh_pulls
     from saltext.github.utils.gh import repos as gh_repos
     from saltext.github.utils.gh import rulesets as gh_rulesets
@@ -82,8 +86,6 @@ except ImportError:  # pragma: no cover
     HAS_LIBS = False
 
 log = logging.getLogger(__name__)
-
-API_URL_DEFAULT = "https://api.github.com"
 
 __virtualname__ = "github"
 
@@ -108,55 +110,22 @@ def _get_config_value(profile, config_name):
     config_name
         The configuration item's name to use to return configuration values.
     """
-    if "gh_profile" not in __context__ or profile not in __context__["gh_profile"]:
-        if not __salt__["config.get"](profile):
-            raise CommandExecutionError(
-                f"Authentication information could not be found for the '{profile}' profile."
-            )
-        __context__.setdefault("gh_profile", {})[profile] = {}
-
-    cache = __context__["gh_profile"][profile]
-    if config_name not in cache:
-        # Unlike config.option, config.get resolves SDB URIs in scalar values,
-        # hence request each value separately and cache the rendered result.
-        cache[config_name] = __salt__["config.get"](f"{profile}:{config_name}", default=None)
-
-    config_value = cache[config_name]
-    if config_value is None:
-        raise CommandExecutionError(
-            f"The '{config_name}' parameter was not found in the '{profile}' profile."
-        )
-
-    return config_value
-
-
-def _get_api_url(profile):
-    """
-    Return the configured GitHub API base URL, defaulting to the public one.
-    """
-    try:
-        return _get_config_value(profile, "api_url").rstrip("/")
-    except CommandExecutionError:  # pragma: no cover
-        return API_URL_DEFAULT
+    return gh_profile.get_config_value(profile, config_name, salt=__salt__, context=__context__)
 
 
 def _get_conn(profile):
     """
     Return the GitHub connection, cached into __context__ for performance
     """
-    token = _get_config_value(profile, "token")
-    org_name = _get_config_value(profile, "org_name")
-    api_url = _get_api_url(profile)
-    key = f"github.{token}:{org_name}:{api_url}"
-
-    if key not in __context__:
-        __context__[key] = gh_client.GitHubConnection(token, org_name, api_url=api_url)
-    return __context__[key]
+    return gh_profile.get_conn(profile, salt=__salt__, context=__context__)
 
 
 def list_users(profile="github", ignore_cache=False):
     """
     List all users within the organization.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_members <saltext.github.modules.github_org.list_members>` instead.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -213,6 +182,9 @@ def add_user(name, profile="github"):
     """
     Add a GitHub user.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_member <saltext.github.modules.github_org.add_member>` instead.
+
     name
         The user for which to obtain information.
 
@@ -237,6 +209,9 @@ def remove_user(name, profile="github"):
     """
     Remove a Github user by name.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.remove_member <saltext.github.modules.github_org.remove_member>` instead.
+
     name
         The user for which to obtain information.
 
@@ -260,6 +235,9 @@ def remove_user(name, profile="github"):
 def get_issue(issue_number, repo_name=None, profile="github", output="min"):
     """
     Return information about a single issue in a named repository.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.get_issue <saltext.github.modules.github_repo.get_issue>` instead.
 
     issue_number
         The number of the issue to retrieve.
@@ -307,6 +285,9 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
 def get_issue_comments(issue_number, repo_name=None, profile="github", since=None, output="min"):
     """
     Return information about the comments for a given issue in a named repository.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.get_issue_comments <saltext.github.modules.github_repo.get_issue_comments>` instead.
 
     issue_number
         The number of the issue for which to retrieve comments.
@@ -372,6 +353,9 @@ def get_issues(
 ):
     """
     Returns information for all issues in a given repository, based on the search options.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.list_issues <saltext.github.modules.github_repo.list_issues>` instead.
 
     repo_name
         The name of the repository for which to list issues. This argument is
@@ -479,6 +463,9 @@ def get_milestones(
     """
     Return information about milestones for a given repository.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.list_milestones <saltext.github.modules.github_repo.list_milestones>` instead.
+
     repo_name
         The name of the repository for which to list issues. This argument is
         required, either passed via the CLI, or defined in the configured
@@ -541,6 +528,9 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github", outp
     """
     Return information about a single milestone in a named repository.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.get_milestone <saltext.github.modules.github_repo.get_milestone>` instead.
+
     number
         The number of the milestone to retrieve. If provided, this option
         will be favored over ``name``.
@@ -602,6 +592,9 @@ def get_repo_info(repo_name, profile="github", ignore_cache=False):
     """
     Return information for a given repo.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.get_info <saltext.github.modules.github_repo.get_info>` instead.
+
     repo_name
         The name of the repository.
 
@@ -621,6 +614,9 @@ def get_repo_info(repo_name, profile="github", ignore_cache=False):
 def get_repo_teams(repo_name, profile="github"):
     """
     Return teams belonging to a repository.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.get_teams <saltext.github.modules.github_repo.get_teams>` instead.
 
     repo_name
         The name of the repository from which to retrieve teams.
@@ -644,6 +640,9 @@ def list_repos(profile="github"):
     repositories within the organization Dependent upon the access rights of
     the profile token.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_repos <saltext.github.modules.github_org.list_repos>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -662,6 +661,9 @@ def list_private_repos(profile="github"):
     List private repositories within the organization. Dependent upon the access
     rights of the profile token.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_repos <saltext.github.modules.github_org.list_repos>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -678,6 +680,9 @@ def list_private_repos(profile="github"):
 def list_public_repos(profile="github"):
     """
     List public repositories within the organization.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_repos <saltext.github.modules.github_org.list_repos>` instead.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -707,6 +712,9 @@ def add_repo(
 ):
     """
     Create a new github repository.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_repo <saltext.github.modules.github_org.add_repo>` instead.
 
     name
         The name of the team to be created.
@@ -776,11 +784,13 @@ def edit_repo(
     has_issues=None,
     has_wiki=None,
     has_downloads=None,
-    default_branch=None,
     profile="github",
 ):
     """
     Updates an existing Github repository.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.update <saltext.github.modules.github_repo.update>` instead.
 
     name
         The name of the team to be created.
@@ -803,11 +813,6 @@ def edit_repo(
 
     has_downloads
         Whether to enable downloads for this repository.
-
-    default_branch
-        The default branch of the repository. The branch must already exist.
-
-        .. versionadded:: 1.1.0
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -834,7 +839,6 @@ def edit_repo(
             has_issues=has_issues,
             has_wiki=has_wiki,
             has_downloads=has_downloads,
-            default_branch=default_branch,
             allow_privacy_change=allow_privacy_change,
         )
         return True
@@ -846,6 +850,9 @@ def edit_repo(
 def remove_repo(name, profile="github"):
     """
     Remove a Github repository.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.delete <saltext.github.modules.github_repo.delete>` instead.
 
     name
         The name of the repository to be removed.
@@ -878,6 +885,9 @@ def get_team(name, profile="github"):
     Returns the team details if a team with the given name exists, or None
     otherwise.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.get_team <saltext.github.modules.github_org.get_team>` instead.
+
     name
         The team name for which to obtain information.
 
@@ -903,6 +913,9 @@ def add_team(
 ):
     """
     Create a new Github team within an organization.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_team <saltext.github.modules.github_org.add_team>` instead.
 
     name
         The name of the team to be created.
@@ -947,6 +960,9 @@ def add_team(
 def edit_team(name, description=None, privacy=None, permission=None, profile="github"):
     """
     Updates an existing Github team.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.edit_team <saltext.github.modules.github_org.edit_team>` instead.
 
     name
         The name of the team to be edited.
@@ -994,6 +1010,9 @@ def remove_team(name, profile="github"):
     """
     Remove a github team.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.remove_team <saltext.github.modules.github_org.remove_team>` instead.
+
     name
         The name of the team to be removed.
 
@@ -1023,6 +1042,9 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
     """
     Gets the repo details for a given team as a dict from repo_name to repo details.
     Note that repo names are always in lower case.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_team_repos <saltext.github.modules.github_org.list_team_repos>` instead.
 
     team_name
         The name of the team from which to list repos.
@@ -1055,6 +1077,9 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
 def add_team_repo(repo_name, team_name, profile="github", permission=None):
     """
     Adds a repository to a team with team_name.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_team_repo <saltext.github.modules.github_org.add_team_repo>` instead.
 
     repo_name
         The name of the repository to add.
@@ -1100,6 +1125,9 @@ def remove_team_repo(repo_name, team_name, profile="github"):
     """
     Removes a repository from a team with team_name.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.remove_team_repo <saltext.github.modules.github_org.remove_team_repo>` instead.
+
     repo_name
         The name of the repository to remove.
 
@@ -1130,6 +1158,9 @@ def remove_team_repo(repo_name, team_name, profile="github"):
 def list_team_members(team_name, profile="github", ignore_cache=False):
     """
     Gets the names of team members in lower case.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_team_members <saltext.github.modules.github_org.list_team_members>` instead.
 
     team_name
         The name of the team from which to list members.
@@ -1163,6 +1194,9 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
     """
     List all members (in lower case) without MFA turned on.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_members_without_mfa <saltext.github.modules.github_org.list_members_without_mfa>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1182,6 +1216,9 @@ def is_team_member(name, team_name, profile="github"):
     """
     Returns True if the github user is in the team with team_name, or False
     otherwise.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.is_team_member <saltext.github.modules.github_org.is_team_member>` instead.
 
     name
         The name of the user whose membership to check.
@@ -1205,6 +1242,9 @@ def is_team_member(name, team_name, profile="github"):
 def add_team_member(name, team_name, profile="github"):
     """
     Adds a team member to a team with team_name.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_team_member <saltext.github.modules.github_org.add_team_member>` instead.
 
     name
         The name of the team member to add.
@@ -1241,6 +1281,9 @@ def remove_team_member(name, team_name, profile="github"):
     """
     Removes a team member from a team with team_name.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.remove_team_member <saltext.github.modules.github_org.remove_team_member>` instead.
+
     name
         The name of the team member to remove.
 
@@ -1272,6 +1315,9 @@ def list_teams(profile="github", ignore_cache=False):
     """
     Lists all teams with the organization.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_teams <saltext.github.modules.github_org.list_teams>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1301,6 +1347,9 @@ def get_prs(
     """
     Returns information for all pull requests in a given repository, based on
     the search options provided.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.list_pulls <saltext.github.modules.github_repo.list_pulls>` instead.
 
     repo_name
         The name of the repository for which to list pull requests. This
@@ -1459,6 +1508,10 @@ def get_ruleset(profile="github", **kwargs):
     """
     Get information of specific ruleset.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.get_ruleset <saltext.github.modules.github_org.get_ruleset>` or
+        :py:func:`github_repo.get_ruleset <saltext.github.modules.github_repo.get_ruleset>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1503,6 +1556,10 @@ def delete_ruleset(profile="github", **kwargs):
     """
     Delete ruleset
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.delete_ruleset <saltext.github.modules.github_org.delete_ruleset>` or
+        :py:func:`github_repo.delete_ruleset <saltext.github.modules.github_repo.delete_ruleset>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1546,6 +1603,10 @@ def delete_ruleset(profile="github", **kwargs):
 def update_ruleset(profile="github", **kwargs):
     """
     Update ruleset
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.update_ruleset <saltext.github.modules.github_org.update_ruleset>` or
+        :py:func:`github_repo.update_ruleset <saltext.github.modules.github_repo.update_ruleset>` instead.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -1600,6 +1661,10 @@ def add_ruleset(profile="github", **kwargs):
     """
     Add ruleset
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_ruleset <saltext.github.modules.github_org.add_ruleset>` or
+        :py:func:`github_repo.add_ruleset <saltext.github.modules.github_repo.add_ruleset>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1646,6 +1711,10 @@ def list_rulesets(profile="github", *, per_page=None, **kwargs):
     """
     List rulesets
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_rulesets <saltext.github.modules.github_org.list_rulesets>` or
+        :py:func:`github_repo.list_rulesets <saltext.github.modules.github_repo.list_rulesets>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1690,846 +1759,3 @@ def list_rulesets(profile="github", *, per_page=None, **kwargs):
         return _ruleset_error_ret(err)
     except CommandExecutionError:
         return {"result": False, "comment": "Error getting rulesets"}
-
-
-def _resolve_repo_name(repo_name, profile):
-    """
-    Default ``repo_name`` to the profile configuration when unset.
-    """
-    if repo_name is None:
-        return _get_config_value(profile, "repo_name")
-    return repo_name
-
-
-def list_deploy_keys(repo_name=None, profile="github"):
-    """
-    List the deploy keys of a repository.
-
-    .. versionadded:: 1.1.0
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.list_deploy_keys my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_deploy_keys.list_all(_get_conn(profile), repo_name)
-
-
-def get_deploy_key(key_id, repo_name=None, profile="github"):
-    """
-    Return the data of a single deploy key of a repository.
-
-    .. versionadded:: 1.1.0
-
-    key_id
-        The ID of the deploy key.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.get_deploy_key 12345 repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_deploy_keys.get(_get_conn(profile), repo_name, key_id)
-
-
-def add_deploy_key(title, key, read_only=False, repo_name=None, profile="github"):
-    """
-    Add a deploy key to a repository. Returns the data of the created key.
-
-    Note that deploy keys are immutable. To modify one, remove it and
-    add a replacement.
-
-    .. versionadded:: 1.1.0
-
-    title
-        The display title of the deploy key.
-
-    key
-        The SSH public key.
-
-    read_only
-        Deny write access to the repository for this key. Defaults to false.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.add_deploy_key autorelease 'ssh-ed25519 AAAA...' read_only=false repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_deploy_keys.create(
-        _get_conn(profile), repo_name, title, key, read_only=bool(read_only)
-    )
-
-
-def remove_deploy_key(key_id, repo_name=None, profile="github"):
-    """
-    Remove a deploy key from a repository.
-
-    .. versionadded:: 1.1.0
-
-    key_id
-        The ID of the deploy key.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.remove_deploy_key 12345 repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    gh_deploy_keys.delete(_get_conn(profile), repo_name, key_id)
-    return True
-
-
-def list_actions_secrets(repo_name=None, profile="github"):
-    """
-    List the Actions secrets of a repository. Secret values are write-only,
-    so this only returns metadata (``name``, ``created_at``, ``updated_at``).
-
-    .. versionadded:: 1.1.0
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.list_actions_secrets my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_actions.list_secrets(_get_conn(profile), repo_name)
-
-
-def get_actions_secret(name, repo_name=None, profile="github"):
-    """
-    Return the metadata of a single Actions secret of a repository.
-    The value itself is write-only and cannot be retrieved.
-
-    .. versionadded:: 1.1.0
-
-    name
-        The name of the secret.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.get_actions_secret MY_SECRET repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_actions.get_secret(_get_conn(profile), repo_name, name)
-
-
-def set_actions_secret(name, value, repo_name=None, profile="github"):
-    """
-    Create or update an Actions secret of a repository. The value is
-    encrypted to the repository public key before leaving the minion.
-
-    .. versionadded:: 1.1.0
-
-    name
-        The name of the secret.
-
-    value
-        The plaintext secret value.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.set_actions_secret MY_SECRET hunter2 repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    gh_actions.set_secret(_get_conn(profile), repo_name, name, value)
-    return True
-
-
-def remove_actions_secret(name, repo_name=None, profile="github"):
-    """
-    Remove an Actions secret from a repository.
-
-    .. versionadded:: 1.1.0
-
-    name
-        The name of the secret.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.remove_actions_secret MY_SECRET repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    gh_actions.delete_secret(_get_conn(profile), repo_name, name)
-    return True
-
-
-def get_workflow_permissions(repo_name=None, profile="github"):
-    """
-    Return the default workflow permissions granted to the ``GITHUB_TOKEN``
-    in a repository, a mapping with ``default_workflow_permissions``
-    (``read``/``write``) and ``can_approve_pull_request_reviews``.
-
-    .. versionadded:: 1.1.0
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.get_workflow_permissions my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_actions.get_workflow_permissions(_get_conn(profile), repo_name)
-
-
-def set_workflow_permissions(
-    default_workflow_permissions=None,
-    can_approve_pull_request_reviews=None,
-    repo_name=None,
-    profile="github",
-):
-    """
-    Update the default workflow permissions granted to the ``GITHUB_TOKEN``
-    in a repository.
-
-    .. versionadded:: 1.1.0
-
-    default_workflow_permissions
-        The default permissions for the ``GITHUB_TOKEN``, either ``read``
-        or ``write``.
-
-    can_approve_pull_request_reviews
-        Whether GitHub Actions can approve pull requests.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.set_workflow_permissions read can_approve_pull_request_reviews=true repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    gh_actions.set_workflow_permissions(
-        _get_conn(profile),
-        repo_name,
-        default_workflow_permissions=default_workflow_permissions,
-        can_approve_pull_request_reviews=can_approve_pull_request_reviews,
-    )
-    return True
-
-
-def list_environments(repo_name=None, profile="github"):
-    """
-    List the environments of a repository.
-
-    .. versionadded:: 1.1.0
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.list_environments my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_environments.list_all(_get_conn(profile), repo_name)
-
-
-def get_environment(name, repo_name=None, profile="github"):
-    """
-    Return the data of a single environment of a repository.
-
-    .. versionadded:: 1.1.0
-
-    name
-        The name of the environment.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.get_environment release repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_environments.get(_get_conn(profile), repo_name, name)
-
-
-def set_environment(
-    name,
-    wait_timer=None,
-    prevent_self_review=None,
-    reviewers=None,
-    deployment_branch_policy=...,
-    repo_name=None,
-    profile="github",
-):
-    """
-    Create or update an environment of a repository.
-    Returns the data of the environment.
-
-    .. versionadded:: 1.1.0
-
-    name
-        The name of the environment.
-
-    wait_timer
-        The amount of time to delay a job after the job is initially
-        triggered, in minutes.
-
-    prevent_self_review
-        Whether or not a user who created the job is prevented from
-        approving their own job.
-
-    reviewers
-        The people or teams that may review jobs that reference the
-        environment, as a list of mappings with ``type`` (``User`` or
-        ``Team``) and ``id``.
-
-    deployment_branch_policy
-        The type of deployment branch policy for this environment, either
-        ``none`` to allow all branches or a mapping with
-        ``protected_branches`` and ``custom_branch_policies`` booleans.
-        Branch name patterns for custom policies are managed separately,
-        see :py:func:`github.add_deployment_branch_policy
-        <saltext.github.modules.github.add_deployment_branch_policy>`.
-        If not passed at all, the current policy is left unchanged.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.set_environment release repo_name=my-repo \\
-            deployment_branch_policy='{protected_branches: false, custom_branch_policies: true}'
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    conn = _get_conn(profile)
-    if deployment_branch_policy is ...:
-        # PUT replaces the whole environment config, so carry over the
-        # current policy when the caller does not specify one.
-        try:
-            current = gh_environments.get(conn, repo_name, name)
-            deployment_branch_policy = gh_environments.normalize(current)[
-                "deployment_branch_policy"
-            ]
-        except GitHubNotFoundError:
-            deployment_branch_policy = None
-    return gh_environments.set_(
-        conn,
-        repo_name,
-        name,
-        wait_timer=wait_timer,
-        prevent_self_review=prevent_self_review,
-        reviewers=reviewers,
-        deployment_branch_policy=deployment_branch_policy,
-    )
-
-
-def remove_environment(name, repo_name=None, profile="github"):
-    """
-    Remove an environment from a repository.
-
-    .. versionadded:: 1.1.0
-
-    name
-        The name of the environment.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.remove_environment release repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    gh_environments.delete(_get_conn(profile), repo_name, name)
-    return True
-
-
-def list_deployment_branch_policies(environment, repo_name=None, profile="github"):
-    """
-    List the deployment branch policies of an environment.
-
-    .. versionadded:: 1.1.0
-
-    environment
-        The name of the environment.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.list_deployment_branch_policies release repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_environments.list_branch_policies(_get_conn(profile), repo_name, environment)
-
-
-def add_deployment_branch_policy(
-    environment, name, type_="branch", repo_name=None, profile="github"
-):
-    r"""
-    Add a deployment branch (or tag) policy to an environment.
-    Returns the data of the created policy.
-
-    The environment's ``deployment_branch_policy`` must have
-    ``custom_branch_policies`` enabled.
-
-    .. versionadded:: 1.1.0
-
-    environment
-        The name of the environment.
-
-    name
-        The name pattern that branches (or tags) must match in order
-        to deploy to the environment.
-
-    type\_
-        Whether this rule targets a ``branch`` or ``tag``.
-        Defaults to ``branch``.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.add_deployment_branch_policy release main repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_environments.create_branch_policy(
-        _get_conn(profile), repo_name, environment, name, type_=type_
-    )
-
-
-def remove_deployment_branch_policy(environment, policy_id, repo_name=None, profile="github"):
-    """
-    Remove a deployment branch policy from an environment.
-
-    .. versionadded:: 1.1.0
-
-    environment
-        The name of the environment.
-
-    policy_id
-        The ID of the branch policy.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.remove_deployment_branch_policy release 12345 repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    gh_environments.delete_branch_policy(_get_conn(profile), repo_name, environment, policy_id)
-    return True
-
-
-def list_labels(repo_name=None, profile="github"):
-    """
-    List the labels of a repository.
-
-    .. versionadded:: 1.1.0
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.list_labels my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_labels.list_all(_get_conn(profile), repo_name)
-
-
-def get_label(name, repo_name=None, profile="github"):
-    """
-    Return the data of a single label of a repository.
-
-    .. versionadded:: 1.1.0
-
-    name
-        The name of the label.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.get_label bug repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_labels.get(_get_conn(profile), repo_name, name)
-
-
-def add_label(name, color=None, description=None, repo_name=None, profile="github"):
-    """
-    Create a label in a repository. Returns the data of the created label.
-
-    .. versionadded:: 1.1.0
-
-    name
-        The name of the label.
-
-    color
-        The hexadecimal color code for the label, without the leading ``#``.
-        If unset, GitHub assigns a random one.
-
-    description
-        A short description of the label.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.add_label release color=00ff00 repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_labels.create(
-        _get_conn(profile), repo_name, name, color=color, description=description
-    )
-
-
-def edit_label(name, new_name=None, color=None, description=None, repo_name=None, profile="github"):
-    """
-    Update an existing label of a repository.
-    Returns the data of the updated label.
-
-    .. versionadded:: 1.1.0
-
-    name
-        The (current) name of the label.
-
-    new_name
-        A new name for the label.
-
-    color
-        The hexadecimal color code for the label, without the leading ``#``.
-
-    description
-        A short description of the label.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.edit_label release color=00ff00 repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_labels.update(
-        _get_conn(profile),
-        repo_name,
-        name,
-        new_name=new_name,
-        color=color,
-        description=description,
-    )
-
-
-def remove_label(name, repo_name=None, profile="github"):
-    """
-    Delete a label from a repository.
-
-    .. versionadded:: 1.1.0
-
-    name
-        The name of the label.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.remove_label release repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    gh_labels.delete(_get_conn(profile), repo_name, name)
-    return True
-
-
-def get_pages(repo_name=None, profile="github"):
-    """
-    Return information about the GitHub Pages site of a repository.
-
-    .. versionadded:: 1.1.0
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.get_pages my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_pages.get(_get_conn(profile), repo_name)
-
-
-def setup_pages(
-    build_type=None, source_branch=None, source_path=None, repo_name=None, profile="github"
-):
-    """
-    Configure a GitHub Pages site for a repository.
-    Returns the data of the created site.
-
-    .. versionadded:: 1.1.0
-
-    build_type
-        The process by which the site is built, either ``legacy``
-        (deploy from a branch) or ``workflow`` (GitHub Actions).
-
-    source_branch
-        For ``legacy`` builds, the repository branch to publish from.
-
-    source_path
-        For ``legacy`` builds, the repository directory to publish from,
-        either ``/`` or ``/docs``.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.setup_pages build_type=workflow repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    return gh_pages.create(
-        _get_conn(profile),
-        repo_name,
-        build_type=build_type,
-        source=gh_pages.build_source(source_branch, source_path),
-    )
-
-
-def update_pages(
-    build_type=None,
-    source_branch=None,
-    source_path=None,
-    https_enforced=None,
-    repo_name=None,
-    profile="github",
-):
-    """
-    Update the GitHub Pages site configuration of a repository.
-
-    .. versionadded:: 1.1.0
-
-    build_type
-        The process by which the site is built, either ``legacy``
-        (deploy from a branch) or ``workflow`` (GitHub Actions).
-
-    source_branch
-        For ``legacy`` builds, the repository branch to publish from.
-
-    source_path
-        For ``legacy`` builds, the repository directory to publish from,
-        either ``/`` or ``/docs``.
-
-    https_enforced
-        Whether HTTPS is enforced for the site.
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.update_pages build_type=workflow repo_name=my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    gh_pages.update(
-        _get_conn(profile),
-        repo_name,
-        build_type=build_type,
-        source=gh_pages.build_source(source_branch, source_path),
-        https_enforced=https_enforced,
-    )
-    return True
-
-
-def remove_pages(repo_name=None, profile="github"):
-    """
-    Delete the GitHub Pages site of a repository.
-
-    .. versionadded:: 1.1.0
-
-    repo_name
-        The name of the repository. This argument is required, either passed
-        via the CLI, or defined in the configured profile.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.remove_pages my-repo
-    """
-    repo_name = _resolve_repo_name(repo_name, profile)
-    gh_pages.delete(_get_conn(profile), repo_name)
-    return True

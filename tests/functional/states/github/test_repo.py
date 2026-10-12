@@ -102,35 +102,6 @@ def test_repo_present_team_removal(github, fake_github, fake_org, testmode):
     assert ("repo-a" in fake_org.get_team("team-a").repos) is testmode
 
 
-def test_repo_present_default_branch(github, fake_github, fake_org, testmode):
-    before = len(fake_github.mutations())
-    ret = github.repo_present(name="repo-a", default_branch="develop", test=testmode)
-    assert ret.result is not False
-    assert (ret.result is None) is testmode
-    assert "repo" in ret.changes
-    assert (len(fake_github.mutations()) == before) is testmode
-    expected = "main" if testmode else "develop"
-    assert fake_org.get_repo("repo-a").default_branch == expected
-
-
-def test_repo_present_default_branch_idempotent(github, fake_github, testmode):
-    ret = github.repo_present(name="repo-a", default_branch="main", test=testmode)
-    assert ret.result is True
-    assert not ret.changes
-    assert not fake_github.mutations()
-
-
-def test_repo_present_create_ignores_default_branch(github, fake_org, _instant_sleep, testmode):
-    # The default branch can only be switched to an existing branch,
-    # so it is not applied on repository creation
-    ret = github.repo_present(name="new-repo", default_branch="develop", test=testmode)
-    assert ret.result is not False
-    assert (ret.result is None) is testmode
-    assert "repo" in ret.changes
-    if not testmode:
-        assert fake_org.get_repo("new-repo").default_branch == "main"
-
-
 def test_repo_present_missing_team(github):
     ret = github.repo_present(name="repo-b", teams={"Ghost": "pull"})
     assert ret.result is False

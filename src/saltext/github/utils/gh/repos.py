@@ -167,7 +167,12 @@ def create(
             "license_template": license_template,
         }
     )
-    conn.org.create_repo(name, **parameters)
+    repo = conn.org.create_repo(name, **parameters)
+    info = to_dict(repo)
+    conn.cache[("repo_info", repo.name.lower())] = info
+    if "repos" in conn.cache:
+        conn.cache["repos"].append(repo)
+    return info
 
 
 @api_request
@@ -218,7 +223,7 @@ def update(
         }
     )
     repo.edit(name, **parameters)
-    get_info(conn, name, ignore_cache=True)  # Refresh cache
+    return get_info(conn, name, ignore_cache=True)  # Refresh cache
 
 
 @api_request

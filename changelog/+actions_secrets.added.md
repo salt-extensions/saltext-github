@@ -1,1 +1,1 @@
-Added management of repository Actions secrets, encrypted client-side to the repository public key (``github.list_actions_secrets``/``get_actions_secret``/``set_actions_secret``/``remove_actions_secret`` and the ``actions_secret_present``/``actions_secret_absent`` states)
+Added management of repository Actions secrets, encrypted client-side to the repository public key (``github_repo.list_actions_secrets``/``get_actions_secret``/``set_actions_secret``/``remove_actions_secret`` and the ``github_repo.actions_secret_present``/``actions_secret_absent`` states)

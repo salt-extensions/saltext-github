@@ -10,3 +10,5 @@ _____________
     :toctree:
 
     github
+    github_org
+    github_repo

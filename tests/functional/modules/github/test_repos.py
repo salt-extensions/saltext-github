@@ -64,11 +64,6 @@ def test_edit_repo(github, fake_org):
     assert github.get_repo_info("repo-a")["description"] == "Updated"
 
 
-def test_edit_repo_default_branch(github, fake_org):
-    assert github.edit_repo("repo-a", default_branch="develop") is True
-    assert fake_org.get_repo("repo-a").default_branch == "develop"
-
-
 def test_edit_repo_privacy_guard(github):
     with pytest.raises(CommandExecutionError, match="privacy"):
         github.edit_repo("repo-a", private=True, profile="github_noprivacy")

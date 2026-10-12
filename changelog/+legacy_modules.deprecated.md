@@ -1,0 +1,1 @@
+Deprecated managing organization- and repository-scoped resources via the ``github`` execution and state modules. Use the corresponding functions of the new ``github_org`` and ``github_repo`` modules instead

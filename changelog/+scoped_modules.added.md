@@ -1,0 +1,1 @@
+Added scoped ``github_org`` and ``github_repo`` execution and state modules, which replace the organization- and repository-related functionality of the monolithic ``github`` modules. Unlike the legacy functions, they raise errors instead of logging them and returning ``False``
