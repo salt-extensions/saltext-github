@@ -4,6 +4,7 @@ import shutil
 import pytest
 from saltfactories.utils.functional import Loaders
 
+from tests.support.github import DEPLOY_KEY_A
 from tests.support.github import FakeGitHubAPI
 
 log = logging.getLogger(__name__)
@@ -212,7 +213,7 @@ def fake_setup(fake_state):
     org.add_member(user1)
     org.add_member(user2)
     repo_a = org.add_repo("repo-a")
-    org.add_repo("repo-b", private=True)
+    repo_b = org.add_repo("repo-b", private=True)
     org.add_ruleset("org-rules")
     team_a = org.add_team("Team A")
     repo_a.add_ruleset("repo-rules", enforcement="disabled")
@@ -220,6 +221,15 @@ def fake_setup(fake_state):
     team_a.add_repo(repo_a, "pull")
     repo_a.add_milestone("v1.0", user1)
     repo_a.add_milestone("v2.0", user1)
+    repo_a.add_deploy_key("existing-key", DEPLOY_KEY_A, read_only=True)
+    repo_a.add_secret("EXISTING_SECRET", "hunter2")
+    release = repo_a.add_environment(
+        "release",
+        deployment_branch_policy={"protected_branches": False, "custom_branch_policies": True},
+    )
+    release.add_branch_policy("main")
+    repo_a.add_label("bug", color="d73a4a", description="Something is broken")
+    repo_b.set_pages(build_type="legacy", source={"branch": "gh-pages", "path": "/"})
     bug = repo_a.add_issue(
         "Found a bug", user1, labels=["bug", "prio:high"], assignee="user2", milestone="v1.0"
     )

@@ -10,10 +10,16 @@ from copy import deepcopy
 from dataclasses import dataclass
 from dataclasses import field
 
+from tests.support.github.entities import DeployKey
+from tests.support.github.entities import DeployKeyData
 from tests.support.github.entities import Entity
 from tests.support.github.entities import EntityData
+from tests.support.github.entities import Environment
+from tests.support.github.entities import EnvironmentData
 from tests.support.github.entities import Issue
 from tests.support.github.entities import IssueData
+from tests.support.github.entities import Label
+from tests.support.github.entities import LabelData
 from tests.support.github.entities import Member
 from tests.support.github.entities import MemberData
 from tests.support.github.entities import Milestone
@@ -23,6 +29,8 @@ from tests.support.github.entities import Organization
 from tests.support.github.entities import OrganizationData
 from tests.support.github.entities import OrgName
 from tests.support.github.entities import OrgRulesetData
+from tests.support.github.entities import Pages
+from tests.support.github.entities import PagesData
 from tests.support.github.entities import PullRequest
 from tests.support.github.entities import PullRequestData
 from tests.support.github.entities import Repo
@@ -30,6 +38,8 @@ from tests.support.github.entities import RepoData
 from tests.support.github.entities import RepoId
 from tests.support.github.entities import RepoRulesetData
 from tests.support.github.entities import Ruleset
+from tests.support.github.entities import Secret
+from tests.support.github.entities import SecretData
 from tests.support.github.entities import Team
 from tests.support.github.entities import TeamData
 from tests.support.github.entities import TeamName
@@ -59,6 +69,15 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
     pulls: dict[RepoId, dict[int, PullRequestData]] = field(
         default_factory=lambda: defaultdict(dict)
     )
+    deploy_keys: dict[RepoId, dict[int, DeployKeyData]] = field(
+        default_factory=lambda: defaultdict(dict)
+    )
+    secrets: dict[RepoId, dict[str, SecretData]] = field(default_factory=lambda: defaultdict(dict))
+    environments: dict[RepoId, dict[str, EnvironmentData]] = field(
+        default_factory=lambda: defaultdict(dict)
+    )
+    labels: dict[RepoId, dict[str, LabelData]] = field(default_factory=lambda: defaultdict(dict))
+    pages: dict[RepoId, PagesData] = field(default_factory=dict)
 
     def __post_init__(self):
         self.snapshot()
@@ -74,6 +93,11 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
         self._init_milestones = deepcopy(self.milestones)
         self._init_issues = deepcopy(self.issues)
         self._init_pulls = deepcopy(self.pulls)
+        self._init_deploy_keys = deepcopy(self.deploy_keys)
+        self._init_secrets = deepcopy(self.secrets)
+        self._init_environments = deepcopy(self.environments)
+        self._init_labels = deepcopy(self.labels)
+        self._init_pages = deepcopy(self.pages)
 
     def reset(self):
         self.orgs = {}
@@ -86,6 +110,11 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
         self.milestones = defaultdict(dict)
         self.issues = defaultdict(dict)
         self.pulls = defaultdict(dict)
+        self.deploy_keys = defaultdict(dict)
+        self.secrets = defaultdict(dict)
+        self.environments = defaultdict(dict)
+        self.labels = defaultdict(dict)
+        self.pages = {}
         self._init_orgs = {}
         self._init_users = {}
         self._init_repos = {}
@@ -96,6 +125,11 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
         self._init_milestones = defaultdict(dict)
         self._init_issues = defaultdict(dict)
         self._init_pulls = defaultdict(dict)
+        self._init_deploy_keys = defaultdict(dict)
+        self._init_secrets = defaultdict(dict)
+        self._init_environments = defaultdict(dict)
+        self._init_labels = defaultdict(dict)
+        self._init_pages = {}
 
     def restore(self):
         self.orgs = deepcopy(self._init_orgs)
@@ -108,6 +142,11 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
         self.milestones = deepcopy(self._init_milestones)
         self.issues = deepcopy(self._init_issues)
         self.pulls = deepcopy(self._init_pulls)
+        self.deploy_keys = deepcopy(self._init_deploy_keys)
+        self.secrets = deepcopy(self._init_secrets)
+        self.environments = deepcopy(self._init_environments)
+        self.labels = deepcopy(self._init_labels)
+        self.pages = deepcopy(self._init_pages)
 
     def _next_issue_number(self, repo_id: RepoId) -> int:
         # Issues and pull requests share one number sequence per repo.
@@ -160,7 +199,7 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
             raise exc(f"Requested nonexistent repo {resolved.name=} from org {resolved.owner=}")
         return Repo(self, self.repos[resolved])
 
-    def add(self, entity: EntityData | Entity):
+    def add(self, entity: EntityData | Entity):  # pylint: disable=too-many-return-statements
         if isinstance(entity, Entity):
             data = entity.data
         else:
@@ -183,6 +222,26 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
             assert data.source in self.orgs
             self.rulesets_org.setdefault(data.source, {})[data.id] = data
             return Ruleset(self, data)
+        if isinstance(data, DeployKeyData):
+            assert data.repo in self.repos
+            self.deploy_keys[data.repo][data.id] = data
+            return DeployKey(self, data)
+        if isinstance(data, SecretData):
+            assert data.repo in self.repos
+            self.secrets[data.repo][data.name] = data
+            return Secret(self, data)
+        if isinstance(data, EnvironmentData):
+            assert data.repo in self.repos
+            self.environments[data.repo][data.name] = data
+            return Environment(self, data)
+        if isinstance(data, LabelData):
+            assert data.repo in self.repos
+            self.labels[data.repo][data.name] = data
+            return Label(self, data)
+        if isinstance(data, PagesData):
+            assert data.repo in self.repos
+            self.pages[data.repo] = data
+            return Pages(self, data)
         if isinstance(data, MilestoneData):
             if data.number < 0:
                 data = data.with_(number=len(self.milestones[data.repo]) + 1)
@@ -226,6 +285,16 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
             self.rulesets_repo[old_data.source].pop(old_data.id)
         elif isinstance(old_data, OrgRulesetData):
             self.rulesets_org[old_data.source].pop(old_data.id)
+        elif isinstance(old_data, DeployKeyData):
+            self.deploy_keys[old_data.repo].pop(old_data.id)
+        elif isinstance(old_data, SecretData):
+            self.secrets[old_data.repo].pop(old_data.name)
+        elif isinstance(old_data, EnvironmentData):
+            self.environments[old_data.repo].pop(old_data.name)
+        elif isinstance(old_data, LabelData):
+            self.labels[old_data.repo].pop(old_data.name)
+        elif isinstance(old_data, PagesData):
+            self.pages.pop(old_data.repo)
         elif isinstance(old_data, MilestoneData):
             self.milestones[old_data.repo].pop(old_data.number)
         elif isinstance(old_data, IssueData):

@@ -12,7 +12,10 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
 from urllib.parse import parse_qs
+from urllib.parse import unquote
 from urllib.parse import urlsplit
+
+from nacl.public import PrivateKey
 
 from tests.support.github.entities import Organization
 from tests.support.github.entities import Repo
@@ -22,6 +25,14 @@ from tests.support.github.state import GlobalState
 
 TOKEN = "test-token"
 ORG = "testorg"
+
+# Sample SSH public keys for deploy key tests
+DEPLOY_KEY_A = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPDeployKeyAForTesting0000000000000000000A existing"
+)
+DEPLOY_KEY_B = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPDeployKeyBForTesting0000000000000000000B replacement"
+)
 
 
 class APIBase:
@@ -37,6 +48,8 @@ class APIBase:
         self.lock = threading.Lock()
         self.requests = []
         self.state = state or GlobalState()
+        # Keypair for the Actions secrets sealed-box encryption
+        self.secrets_private_key = PrivateKey.generate()
         self._server = None
         self._routes: dict[HTTP_METHOD, list[tuple[tuple[re.Pattern[str], ...], Callable]]] = {}
         for name in dir(self):
@@ -211,7 +224,7 @@ class APIBase:
                 query = {key: vals[0] for key, vals in parse_qs(split.query).items()}
                 status, headers, payload = api.dispatch(
                     self.command,
-                    split.path,
+                    unquote(split.path),
                     query,
                     body,
                     self.headers.get("Authorization"),

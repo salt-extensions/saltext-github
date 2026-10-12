@@ -1,0 +1,85 @@
+def test_pages_present_enable(github, fake_github, fake_org, testmode):
+    before = len(fake_github.mutations())
+    ret = github.pages_present(name="repo-a", build_type="workflow", test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
+    assert ret.changes["old"] is None
+    assert (len(fake_github.mutations()) == before) is testmode
+    pages = fake_org.get_repo("repo-a").pages
+    if testmode:
+        assert pages is None
+    else:
+        assert pages.build_type == "workflow"
+        rerun = github.pages_present(name="repo-a", build_type="workflow")
+        assert rerun.result is True
+        assert not rerun.changes
+
+
+def test_pages_present_enable_with_https(github, fake_org, testmode):
+    ret = github.pages_present(
+        name="repo-a", build_type="workflow", https_enforced=True, test=testmode
+    )
+    assert ret.result is not False
+    if not testmode:
+        assert fake_org.get_repo("repo-a").pages.https_enforced is True
+
+
+def test_pages_present_idempotent(github, fake_github, testmode):
+    ret = github.pages_present(
+        name="repo-b", build_type="legacy", source_branch="gh-pages", source_path="/", test=testmode
+    )
+    assert ret.result is True
+    assert not ret.changes
+    assert not fake_github.mutations()
+
+
+def test_pages_present_build_type_drift(github, fake_github, fake_org, testmode):
+    before = len(fake_github.mutations())
+    ret = github.pages_present(name="repo-b", build_type="workflow", test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
+    assert ret.changes == {
+        "old": {"build_type": "legacy"},
+        "new": {"build_type": "workflow"},
+    }
+    assert (len(fake_github.mutations()) == before) is testmode
+    expected = "legacy" if testmode else "workflow"
+    assert fake_org.get_repo("repo-b").pages.build_type == expected
+
+
+def test_pages_present_source_drift(github, fake_org, testmode):
+    ret = github.pages_present(name="repo-b", source_branch="docs", test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
+    assert ret.changes["new"] == {"source_branch": "docs"}
+    expected = "gh-pages" if testmode else "docs"
+    assert fake_org.get_repo("repo-b").pages.source["branch"] == expected
+
+
+def test_pages_present_missing_repo(github):
+    # A missing repo is indistinguishable from a missing Pages site (404),
+    # so the failure surfaces during the creation attempt
+    ret = github.pages_present(name="ghost")
+    assert ret.result is False
+    assert "Failed to enable Pages" in ret.comment
+
+
+def test_pages_absent(github, fake_github, fake_org, testmode):
+    before = len(fake_github.mutations())
+    ret = github.pages_absent(name="repo-b", test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
+    assert ret.changes
+    assert (len(fake_github.mutations()) == before) is testmode
+    assert (fake_org.get_repo("repo-b").pages is not None) is testmode
+    if not testmode:
+        rerun = github.pages_absent(name="repo-b")
+        assert rerun.result is True
+        assert not rerun.changes
+
+
+def test_pages_absent_already(github, fake_github, testmode):
+    ret = github.pages_absent(name="repo-a", test=testmode)
+    assert ret.result is True
+    assert not ret.changes
+    assert not fake_github.mutations()

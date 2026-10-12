@@ -21,27 +21,40 @@ Layout:
     Per-area route mixins composed into :class:`FakeGitHubAPI` below.
 """
 
+from tests.support.github.base import DEPLOY_KEY_A
+from tests.support.github.base import DEPLOY_KEY_B
 from tests.support.github.base import ORG
 from tests.support.github.base import TOKEN
+from tests.support.github.entities import BranchPolicy
+from tests.support.github.entities import DeployKey
 from tests.support.github.entities import Entity
 from tests.support.github.entities import EntityData
 from tests.support.github.entities import EntityView
+from tests.support.github.entities import Environment
 from tests.support.github.entities import Issue
 from tests.support.github.entities import IssueComment
+from tests.support.github.entities import Label
 from tests.support.github.entities import Member
 from tests.support.github.entities import Milestone
 from tests.support.github.entities import NotFound
 from tests.support.github.entities import Organization
+from tests.support.github.entities import Pages
 from tests.support.github.entities import PullRequest
 from tests.support.github.entities import Repo
 from tests.support.github.entities import RepoId
 from tests.support.github.entities import Ruleset
+from tests.support.github.entities import Secret
 from tests.support.github.entities import Team
 from tests.support.github.entities import TeamMember
 from tests.support.github.entities import User
+from tests.support.github.routes import ActionsRoutes
+from tests.support.github.routes import DeployKeyRoutes
+from tests.support.github.routes import EnvironmentRoutes
 from tests.support.github.routes import IssueRoutes
+from tests.support.github.routes import LabelRoutes
 from tests.support.github.routes import MilestoneRoutes
 from tests.support.github.routes import OrgRoutes
+from tests.support.github.routes import PagesRoutes
 from tests.support.github.routes import RepoRoutes
 from tests.support.github.routes import RulesetRoutes
 from tests.support.github.routes import TeamRoutes
@@ -49,31 +62,51 @@ from tests.support.github.routing import Request
 from tests.support.github.state import GlobalState
 
 __all__ = [
+    "DEPLOY_KEY_A",
+    "DEPLOY_KEY_B",
     "ORG",
     "TOKEN",
+    "BranchPolicy",
+    "DeployKey",
     "Entity",
     "EntityData",
     "EntityView",
+    "Environment",
     "FakeGitHubAPI",
     "GlobalState",
     "Issue",
     "IssueComment",
+    "Label",
     "Member",
     "Milestone",
     "NotFound",
     "Organization",
+    "Pages",
     "PullRequest",
     "Repo",
     "RepoId",
     "Request",
     "Ruleset",
+    "Secret",
     "Team",
     "TeamMember",
     "User",
 ]
 
 
-class FakeGitHubAPI(OrgRoutes, RepoRoutes, TeamRoutes, RulesetRoutes, MilestoneRoutes, IssueRoutes):
+class FakeGitHubAPI(  # pylint: disable=too-many-ancestors
+    OrgRoutes,
+    RepoRoutes,
+    TeamRoutes,
+    RulesetRoutes,
+    MilestoneRoutes,
+    IssueRoutes,
+    DeployKeyRoutes,
+    ActionsRoutes,
+    EnvironmentRoutes,
+    LabelRoutes,
+    PagesRoutes,
+):
     """
     Dict-backed implementation of the consumed GitHub API surface.
     """

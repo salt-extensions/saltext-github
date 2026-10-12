@@ -274,6 +274,9 @@ class Organization(Entity):
         self.gh.repos.pop(repo_id)
         for team in self.teams:
             team.data.repos.pop(repo_id, None)
+        for store in (self.gh.deploy_keys, self.gh.secrets, self.gh.environments, self.gh.labels):
+            store.pop(repo_id, None)
+        self.gh.pages.pop(repo_id, None)
 
     def add_member(self, user: "User | UserData | UserName", *, exc=NotFound, **params) -> "Member":
         login = user if isinstance(user, UserName) else user.login
@@ -468,6 +471,9 @@ class RepoData(EntityData):
     has_issues: bool = True
     has_wiki: bool = True
     has_downloads: bool = True
+    # Managed via the Actions permissions endpoints, not part of the repo payload
+    default_workflow_permissions: str = "write"
+    can_approve_pull_request_reviews: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -601,6 +607,110 @@ class Repo(Entity):
             )
         return PullRequest(self.gh, self.gh.pulls[self.data.repo_id][number])
 
+    @property
+    def deploy_keys(self) -> "EntityView[int, DeployKey]":
+        return EntityView(
+            {
+                key_id: DeployKey(self.gh, data)
+                for key_id, data in self.gh.deploy_keys[self.data.repo_id].items()
+            }
+        )
+
+    def add_deploy_key(self, title: str, key: str, **params) -> "DeployKey":
+        return self.gh.add(DeployKeyData(title, self.data.repo_id, key, **params))
+
+    def get_deploy_key(self, key_id: int | str, *, exc=NotFound) -> "DeployKey":
+        key_id = int(key_id)
+        if key_id not in self.gh.deploy_keys[self.data.repo_id]:
+            raise exc(f"Deploy key {key_id=} does not exist for repo {self.data.repo_id}")
+        return DeployKey(self.gh, self.gh.deploy_keys[self.data.repo_id][key_id])
+
+    def remove_deploy_key(self, key_id: int | str, *, exc=NotFound) -> None:
+        key_id = int(key_id)
+        if key_id not in self.gh.deploy_keys[self.data.repo_id]:
+            raise exc(f"Deploy key {key_id=} does not exist for repo {self.data.repo_id}")
+        del self.gh.deploy_keys[self.data.repo_id][key_id]
+
+    @property
+    def secrets(self) -> "EntityView[str, Secret]":
+        return EntityView(
+            {
+                name: Secret(self.gh, data)
+                for name, data in self.gh.secrets[self.data.repo_id].items()
+            },
+            resolve=lambda key: key.upper() if isinstance(key, str) else key,
+        )
+
+    def add_secret(self, name: str, value: str, **params) -> "Secret":
+        return self.gh.add(SecretData(name, self.data.repo_id, value, **params))
+
+    def get_secret(self, name: str, *, exc=NotFound) -> "Secret":
+        name = name.upper()
+        if name not in self.gh.secrets[self.data.repo_id]:
+            raise exc(f"Secret {name=} does not exist for repo {self.data.repo_id}")
+        return Secret(self.gh, self.gh.secrets[self.data.repo_id][name])
+
+    def remove_secret(self, name: str, *, exc=NotFound) -> None:
+        name = name.upper()
+        if name not in self.gh.secrets[self.data.repo_id]:
+            raise exc(f"Secret {name=} does not exist for repo {self.data.repo_id}")
+        del self.gh.secrets[self.data.repo_id][name]
+
+    @property
+    def environments(self) -> "EntityView[str, Environment]":
+        return EntityView(
+            {
+                name: Environment(self.gh, data)
+                for name, data in self.gh.environments[self.data.repo_id].items()
+            }
+        )
+
+    def add_environment(self, name: str, **params) -> "Environment":
+        return self.gh.add(EnvironmentData(name, self.data.repo_id, **params))
+
+    def get_environment(self, name: str, *, exc=NotFound) -> "Environment":
+        if name not in self.gh.environments[self.data.repo_id]:
+            raise exc(f"Environment {name=} does not exist for repo {self.data.repo_id}")
+        return Environment(self.gh, self.gh.environments[self.data.repo_id][name])
+
+    def remove_environment(self, name: str, *, exc=NotFound) -> None:
+        if name not in self.gh.environments[self.data.repo_id]:
+            raise exc(f"Environment {name=} does not exist for repo {self.data.repo_id}")
+        del self.gh.environments[self.data.repo_id][name]
+
+    @property
+    def labels(self) -> "EntityView[str, Label]":
+        return EntityView(
+            {name: Label(self.gh, data) for name, data in self.gh.labels[self.data.repo_id].items()}
+        )
+
+    def add_label(self, name: str, **params) -> "Label":
+        return self.gh.add(LabelData(name, self.data.repo_id, **params))
+
+    def get_label(self, name: str, *, exc=NotFound) -> "Label":
+        if name not in self.gh.labels[self.data.repo_id]:
+            raise exc(f"Label {name=} does not exist for repo {self.data.repo_id}")
+        return Label(self.gh, self.gh.labels[self.data.repo_id][name])
+
+    def remove_label(self, name: str, *, exc=NotFound) -> None:
+        if name not in self.gh.labels[self.data.repo_id]:
+            raise exc(f"Label {name=} does not exist for repo {self.data.repo_id}")
+        del self.gh.labels[self.data.repo_id][name]
+
+    @property
+    def pages(self) -> "Pages | None":
+        if self.data.repo_id not in self.gh.pages:
+            return None
+        return Pages(self.gh, self.gh.pages[self.data.repo_id])
+
+    def set_pages(self, **params) -> "Pages":
+        return self.gh.add(PagesData(self.data.repo_id, **params))
+
+    def remove_pages(self, *, exc=NotFound) -> None:
+        if self.data.repo_id not in self.gh.pages:
+            raise exc(f"Pages do not exist for repo {self.data.repo_id}")
+        del self.gh.pages[self.data.repo_id]
+
     def team_payload(self, permission, /, **ovrr):
         rend = self.payload()
         rend["permissions"] = {
@@ -625,6 +735,8 @@ class Repo(Entity):
             "open_issues_count": 0,
         }
         rend.pop("owner_type")
+        rend.pop("default_workflow_permissions")
+        rend.pop("can_approve_pull_request_reviews")
         return rend | ovrr
 
 
@@ -927,6 +1039,235 @@ class PullRequest(Entity):
                 "pull_request": {
                     "url": f"{self.gh.base_url}/repos/{self.data.repo}/pulls/{self.data.number}",
                 },
+            }
+            | ovrr
+        )
+
+
+@dataclass
+class DeployKeyData(EntityData):
+    title: str
+    repo: RepoId
+    key: str
+    _: KW_ONLY
+    read_only: bool = False
+    verified: bool = True
+    created_at: str = CREATED_AT
+
+    def __post_init__(self):
+        # Titles are only unique per repo, include the repo in the ID.
+        self.id = zlib.crc32(f"{type(self).__name__}/{self.repo}/{self.title}".encode())
+
+
+@dataclass
+class DeployKey(Entity):
+    data: DeployKeyData
+
+    def payload(self, /, **ovrr):
+        rend = asdict(self.data)
+        rend.pop("repo")
+        return (
+            rend
+            | {
+                "url": f"{self.gh.base_url}/repos/{self.data.repo}/keys/{self.data.id}",
+            }
+            | ovrr
+        )
+
+
+@dataclass
+class SecretData(EntityData):
+    name: str
+    repo: RepoId
+    # The fake stores the decrypted plaintext for assertions. The real API
+    # never returns it.
+    value: str = ""
+    _: KW_ONLY
+    created_at: str = CREATED_AT
+    updated_at: str = CREATED_AT
+
+    def __post_init__(self):
+        # Like the real API, secret names are case-insensitive and
+        # rendered in upper case.
+        self.name = self.name.upper()
+        super().__post_init__()
+
+
+@dataclass
+class Secret(Entity):
+    data: SecretData
+
+    def payload(self, /, **ovrr):
+        return {
+            "name": self.data.name,
+            "created_at": self.data.created_at,
+            "updated_at": self.data.updated_at,
+        } | ovrr
+
+
+@dataclass
+class BranchPolicyData(EntityData):
+    name: str
+    environment: str
+    repo: RepoId
+    _: KW_ONLY
+    type: str = "branch"
+
+    def __post_init__(self):
+        # Patterns are only unique per environment, include it in the ID.
+        self.id = zlib.crc32(
+            f"{type(self).__name__}/{self.repo}/{self.environment}/{self.name}".encode()
+        )
+
+
+@dataclass
+class BranchPolicy(Entity):
+    data: BranchPolicyData
+
+    def payload(self, /, **ovrr):
+        return {
+            "id": self.data.id,
+            "name": self.data.name,
+            "type": self.data.type,
+        } | ovrr
+
+
+@dataclass
+class EnvironmentData(EntityData):
+    name: str
+    repo: RepoId
+    _: KW_ONLY
+    wait_timer: int = 0
+    prevent_self_review: bool = False
+    reviewers: list[dict] = field(default_factory=list)  # [{"type": ..., "id": ...}]
+    # None (all branches) or {"protected_branches": bool, "custom_branch_policies": bool}
+    deployment_branch_policy: dict | None = None
+    branch_policies: dict[int, BranchPolicyData] = field(default_factory=dict)
+    created_at: str = CREATED_AT
+    updated_at: str = CREATED_AT
+
+
+@dataclass
+class Environment(Entity):
+    data: EnvironmentData
+
+    @property
+    def branch_policies(self) -> "EntityView[int, BranchPolicy]":
+        return EntityView(
+            {pid: BranchPolicy(self.gh, data) for pid, data in self.data.branch_policies.items()}
+        )
+
+    def add_branch_policy(self, name: str, **params) -> BranchPolicy:
+        policy = BranchPolicyData(name, self.data.name, self.data.repo, **params)
+        self.data.branch_policies[policy.id] = policy
+        return BranchPolicy(self.gh, policy)
+
+    def get_branch_policy(self, policy_id: int | str, *, exc=NotFound) -> BranchPolicy:
+        policy_id = int(policy_id)
+        if policy_id not in self.data.branch_policies:
+            raise exc(f"Branch policy {policy_id=} does not exist in env {self.data.name}")
+        return BranchPolicy(self.gh, self.data.branch_policies[policy_id])
+
+    def remove_branch_policy(self, policy_id: int | str, *, exc=NotFound) -> None:
+        policy_id = int(policy_id)
+        if policy_id not in self.data.branch_policies:
+            raise exc(f"Branch policy {policy_id=} does not exist in env {self.data.name}")
+        del self.data.branch_policies[policy_id]
+
+    def payload(self, /, **ovrr):
+        # Like the real API, the settings are scattered over protection_rules
+        protection_rules = []
+        if self.data.wait_timer:
+            protection_rules.append(
+                {"id": 1, "type": "wait_timer", "wait_timer": self.data.wait_timer}
+            )
+        if self.data.reviewers:
+            protection_rules.append(
+                {
+                    "id": 2,
+                    "type": "required_reviewers",
+                    "prevent_self_review": self.data.prevent_self_review,
+                    "reviewers": [
+                        {"type": reviewer["type"], "reviewer": {"id": reviewer["id"]}}
+                        for reviewer in self.data.reviewers
+                    ],
+                }
+            )
+        if self.data.deployment_branch_policy:
+            protection_rules.append({"id": 3, "type": "branch_policy"})
+        policy = self.data.deployment_branch_policy
+        return {
+            "id": self.data.id,
+            "name": self.data.name,
+            "url": f"{self.gh.base_url}/repos/{self.data.repo}/environments/{self.data.name}",
+            "html_url": (
+                f"https://github.example.com/{self.data.repo}/deployments/"
+                f"activity_log?environments_filter={self.data.name}"
+            ),
+            "created_at": self.data.created_at,
+            "updated_at": self.data.updated_at,
+            "protection_rules": protection_rules,
+            "deployment_branch_policy": dict(policy) if policy else None,
+        } | ovrr
+
+
+@dataclass
+class LabelData(EntityData):
+    name: str
+    repo: RepoId
+    _: KW_ONLY
+    color: str = "ededed"
+    description: str | None = None
+    default: bool = False
+
+    def __post_init__(self):
+        # Label names are only unique per repo, include it in the ID.
+        self.id = zlib.crc32(f"{type(self).__name__}/{self.repo}/{self.name}".encode())
+
+
+@dataclass
+class Label(Entity):
+    data: LabelData
+
+    def payload(self, /, **ovrr):
+        rend = asdict(self.data)
+        rend.pop("repo")
+        return (
+            rend
+            | {
+                "url": f"{self.gh.base_url}/repos/{self.data.repo}/labels/{self.data.name}",
+            }
+            | ovrr
+        )
+
+
+@dataclass
+class PagesData(EntityData):
+    repo: RepoId
+    _: KW_ONLY
+    build_type: str = "legacy"
+    source: dict | None = None  # {"branch": ..., "path": ...}
+    cname: str | None = None
+    https_enforced: bool = False
+    status: str = "built"
+
+    def __post_init__(self):
+        self.id = zlib.crc32(f"{type(self).__name__}/{self.repo}".encode())
+
+
+@dataclass
+class Pages(Entity):
+    data: PagesData
+
+    def payload(self, /, **ovrr):
+        rend = asdict(self.data)
+        rend.pop("repo")
+        return (
+            rend
+            | {
+                "url": f"{self.gh.base_url}/repos/{self.data.repo}/pages",
+                "html_url": f"https://{self.data.repo.owner}.github.example.com/{self.data.repo.name}/",
+                "public": True,
             }
             | ovrr
         )

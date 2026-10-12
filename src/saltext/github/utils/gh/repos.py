@@ -181,6 +181,7 @@ def update(
     has_issues=None,
     has_wiki=None,
     has_downloads=None,
+    default_branch=None,
     allow_privacy_change=False,
 ):
     """
@@ -213,6 +214,7 @@ def update(
             "has_issues": has_issues,
             "has_wiki": has_wiki,
             "has_downloads": has_downloads,
+            "default_branch": default_branch,
         }
     )
     repo.edit(name, **parameters)

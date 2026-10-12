@@ -1,0 +1,1 @@
+Added management of repository environments, including deployment branch policies (``github.list_environments``/``get_environment``/``set_environment``/``remove_environment``/``list_deployment_branch_policies``/``add_deployment_branch_policy``/``remove_deployment_branch_policy`` and the ``environment_present``/``environment_absent`` states)
