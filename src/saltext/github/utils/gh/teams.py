@@ -11,7 +11,7 @@ import logging
 from github.GithubException import UnknownObjectException
 
 from saltext.github.utils import filter_unset
-from saltext.github.utils.github.client import api_request
+from saltext.github.utils.gh.client import api_request
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def list_all(conn, ignore_cache=False):
     team details (cached).
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ignore_cache
         Bypass the cached team list.
@@ -51,7 +51,7 @@ def get(conn, name):
     not exist.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
         The name of the team.
@@ -65,7 +65,7 @@ def create(conn, name, *, description=None, repo_names=None, privacy=None, permi
     Create a new team in the organization.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     name
         The name of the team to create.
@@ -96,7 +96,7 @@ def update(conn, team_info, name, *, description=None, privacy=None, permission=
     Update an existing team.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
         The team's entry from :func:`list_all`.
@@ -126,7 +126,7 @@ def delete(conn, team_info):
     Delete a team from the organization.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
         The team's entry from :func:`list_all`.
@@ -143,7 +143,7 @@ def list_repos(conn, team_info, ignore_cache=False):
     name to repository details (cached).
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
         The team's entry from :func:`list_all`.
@@ -175,7 +175,7 @@ def add_repo(conn, team_info, repo_name, permission=None):
     on it. Returns false if updating the permission failed.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
         The team's entry from :func:`list_all`.
@@ -205,7 +205,7 @@ def remove_repo(conn, team_info, repo_name):
     longer associated with the team afterwards.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
         The team's entry from :func:`list_all`.
@@ -225,7 +225,7 @@ def list_members(conn, team_info, ignore_cache=False):
     Return the (lowercase) logins of a team's members (cached).
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
         The team's entry from :func:`list_all`.
@@ -247,7 +247,7 @@ def add_member(conn, team_info, login):
     Add an organization member to a team.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
         The team's entry from :func:`list_all`.
@@ -267,7 +267,7 @@ def remove_member(conn, team_info, login):
     a member of the team afterwards.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     team_info
         The team's entry from :func:`list_all`.
@@ -275,7 +275,7 @@ def remove_member(conn, team_info, login):
     login
         The login of the user to remove.
 
-    Raises :class:`~saltext.github.utils.github.exceptions.GitHubNotFoundError`
+    Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the team or user does not exist.
     """
     team = conn.org.get_team_by_slug(team_info["slug"])

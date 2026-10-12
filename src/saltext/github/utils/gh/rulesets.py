@@ -6,7 +6,7 @@ import logging
 
 from salt.exceptions import CommandExecutionError
 
-from saltext.github.utils.github import client
+from saltext.github.utils.gh import client
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def list_all(
     Return all rulesets of a repository or organization.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     Other parameters as described in :func:`build_path`. ``headers`` is a
     mapping of extra headers to send.
@@ -81,7 +81,7 @@ def get(conn, ruleset_id, ruleset_type, *, owner=None, repo_name=None, org_name=
     Return the data of a specific ruleset.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ruleset_id
         The ID of the ruleset to retrieve.
@@ -102,7 +102,7 @@ def create(
     Create a new ruleset. Returns the data of the created ruleset.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ruleset_params
         The ruleset definition. Must contain at least ``name`` and
@@ -131,7 +131,7 @@ def update(
     Update an existing ruleset. Returns the data of the updated ruleset.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ruleset_id
         The ID of the ruleset to update.
@@ -156,7 +156,7 @@ def delete(
     Delete a ruleset.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     ruleset_id
         The ID of the ruleset to delete.

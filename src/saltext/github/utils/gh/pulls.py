@@ -4,7 +4,7 @@ Operations on GitHub repository pull requests.
 
 import logging
 
-from saltext.github.utils.github import client
+from saltext.github.utils.gh import client
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def list_all(
     search options.
 
     conn
-        The :class:`~saltext.github.utils.github.client.GitHubConnection` to use.
+        The :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
 
     repo_name
         The name of the repository whose pull requests to list.

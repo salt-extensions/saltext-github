@@ -6,8 +6,8 @@ from salt.exceptions import CommandExecutionError
 from salt.modules import config as config_mod
 
 from saltext.github.modules import github as github_mod
-from saltext.github.utils.github import client as gh_client
-from saltext.github.utils.github.exceptions import GitHubApiError
+from saltext.github.utils.gh import client as gh_client
+from saltext.github.utils.gh.exceptions import GitHubApiError
 
 
 @pytest.fixture

@@ -10,13 +10,13 @@ _________
     :toctree:
 
     utils
-    utils.github
-    utils.github.client
-    utils.github.exceptions
-    utils.github.issues
-    utils.github.milestones
-    utils.github.pulls
-    utils.github.repos
-    utils.github.rulesets
-    utils.github.teams
-    utils.github.users
+    utils.gh
+    utils.gh.client
+    utils.gh.exceptions
+    utils.gh.issues
+    utils.gh.milestones
+    utils.gh.pulls
+    utils.gh.repos
+    utils.gh.rulesets
+    utils.gh.teams
+    utils.gh.users
