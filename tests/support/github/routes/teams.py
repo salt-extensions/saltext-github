@@ -19,11 +19,12 @@ from tests.support.github.routing import PUT
 def _team_uris(resource=""):
     """
     Render the three URI flavors (modern by slug, modern by ID, legacy by ID)
-    of a team resource.
+    of a team resource. Repos are addressed by full name in all flavors.
     """
+    resource = resource.replace("<repo>", "<owner>/<repo>")
     modern_slug = f"orgs/<org>/teams/<team_slug>/{resource}".rstrip("/")
     modern_id = f"organizations/<org_id>/team/<team_id>/{resource}".rstrip("/")
-    legacy = f"teams/<team_id>/{resource.replace('<repo>', '<org>/<repo>')}".rstrip("/")
+    legacy = f"teams/<team_id>/{resource}".rstrip("/")
     return modern_slug, modern_id, legacy
 
 
@@ -105,13 +106,15 @@ class TeamRoutes(APIBase):
     @PUT(*_team_uris("repos/<repo>"))
     def _team_add_repo(self, match, query, body):
         team = self._resolve_team(match)
-        team.add_repo(match["repo"], (body or {}).get("permission", "pull"))
+        repo = self.state.get_repo((match["owner"], match["repo"]))
+        team.add_repo(repo, (body or {}).get("permission", "pull"))
         return 204
 
     @DELETE(*_team_uris("repos/<repo>"))
     def _team_remove_repo(self, match, query, body):
         team = self._resolve_team(match)
-        team.remove_repo(match["repo"])
+        repo = self.state.get_repo((match["owner"], match["repo"]))
+        team.remove_repo(repo)
         return 204
 
     @GET(*_team_uris("members"))
