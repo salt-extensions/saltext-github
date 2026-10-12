@@ -60,9 +60,7 @@ def test_repo_absent_no_changes():
         )
     assert ret == expected
 
-    # test mode
-    expected["result"] = None
-
+    # test mode: an already absent ruleset is still a fulfilled state
     with mock.patch.dict(github_state.__salt__, {"github.list_rulesets": mock_query}):
         with mock.patch.dict(github_state.__opts__, {"test": True}):
             ret = github_state.ruleset_absent(
@@ -130,11 +128,11 @@ def test_repo_absent_changes():
 
 
 def test_repo_present_no_changes():
-    # Test mode
+    # Test mode: a ruleset present as specified is a fulfilled state
     expected = {
         "name": "mock_repo_absent",
         "changes": {},
-        "result": None,
+        "result": True,
         "comment": "ruleset present",
     }
 
@@ -156,8 +154,6 @@ def test_repo_present_no_changes():
             )
             assert ret == expected
 
-    expected["result"] = True
-
     with mock.patch.dict(
         github_state.__salt__,
         {"github.list_rulesets": mock_query, "github.get_ruleset": mock_ruleset},
@@ -177,8 +173,8 @@ def test_repo_present_update_ruleset():
     expected = {
         "name": "mock_repo_absent",
         "changes": {
-            "old": "Ruleset properties were {'name': 'mock_repo_absent', 'id': 1, 'target': 'branch'}",
-            "new": "Ruleset properties (that changed) are {'target': 'tag', 'name': 'mock_repo_absent'}",
+            "old": {"target": "branch"},
+            "new": {"target": "tag"},
         },
         "result": True,
         "comment": "ruleset updated",
@@ -210,10 +206,13 @@ def test_repo_present_update_ruleset():
         )
         assert ret == expected
 
-    # Test mode
+    # Test mode: forecast changes are reported
     expected = {
         "name": "mock_repo_absent",
-        "changes": {},
+        "changes": {
+            "old": {"target": "branch"},
+            "new": {"target": "tag"},
+        },
         "result": None,
         "comment": "ruleset will be updated",
     }
@@ -265,10 +264,9 @@ def test_repo_present_add_ruleset():
         )
         assert ret == expected
 
-    # Test mode
+    # Test mode: forecast changes are reported
     expected["result"] = None
     expected["comment"] = "ruleset will be added"
-    expected["changes"] = {}
 
     with mock.patch.dict(github_state.__opts__, {"test": True}):
         with mock.patch.dict(
