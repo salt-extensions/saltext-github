@@ -10,6 +10,11 @@ Configure this module by specifying the name of a configuration
 profile in the minion config, minion pillar, or master config. The module
 will use the ``github`` key by default, if defined.
 
+.. versionadded:: 1.1.0
+
+    Added the ``api_url`` configuration option to override the API endpoint
+    we run against. Can be used for GitHub Enterprise instances.
+
 For example:
 
 .. code-block:: yaml
