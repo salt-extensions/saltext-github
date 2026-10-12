@@ -68,7 +68,12 @@ ignored-modules=
 
 # Python code to execute, usually for sys.path manipulation such as
 # pygtk.require().
-#init-hook=
+# Put the source root on sys.path before module expansion: on Python 3.10,
+# implicit namespace detection fails otherwise, breaking source-roots module
+# name resolution. Pylint then roots the packages at saltext/github, causing
+# absolute `github` (PyGithub) imports to resolve to this package in
+# parallel runs. FIXME: Remove this once the lint runs on 3.11 in CI
+init-hook='import os, sys; sys.path.insert(0, os.path.abspath("src"))'
 
 # Use multiple processes to speed up Pylint. Specifying 0 will auto-detect the
 # number of processors available to use, and will cap the count on Windows to
