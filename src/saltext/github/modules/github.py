@@ -181,7 +181,7 @@ def get_user(name, profile="github", user_details=False):
     try:
         return gh_users.get_user_info(_get_conn(profile), name)
     except GitHubNotFoundError:
-        log.exception("Resource not found")
+        log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
@@ -205,7 +205,7 @@ def add_user(name, profile="github"):
     try:
         return gh_users.invite_member(_get_conn(profile), name)
     except GitHubNotFoundError:
-        log.exception("Resource not found")
+        log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
@@ -229,7 +229,7 @@ def remove_user(name, profile="github"):
     try:
         return gh_users.remove_member(_get_conn(profile), name)
     except GitHubNotFoundError:
-        log.exception("Resource not found")
+        log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
@@ -740,7 +740,7 @@ def add_repo(
         )
         return True
     except GitHubApiError:
-        log.exception("Error creating a repo")
+        log.error("Error creating a repo", exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
@@ -808,7 +808,7 @@ def edit_repo(
         )
         return True
     except GitHubApiError:
-        log.exception("Error editing a repo")
+        log.error("Error editing a repo", exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
@@ -838,7 +838,7 @@ def remove_repo(name, profile="github"):
         gh_repos.delete(conn, name)
         return True
     except GitHubApiError:
-        log.exception("Error deleting a repo")
+        log.error("Error deleting a repo", exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
@@ -909,7 +909,7 @@ def add_team(
         )
         return True
     except GitHubApiError:
-        log.exception("Error creating a team")
+        log.error("Error creating a team", exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
@@ -955,7 +955,7 @@ def edit_team(name, description=None, privacy=None, permission=None, profile="gi
         )
         return True
     except GitHubNotFoundError:
-        log.exception("Resource not found")
+        log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
@@ -984,7 +984,7 @@ def remove_team(name, profile="github"):
         gh_teams.delete(conn, team_info)
         return gh_teams.get(conn, name) is None
     except GitHubApiError:
-        log.exception("Error deleting a team")
+        log.error("Error deleting a team", exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
@@ -1017,7 +1017,7 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
     try:
         return gh_teams.list_repos(conn, cached_team, ignore_cache=ignore_cache)
     except GitHubNotFoundError:
-        log.exception("Resource not found: %s", cached_team["id"])
+        log.error("Resource not found: %s", cached_team["id"], exc_info_on_loglevel=logging.DEBUG)
         return {}
 
 
@@ -1060,7 +1060,7 @@ def add_team_repo(repo_name, team_name, profile="github", permission=None):
             )
             return False
     except GitHubNotFoundError:
-        log.exception("Resource not found: %s", team_info["id"])
+        log.error("Resource not found: %s", team_info["id"], exc_info_on_loglevel=logging.DEBUG)
         return False
     return True
 
@@ -1092,7 +1092,7 @@ def remove_team_repo(repo_name, team_name, profile="github"):
     try:
         return gh_teams.remove_repo(conn, team_info, repo_name)
     except GitHubNotFoundError:
-        log.exception("Resource not found: %s", team_info["id"])
+        log.error("Resource not found: %s", team_info["id"], exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
@@ -1124,7 +1124,7 @@ def list_team_members(team_name, profile="github", ignore_cache=False):
     try:
         return gh_teams.list_members(conn, cached_team, ignore_cache=ignore_cache)
     except GitHubNotFoundError:
-        log.exception("Resource not found: %s", cached_team["id"])
+        log.error("Resource not found: %s", cached_team["id"], exc_info_on_loglevel=logging.DEBUG)
         return []
 
 
@@ -1198,10 +1198,10 @@ def add_team_member(name, team_name, profile="github"):
     try:
         gh_teams.add_member(conn, team_info, name)
     except GitHubNotFoundError:
-        log.exception("Resource not found: %s", team_info["id"])
+        log.error("Resource not found: %s", team_info["id"], exc_info_on_loglevel=logging.DEBUG)
         return False
     except GitHubApiError:
-        log.exception("Error in adding a member to a team")
+        log.error("Error in adding a member to a team", exc_info_on_loglevel=logging.DEBUG)
         return False
     return True
 
@@ -1233,7 +1233,7 @@ def remove_team_member(name, team_name, profile="github"):
     try:
         return gh_teams.remove_member(conn, team_info, name)
     except GitHubNotFoundError:
-        log.exception("Resource not found: %s", team_info["id"])
+        log.error("Resource not found: %s", team_info["id"], exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
