@@ -37,17 +37,23 @@ For example:
       api_url: https://api.github.com
 """
 
-import json
 import logging
-import re
 
 from salt.exceptions import CommandExecutionError
 
 from saltext.github.utils import filter_unset
 
 try:
-    import github  # pylint: disable=import-self
-    from github.GithubException import UnknownObjectException
+    from saltext.github.utils.github import client as gh_client
+    from saltext.github.utils.github import issues as gh_issues
+    from saltext.github.utils.github import milestones as gh_milestones
+    from saltext.github.utils.github import pulls as gh_pulls
+    from saltext.github.utils.github import repos as gh_repos
+    from saltext.github.utils.github import rulesets as gh_rulesets
+    from saltext.github.utils.github import teams as gh_teams
+    from saltext.github.utils.github import users as gh_users
+    from saltext.github.utils.github.exceptions import GitHubApiError
+    from saltext.github.utils.github.exceptions import GitHubNotFoundError
 
     HAS_LIBS = True
 except ImportError:  # pragma: no cover
@@ -110,42 +116,17 @@ def _get_api_url(profile):
         return API_URL_DEFAULT
 
 
-def _get_client(profile) -> github.Github:
+def _get_conn(profile):
     """
-    Return the GitHub client, cached into __context__ for performance
+    Return the GitHub connection, cached into __context__ for performance
     """
     token = _get_config_value(profile, "token")
+    org_name = _get_config_value(profile, "org_name")
     api_url = _get_api_url(profile)
-    key = "github.{}:{}:{}".format(  # pylint: disable=consider-using-f-string
-        token, _get_config_value(profile, "org_name"), api_url
-    )
+    key = f"github.{token}:{org_name}:{api_url}"
 
     if key not in __context__:
-        __context__[key] = github.Github(
-            auth=github.Auth.Token(token), base_url=api_url, per_page=100
-        )
-    return __context__[key]
-
-
-def _get_repos(profile, ignore_cache=False):
-    org_name = _get_config_value(profile, "org_name")
-    key = f"github.{org_name}:repos"
-
-    if key not in __context__ or ignore_cache:
-        client = _get_client(profile)
-        organization = client.get_organization(org_name)
-
-        next_result = []
-
-        for repo in organization.get_repos():
-            next_result.append(repo)
-
-            # Cache a copy of each repo for single lookups
-            repo_key = f"github.{org_name}:{repo.name.lower()}:repo_info"
-            __context__[repo_key] = _repo_to_dict(repo)
-
-        __context__[key] = next_result
-
+        __context__[key] = gh_client.GitHubConnection(token, org_name, api_url=api_url)
     return __context__[key]
 
 
@@ -166,13 +147,7 @@ def list_users(profile="github", ignore_cache=False):
         salt myminion github.list_users
         salt myminion github.list_users profile='my-github-profile'
     """
-    org_name = _get_config_value(profile, "org_name")
-    key = f"github.{org_name}:users"
-    if key not in __context__ or ignore_cache:
-        client = _get_client(profile)
-        organization = client.get_organization(org_name)
-        __context__[key] = [member.login for member in organization.get_members()]
-    return __context__[key]
+    return gh_users.list_members(_get_conn(profile), ignore_cache=ignore_cache)
 
 
 def get_user(name, profile="github", user_details=False):
@@ -203,37 +178,11 @@ def get_user(name, profile="github", user_details=False):
         # User is in the org, no need for additional Data
         return True
 
-    response = {}
-    client = _get_client(profile)
-    organization = client.get_organization(_get_config_value(profile, "org_name"))
-
     try:
-        user = client.get_user(name)
-    except UnknownObjectException:
+        return gh_users.get_user_info(_get_conn(profile), name)
+    except GitHubNotFoundError:
         log.exception("Resource not found")
         return False
-
-    response["company"] = user.company
-    response["created_at"] = user.created_at
-    response["email"] = user.email
-    response["html_url"] = user.html_url
-    response["id"] = user.id
-    response["login"] = user.login
-    response["name"] = user.name
-    response["type"] = user.type
-    response["url"] = user.url
-
-    try:
-        membership = user.get_organization_membership(organization)
-    except UnknownObjectException:
-        response["membership_state"] = "nonexistent"
-        response["in_org"] = False
-        return response
-
-    response["in_org"] = organization.has_in_members(user)
-    response["membership_state"] = membership.state
-
-    return response
 
 
 def add_user(name, profile="github"):
@@ -253,21 +202,11 @@ def add_user(name, profile="github"):
         salt myminion github.add_user github-handle
     """
 
-    client = _get_client(profile)
-    organization = client.get_organization(_get_config_value(profile, "org_name"))
-
     try:
-        github_named_user = client.get_user(name)
-    except UnknownObjectException:
+        return gh_users.invite_member(_get_conn(profile), name)
+    except GitHubNotFoundError:
         log.exception("Resource not found")
         return False
-
-    # There is no public method that also returns the resulting membership state
-    _, data = client.requester.requestJsonAndCheck(
-        "PUT", organization.url + "/memberships/" + github_named_user.login
-    )
-
-    return data.get("state") == "pending"
 
 
 def remove_user(name, profile="github"):
@@ -287,19 +226,11 @@ def remove_user(name, profile="github"):
         salt myminion github.remove_user github-handle
     """
 
-    client = _get_client(profile)
-    organization = client.get_organization(_get_config_value(profile, "org_name"))
-
     try:
-        git_user = client.get_user(name)
-    except UnknownObjectException:
+        return gh_users.remove_member(_get_conn(profile), name)
+    except GitHubNotFoundError:
         log.exception("Resource not found")
         return False
-
-    if organization.has_in_members(git_user):
-        organization.remove_from_members(git_user)
-
-    return not organization.has_in_members(git_user)
 
 
 def get_issue(issue_number, repo_name=None, profile="github", output="min"):
@@ -329,23 +260,22 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
         salt myminion github.get_issue 514
         salt myminion github.get_issue 514 repo_name=salt
     """
-    org_name = _get_config_value(profile, "org_name")
     if repo_name is None:
         repo_name = _get_config_value(profile, "repo_name")
 
-    action = "/".join(["repos", org_name, repo_name])
-    command = "issues/" + str(issue_number)
-
     ret = {}
-    issue_data = _query(profile, action=action, command=command)
+    try:
+        issue_data = gh_issues.get(_get_conn(profile), repo_name, issue_number)
+    except GitHubApiError:
+        return ret
 
-    issue_id = issue_data.get("dict", {}).get("id")
+    issue_id = (issue_data or {}).get("id")
 
     if issue_id:
         if output.lower() == "full":
-            ret[issue_id] = issue_data["dict"]
+            ret[issue_id] = issue_data
         else:
-            ret[issue_id] = _format_issue(issue_data["dict"])
+            ret[issue_id] = gh_issues.format_issue(issue_data)
 
     return ret
 
@@ -381,23 +311,13 @@ def get_issue_comments(issue_number, repo_name=None, profile="github", since=Non
         salt myminion github.get_issue_comments 514
         salt myminion github.get_issue 514 repo_name=salt
     """
-    org_name = _get_config_value(profile, "org_name")
     if repo_name is None:
         repo_name = _get_config_value(profile, "repo_name")
 
-    action = "/".join(["repos", org_name, repo_name])
-    command = "/".join(["issues", str(issue_number), "comments"])
-
-    args = {}
-    if since:
-        args["since"] = since
-
-    comments = _query(profile, action=action, command=command, args=args)
-    if comments.get("error"):
-        raise CommandExecutionError(comments["error"])
+    comments = gh_issues.get_comments(_get_conn(profile), repo_name, issue_number, since=since)
 
     ret = {}
-    for comment in comments.get("dict", {}):
+    for comment in comments or []:
         comment_id = comment.get("id")
         if output == "full":
             ret[comment_id] = comment
@@ -494,52 +414,31 @@ def get_issues(
 
         salt myminion github.get_issues my-github-repo
     """
-    org_name = _get_config_value(profile, "org_name")
     if repo_name is None:
         repo_name = _get_config_value(profile, "repo_name")
 
-    action = "/".join(["repos", org_name, repo_name])
-    args = {}
-
-    # Build API arguments, as necessary.
-    if milestone:
-        args["milestone"] = milestone
-    if assignee:
-        args["assignee"] = assignee
-    if creator:
-        args["creator"] = creator
-    if mentioned:
-        args["mentioned"] = mentioned
-    if labels:
-        args["labels"] = labels
-    if since:
-        args["since"] = since
-    if per_page:
-        args["per_page"] = per_page
-
-    # Only pass the following API args if they're not the defaults listed.
-    if state and state != "open":
-        args["state"] = state
-    if sort and sort != "created":
-        args["sort"] = sort
-    if direction and direction != "desc":
-        args["direction"] = direction
+    issues = gh_issues.list_all(
+        _get_conn(profile),
+        repo_name,
+        milestone=milestone,
+        state=state,
+        assignee=assignee,
+        creator=creator,
+        mentioned=mentioned,
+        labels=labels,
+        sort=sort,
+        direction=direction,
+        since=since,
+        per_page=per_page,
+    )
 
     ret = {}
-    issues = _query(profile, action=action, command="issues", args=args)
-    if issues.get("error"):
-        raise CommandExecutionError(issues["error"])
-
-    for issue in issues.get("dict", {}):
-        # Pull requests are included in the issue list from GitHub
-        # Let's not include those in the return.
-        if issue.get("pull_request"):
-            continue
+    for issue in issues or []:
         issue_id = issue.get("id")
         if output == "full":
             ret[issue_id] = issue
         else:
-            ret[issue_id] = _format_issue(issue)
+            ret[issue_id] = gh_issues.format_issue(issue)
 
     return ret
 
@@ -591,38 +490,25 @@ def get_milestones(
 
         salt myminion github.get_milestones
     """
-    org_name = _get_config_value(profile, "org_name")
     if repo_name is None:
         repo_name = _get_config_value(profile, "repo_name")
 
-    action = "/".join(["repos", org_name, repo_name])
-    args = {}
-
-    if per_page:
-        args["per_page"] = per_page
-
-    # Only pass the following API args if they're not the defaults listed.
-    if state and state != "open":
-        args["state"] = state
-    if sort and sort != "due_on":
-        args["sort"] = sort
-    if direction and direction != "asc":
-        args["direction"] = direction
+    milestones = gh_milestones.list_all(
+        _get_conn(profile),
+        repo_name,
+        state=state,
+        sort=sort,
+        direction=direction,
+        per_page=per_page,
+    )
 
     ret = {}
-    milestones = _query(profile, action=action, command="milestones", args=args)
-    if milestones.get("error"):
-        raise CommandExecutionError(milestones["error"])
-
-    for milestone in milestones.get("dict", {}):
+    for milestone in milestones or []:
         milestone_id = milestone.get("id")
         if output == "full":
             ret[milestone_id] = milestone
         else:
-            milestone.pop("creator", None)
-            milestone.pop("html_url", None)
-            milestone.pop("labels_url", None)
-            ret[milestone_id] = milestone
+            ret[milestone_id] = gh_milestones.format_milestone(milestone)
 
     return ret
 
@@ -660,62 +546,31 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github", outp
     """
     ret = {}
 
-    if not any([number, name]):
+    if not (number or name):
         raise CommandExecutionError("Either a milestone 'name' or 'number' must be provided.")
 
-    org_name = _get_config_value(profile, "org_name")
     if repo_name is None:
         repo_name = _get_config_value(profile, "repo_name")
 
-    action = "/".join(["repos", org_name, repo_name])
     if number:
-        command = "milestones/" + str(number)
-        milestone_data = _query(profile, action=action, command=command)
-        milestone_data = milestone_data.get("dict", {})
-        milestone_id = milestone_data.get("id")
+        try:
+            milestone_data = gh_milestones.get(_get_conn(profile), repo_name, number)
+        except GitHubApiError:
+            return ret
+        milestone_id = (milestone_data or {}).get("id")
         if milestone_id:
             if output.lower() == "full":
                 ret[milestone_id] = milestone_data
             else:
-                milestone_data.pop("creator", None)
-                milestone_data.pop("html_url", None)
-                milestone_data.pop("labels_url", None)
-                ret[milestone_id] = milestone_data
+                ret[milestone_id] = gh_milestones.format_milestone(milestone_data)
+        return ret
+
+    milestones = get_milestones(repo_name=repo_name, profile=profile, output=output)
+    for key, val in milestones.items():
+        if val.get("title") == name:
+            ret[key] = val
             return ret
 
-    else:
-        milestones = get_milestones(repo_name=repo_name, profile=profile, output=output)
-        for key, val in milestones.items():
-            if val.get("title") == name:
-                ret[key] = val
-                return ret
-
-    return ret
-
-
-def _repo_to_dict(repo):
-    ret = {}
-    ret["id"] = repo.id
-    ret["name"] = repo.name
-    ret["full_name"] = repo.full_name
-    ret["owner"] = repo.owner.login
-    ret["private"] = repo.private
-    ret["html_url"] = repo.html_url
-    ret["description"] = repo.description
-    ret["fork"] = repo.fork
-    ret["homepage"] = repo.homepage
-    ret["size"] = repo.size
-    ret["stargazers_count"] = repo.stargazers_count
-    ret["watchers_count"] = repo.watchers_count
-    ret["language"] = repo.language
-    ret["open_issues_count"] = repo.open_issues_count
-    ret["forks"] = repo.forks
-    ret["open_issues"] = repo.open_issues
-    ret["watchers"] = repo.watchers
-    ret["default_branch"] = repo.default_branch
-    ret["has_issues"] = repo.has_issues
-    ret["has_wiki"] = repo.has_wiki
-    ret["has_downloads"] = repo.has_downloads
     return ret
 
 
@@ -736,27 +591,7 @@ def get_repo_info(repo_name, profile="github", ignore_cache=False):
         salt myminion github.get_repo_info salt
         salt myminion github.get_repo_info salt profile='my-github-profile'
     """
-
-    org_name = _get_config_value(profile, "org_name")
-    key = "github.{}:{}:repo_info".format(  # pylint: disable=consider-using-f-string
-        _get_config_value(profile, "org_name"), repo_name.lower()
-    )
-
-    if key not in __context__ or ignore_cache:
-        client = _get_client(profile)
-        try:
-            # With lazy fetching, client.get_repo returns a Repository object
-            # even if the repo does not exist - the exception is only raised
-            # once attributes of the object are accessed.
-            repo = client.get_repo("/".join([org_name, repo_name]))
-            ret = _repo_to_dict(repo)
-
-            __context__[key] = ret
-        except github.UnknownObjectException as exc:
-            raise CommandExecutionError(
-                f"The '{repo_name}' repository under the '{org_name}' organization could not be found."
-            ) from exc
-    return __context__[key]
+    return gh_repos.get_info(_get_conn(profile), repo_name, ignore_cache=ignore_cache)
 
 
 def get_repo_teams(repo_name, profile="github"):
@@ -776,25 +611,7 @@ def get_repo_teams(repo_name, profile="github"):
         salt myminion github.get_repo_teams salt
         salt myminion github.get_repo_teams salt profile='my-github-profile'
     """
-    ret = []
-    org_name = _get_config_value(profile, "org_name")
-    client = _get_client(profile)
-
-    try:
-        repo = client.get_repo("/".join([org_name, repo_name]))
-    except github.UnknownObjectException as exc:
-        raise CommandExecutionError(
-            f"The '{repo_name}' repository under the '{org_name}' organization could not be found."
-        ) from exc
-    try:
-        teams = repo.get_teams()
-        for team in teams:
-            ret.append({"id": team.id, "name": team.name, "permission": team.permission})
-    except github.UnknownObjectException as exc:  # pragma: no cover
-        raise CommandExecutionError(
-            f"Unable to retrieve teams for repository '{repo_name}' under the '{org_name}' organization."
-        ) from exc
-    return ret
+    return gh_repos.get_teams(_get_conn(profile), repo_name)
 
 
 def list_repos(profile="github"):
@@ -813,7 +630,7 @@ def list_repos(profile="github"):
         salt myminion github.list_repos
         salt myminion github.list_repos profile='my-github-profile'
     """
-    return [repo.name for repo in _get_repos(profile)]
+    return [repo.name for repo in gh_repos.list_all(_get_conn(profile))]
 
 
 def list_private_repos(profile="github"):
@@ -831,11 +648,7 @@ def list_private_repos(profile="github"):
         salt myminion github.list_private_repos
         salt myminion github.list_private_repos profile='my-github-profile'
     """
-    repos = []
-    for repo in _get_repos(profile):
-        if repo.private is True:
-            repos.append(repo.name)
-    return repos
+    return [repo.name for repo in gh_repos.list_all(_get_conn(profile)) if repo.private is True]
 
 
 def list_public_repos(profile="github"):
@@ -852,11 +665,7 @@ def list_public_repos(profile="github"):
         salt myminion github.list_public_repos
         salt myminion github.list_public_repos profile='my-github-profile'
     """
-    repos = []
-    for repo in _get_repos(profile):
-        if repo.private is False:
-            repos.append(repo.name)
-    return repos
+    return [repo.name for repo in gh_repos.list_all(_get_conn(profile)) if repo.private is False]
 
 
 def add_repo(
@@ -916,24 +725,21 @@ def add_repo(
         salt myminion github.add_repo 'repo_name'
     """
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        parameters = filter_unset(
-            {
-                "description": description,
-                "homepage": homepage,
-                "private": private,
-                "has_issues": has_issues,
-                "has_wiki": has_wiki,
-                "has_downloads": has_downloads,
-                "auto_init": auto_init,
-                "gitignore_template": gitignore_template,
-                "license_template": license_template,
-            }
+        gh_repos.create(
+            _get_conn(profile),
+            name,
+            description=description,
+            homepage=homepage,
+            private=private,
+            has_issues=has_issues,
+            has_wiki=has_wiki,
+            has_downloads=has_downloads,
+            auto_init=auto_init,
+            gitignore_template=gitignore_template,
+            license_template=license_template,
         )
-        organization.create_repo(name, **parameters)
         return True
-    except github.GithubException:
+    except GitHubApiError:
         log.exception("Error creating a repo")
         return False
 
@@ -984,33 +790,24 @@ def edit_repo(
     """
 
     try:
-        allow_private_change = _get_config_value(profile, "allow_repo_privacy_changes")
+        allow_privacy_change = _get_config_value(profile, "allow_repo_privacy_changes")
     except CommandExecutionError:
-        allow_private_change = False
-
-    if private is not None and not allow_private_change:
-        raise CommandExecutionError(
-            f"The private field is set to be changed for repo {name} but allow_repo_privacy_changes disallows this."
-        )
+        allow_privacy_change = False
 
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        repo = organization.get_repo(name)
-        parameters = filter_unset(
-            {
-                "description": description,
-                "homepage": homepage,
-                "private": private,
-                "has_issues": has_issues,
-                "has_wiki": has_wiki,
-                "has_downloads": has_downloads,
-            }
+        gh_repos.update(
+            _get_conn(profile),
+            name,
+            description=description,
+            homepage=homepage,
+            private=private,
+            has_issues=has_issues,
+            has_wiki=has_wiki,
+            has_downloads=has_downloads,
+            allow_privacy_change=allow_privacy_change,
         )
-        repo.edit(name, **parameters)
-        get_repo_info(name, profile=profile, ignore_cache=True)  # Refresh cache
         return True
-    except github.GithubException:
+    except GitHubApiError:
         log.exception("Error editing a repo")
         return False
 
@@ -1031,19 +828,16 @@ def remove_repo(name, profile="github"):
 
         salt myminion github.remove_repo 'my-repo'
     """
+    conn = _get_conn(profile)
     try:
-        get_repo_info(name, profile=profile)
+        gh_repos.get_info(conn, name)
     except CommandExecutionError:
         log.error("Repo %s to be removed does not exist.", name)
         return False
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        repo = organization.get_repo(name)
-        repo.delete()
-        _get_repos(profile=profile, ignore_cache=True)  # refresh cache
+        gh_repos.delete(conn, name)
         return True
-    except github.GithubException:
+    except GitHubApiError:
         log.exception("Error deleting a repo")
         return False
 
@@ -1065,7 +859,7 @@ def get_team(name, profile="github"):
 
         salt myminion github.get_team 'team_name'
     """
-    return list_teams(profile).get(name)
+    return gh_teams.get(_get_conn(profile), name)
 
 
 def add_team(
@@ -1105,25 +899,16 @@ def add_team(
         salt myminion github.add_team 'team_name'
     """
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        parameters = filter_unset(
-            {
-                "description": description,
-                "permission": permission,
-                "privacy": privacy,
-            }
+        gh_teams.create(
+            _get_conn(profile),
+            name,
+            description=description,
+            repo_names=repo_names,
+            privacy=privacy,
+            permission=permission,
         )
-        if repo_names is not None:
-            # create_team expects Repository objects, resolve the (full) names
-            parameters["repo_names"] = [
-                client.get_repo(repo) if "/" in repo else organization.get_repo(repo)
-                for repo in repo_names
-            ]
-        organization.create_team(name, **parameters)
-        list_teams(ignore_cache=True, profile=profile)  # Refresh cache
         return True
-    except github.GithubException:
+    except GitHubApiError:
         log.exception("Error creating a team")
         return False
 
@@ -1154,26 +939,22 @@ def edit_team(name, description=None, privacy=None, permission=None, profile="gi
 
         salt myminion github.edit_team 'team_name' description='Team description'
     """
-    team = get_team(name, profile=profile)
+    conn = _get_conn(profile)
+    team = gh_teams.get(conn, name)
     if not team:
         log.error("Team %s does not exist", name)
         return False
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team_by_slug(team["slug"])
-        team.edit(
+        gh_teams.update(
+            conn,
+            team,
             name,
-            **filter_unset(
-                {
-                    "description": description,
-                    "privacy": privacy,
-                    "permission": permission,
-                }
-            ),
+            description=description,
+            privacy=privacy,
+            permission=permission,
         )
         return True
-    except UnknownObjectException:
+    except GitHubNotFoundError:
         log.exception("Resource not found")
         return False
 
@@ -1194,17 +975,15 @@ def remove_team(name, profile="github"):
 
         salt myminion github.remove_team 'team_name'
     """
-    team_info = get_team(name, profile=profile)
+    conn = _get_conn(profile)
+    team_info = gh_teams.get(conn, name)
     if not team_info:
         log.error("Team %s to be removed does not exist.", name)
         return False
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team_by_slug(team_info["slug"])
-        team.delete()
-        return list_teams(ignore_cache=True, profile=profile).get(name) is None
-    except github.GithubException:
+        gh_teams.delete(conn, team_info)
+        return gh_teams.get(conn, name) is None
+    except GitHubApiError:
         log.exception("Error deleting a team")
         return False
 
@@ -1229,35 +1008,15 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
 
         salt myminion github.list_team_repos 'team_name'
     """
-    cached_team = get_team(team_name, profile=profile)
+    conn = _get_conn(profile)
+    cached_team = gh_teams.get(conn, team_name)
     if not cached_team:
         log.error("Team %s does not exist.", team_name)
         return False
 
-    # Return from cache if available
-    if cached_team.get("repos") and not ignore_cache:
-        return cached_team["repos"]
-
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team_by_slug(cached_team["slug"])
-    except UnknownObjectException:
-        log.exception("Resource not found: %s", cached_team["id"])
-        return {}
-    try:
-        repos = {}
-        for repo in team.get_repos():
-            permission = "pull"
-            if repo.permissions.admin:
-                permission = "admin"
-            elif repo.permissions.push:
-                permission = "push"
-
-            repos[repo.name.lower()] = {"permission": permission}
-        cached_team["repos"] = repos
-        return repos
-    except UnknownObjectException:  # pragma: no cover
+        return gh_teams.list_repos(conn, cached_team, ignore_cache=ignore_cache)
+    except GitHubNotFoundError:
         log.exception("Resource not found: %s", cached_team["id"])
         return {}
 
@@ -1286,27 +1045,23 @@ def add_team_repo(repo_name, team_name, profile="github", permission=None):
 
         salt myminion github.add_team_repo 'my_repo' 'team_name'
     """
-    team_info = get_team(team_name, profile=profile)
+    conn = _get_conn(profile)
+    team_info = gh_teams.get(conn, team_name)
     if not team_info:
         log.error("Team %s does not exist", team_name)
         return False
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team_by_slug(team_info["slug"])
-        repo = organization.get_repo(repo_name)
-    except UnknownObjectException:
+        if not gh_teams.add_repo(conn, team_info, repo_name, permission=permission):
+            log.error(
+                "Failed setting permission %s on repo %s for team %s",
+                permission,
+                repo_name,
+                team_name,
+            )
+            return False
+    except GitHubNotFoundError:
         log.exception("Resource not found: %s", team_info["id"])
         return False
-    if permission is None:
-        team.add_to_repos(repo)
-    elif not team.update_team_repository(repo, permission):
-        log.error(
-            "Failed setting permission %s on repo %s for team %s", permission, repo_name, team_name
-        )
-        return False
-    # Try to refresh cache
-    list_team_repos(team_name, profile=profile, ignore_cache=True)
     return True
 
 
@@ -1329,20 +1084,16 @@ def remove_team_repo(repo_name, team_name, profile="github"):
 
         salt myminion github.remove_team_repo 'my_repo' 'team_name'
     """
-    team_info = get_team(team_name, profile=profile)
+    conn = _get_conn(profile)
+    team_info = gh_teams.get(conn, team_name)
     if not team_info:
         log.error("Team %s does not exist", team_name)
         return False
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team_by_slug(team_info["slug"])
-        repo = organization.get_repo(repo_name)
-    except UnknownObjectException:
+        return gh_teams.remove_repo(conn, team_info, repo_name)
+    except GitHubNotFoundError:
         log.exception("Resource not found: %s", team_info["id"])
         return False
-    team.remove_from_repos(repo)
-    return repo_name not in list_team_repos(team_name, profile=profile, ignore_cache=True)
 
 
 def list_team_members(team_name, profile="github", ignore_cache=False):
@@ -1364,25 +1115,15 @@ def list_team_members(team_name, profile="github", ignore_cache=False):
 
         salt myminion github.list_team_members 'team_name'
     """
-    cached_team = get_team(team_name, profile=profile)
+    conn = _get_conn(profile)
+    cached_team = gh_teams.get(conn, team_name)
     if not cached_team:
         log.error("Team %s does not exist.", team_name)
         return False
-    # Return from cache if available
-    if cached_team.get("members") and not ignore_cache:
-        return cached_team["members"]
 
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team_by_slug(cached_team["slug"])
-    except UnknownObjectException:
-        log.exception("Resource not found: %s", cached_team["id"])
-        return []
-    try:
-        cached_team["members"] = [member.login.lower() for member in team.get_members()]
-        return cached_team["members"]
-    except UnknownObjectException:  # pragma: no cover
+        return gh_teams.list_members(conn, cached_team, ignore_cache=ignore_cache)
+    except GitHubNotFoundError:
         log.exception("Resource not found: %s", cached_team["id"])
         return []
 
@@ -1403,18 +1144,7 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
 
         salt myminion github.list_members_without_mfa
     """
-    key = "github.{}:non_mfa_users".format(  # pylint: disable=consider-using-f-string
-        _get_config_value(profile, "org_name")
-    )
-
-    if key not in __context__ or ignore_cache:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-
-        __context__[key] = [
-            m.login.lower() for m in organization.get_members(filter_="2fa_disabled")
-        ]
-    return __context__[key]
+    return gh_users.list_members_without_mfa(_get_conn(profile), ignore_cache=ignore_cache)
 
 
 def is_team_member(name, team_name, profile="github"):
@@ -1460,22 +1190,17 @@ def add_team_member(name, team_name, profile="github"):
 
         salt myminion github.add_team_member 'user_name' 'team_name'
     """
-    team_info = get_team(team_name, profile=profile)
+    conn = _get_conn(profile)
+    team_info = gh_teams.get(conn, team_name)
     if not team_info:
         log.error("Team %s does not exist", team_name)
         return False
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team_by_slug(team_info["slug"])
-        member = client.get_user(name)
-    except UnknownObjectException:
+        gh_teams.add_member(conn, team_info, name)
+    except GitHubNotFoundError:
         log.exception("Resource not found: %s", team_info["id"])
         return False
-
-    try:
-        team.add_membership(member, "member")
-    except github.GithubException:
+    except GitHubApiError:
         log.exception("Error in adding a member to a team")
         return False
     return True
@@ -1500,27 +1225,16 @@ def remove_team_member(name, team_name, profile="github"):
 
         salt myminion github.remove_team_member 'user_name' 'team_name'
     """
-    team_info = get_team(team_name, profile=profile)
+    conn = _get_conn(profile)
+    team_info = gh_teams.get(conn, team_name)
     if not team_info:
         log.error("Team %s does not exist", team_name)
         return False
     try:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team_by_slug(team_info["slug"])
-        member = client.get_user(name)
-
-    except UnknownObjectException:
+        return gh_teams.remove_member(conn, team_info, name)
+    except GitHubNotFoundError:
         log.exception("Resource not found: %s", team_info["id"])
         return False
-
-    team.remove_membership(member)
-    try:
-        # There is no non-deprecated endpoint for checking plain membership
-        team.get_team_membership(member)
-    except UnknownObjectException:
-        return True
-    return False
 
 
 def list_teams(profile="github", ignore_cache=False):
@@ -1539,29 +1253,7 @@ def list_teams(profile="github", ignore_cache=False):
 
         salt myminion github.list_teams
     """
-    key = "github.{}:teams".format(  # pylint: disable=consider-using-f-string
-        _get_config_value(profile, "org_name")
-    )
-
-    if key not in __context__ or ignore_cache:
-        client = _get_client(profile)
-        organization = client.get_organization(_get_config_value(profile, "org_name"))
-        teams_data = organization.get_teams()
-        teams = {}
-        for team in teams_data:
-            # These attributes are all present in the list response. Take care
-            # not to access any lazily completable attributes missing from it
-            # here since each one would trigger a separate request per team.
-            teams[team.name] = {
-                "id": team.id,
-                "slug": team.slug,
-                "description": team.description,
-                "permission": team.permission,
-                "privacy": team.privacy,
-            }
-        __context__[key] = teams
-
-    return __context__[key]
+    return gh_teams.list_all(_get_conn(profile), ignore_cache=ignore_cache)
 
 
 def get_prs(
@@ -1627,192 +1319,32 @@ def get_prs(
         salt myminion github.get_prs
         salt myminion github.get_prs base=2016.11
     """
-    org_name = _get_config_value(profile, "org_name")
     if repo_name is None:
         repo_name = _get_config_value(profile, "repo_name")
 
-    action = "/".join(["repos", org_name, repo_name])
-    args = {}
-
-    # Build API arguments, as necessary.
-    if head:
-        args["head"] = head
-    if base:
-        args["base"] = base
-    if per_page:
-        args["per_page"] = per_page
-
-    # Only pass the following API args if they're not the defaults listed.
-    if state and state != "open":
-        args["state"] = state
-    if sort and sort != "created":
-        args["sort"] = sort
-    if direction and direction != "desc":
-        args["direction"] = direction
+    prs = gh_pulls.list_all(
+        _get_conn(profile),
+        repo_name,
+        state=state,
+        head=head,
+        base=base,
+        sort=sort,
+        direction=direction,
+        per_page=per_page,
+    )
 
     ret = {}
-    prs = _query(profile, action=action, command="pulls", args=args)
-    if prs.get("error"):
-        raise CommandExecutionError(prs["error"])
-
-    for pr_ in prs.get("dict", {}):
+    for pr_ in prs or []:
         pr_id = pr_.get("id")
         if output == "full":
             ret[pr_id] = pr_
         else:
-            ret[pr_id] = _format_pr(pr_)
+            ret[pr_id] = gh_pulls.format_pr(pr_)
 
     return ret
 
 
-def _format_pr(pr_):
-    """
-    Helper function to format API return information into a more manageable
-    and useful dictionary for pull request information.
-
-    pr_
-        The pull request to format.
-    """
-    ret = {
-        "id": pr_.get("id"),
-        "pr_number": pr_.get("number"),
-        "state": pr_.get("state"),
-        "title": pr_.get("title"),
-        "user": pr_.get("user").get("login"),
-        "html_url": pr_.get("html_url"),
-        "base_branch": pr_.get("base").get("ref"),
-    }
-
-    return ret
-
-
-def _format_issue(issue):
-    """
-    Helper function to format API return information into a more manageable
-    and useful dictionary for issue information.
-
-    issue
-        The issue to format.
-    """
-    ret = {
-        "id": issue.get("id"),
-        "issue_number": issue.get("number"),
-        "state": issue.get("state"),
-        "title": issue.get("title"),
-        "user": issue.get("user").get("login"),
-        "html_url": issue.get("html_url"),
-    }
-
-    assignee = issue.get("assignee")
-    if assignee:
-        assignee = assignee.get("login")
-
-    labels = issue.get("labels")
-    label_names = []
-    for label in labels:
-        label_names.append(label.get("name"))
-
-    milestone = issue.get("milestone")
-    if milestone:
-        milestone = milestone.get("title")
-
-    ret["assignee"] = assignee
-    ret["labels"] = label_names
-    ret["milestone"] = milestone
-
-    return ret
-
-
-def _next_page_number(headers):
-    """
-    Extract the next page number from a GitHub ``Link`` response header.
-
-    Returns ``None`` when there is no further page.
-    """
-    link = None
-    for key, val in (headers or {}).items():
-        if key.lower() == "link":
-            link = val
-            break
-    if not link:
-        return None
-    match = re.search(r'<[^>]*[?&]page=(\d+)[^>]*>\s*;\s*rel="next"', link)
-    if match:
-        return match.group(1)
-    return None
-
-
-def _query(
-    profile,
-    action=None,
-    command=None,
-    args=None,
-    method="GET",
-    header_dict=None,
-    data=None,
-    per_page=None,
-):
-    """
-    Make a web call to the GitHub API and deal with paginated results.
-
-    Requests are dispatched through the PyGithub client (honoring the
-    profile's ``api_url``, authentication and retry handling).
-    """
-    if not isinstance(args, dict):
-        args = {}
-
-    path_segments = (([action] if isinstance(action, str) else action) or []) + (
-        ([command] if isinstance(command, str) else command) or []
-    )
-    url = "/" + "/".join(str(segment) for segment in path_segments)
-
-    log.debug("GitHub API path: %s", url)
-
-    if per_page and "per_page" not in args:
-        args["per_page"] = per_page
-
-    if isinstance(data, str):
-        data = json.loads(data)
-
-    requester = _get_client(profile).requester
-
-    complete_result = []
-    next_page = None
-    while True:
-        if next_page:
-            args["page"] = next_page
-        try:
-            status, headers, text = requester.requestJson(
-                method, url, parameters=args or None, headers=header_dict, input=data
-            )
-        except github.GithubException as err:
-            return {"status": err.status, "error": str(err)}
-        except Exception as err:  # pylint: disable=broad-except
-            raise CommandExecutionError(f"GitHub API request failed: {err}") from err
-        log.debug("GitHub Response Status Code: %s", status)
-        decoded = json.loads(text) if text else None
-
-        if status not in (200, 201, 204):
-            message = decoded.get("message", text) if isinstance(decoded, dict) else text
-            return {"status": status, "error": f"{status} {message}".strip(), "dict": decoded}
-
-        if not isinstance(decoded, list):
-            # If only querying for one item, such as a single issue
-            # The GitHub API returns a single dictionary, instead of
-            # A list of dictionaries. In that case, we can return.
-            return {"status": status, "headers": headers, "dict": decoded}
-
-        complete_result += decoded
-        ret = {"status": status, "headers": headers, "dict": complete_result}
-
-        next_page = _next_page_number(headers)
-        if next_page is None:
-            break
-
-    return ret
-
-
-def _check_ruleset_params(
+def _resolve_ruleset_params(
     profile,
     require_id=False,
     require_params=False,
@@ -1827,7 +1359,8 @@ def _check_ruleset_params(
     **_,
 ):
     """
-    Helper function to check for param values on command line and in config file
+    Helper function that merges CLI parameters with profile configuration
+    defaults for ruleset operations.
 
     profile
         The name of the profile configuration to use.
@@ -1837,8 +1370,6 @@ def _check_ruleset_params(
 
     require_params
         Require ruleset_params payload. Defaults to false.
-        If true, just requires that ruleset_params is set.
-        You can also pass a set of named params to require in the payload.
     """
     ruleset_type = ruleset_type or _get_config_value(profile, "ruleset_type")
     if ruleset_type not in ("repo", "org"):
@@ -1847,10 +1378,8 @@ def _check_ruleset_params(
     if ruleset_type == "repo":
         owner = owner or _get_config_value(profile, "owner")
         repo_name = repo_name or _get_config_value(profile, "repo_name")
-        action = ["repos", owner, repo_name, "rulesets"]
     else:
         org_name = org_name or _get_config_value(profile, "org_name")
-        action = ["orgs", org_name, "rulesets"]
 
     # check for optional header_dict
     try:
@@ -1865,31 +1394,34 @@ def _check_ruleset_params(
     # if ruleset is required, check for ruleset_id
     if require_id:
         ruleset_id = ruleset_id or _get_config_value(profile, "ruleset_id")
-        action.append(ruleset_id or _get_config_value(profile, "ruleset_id"))
 
     # if ruleset_params are required, check for ruleset_params
     if require_params:
         ruleset_params = ruleset_params or _get_config_value(profile, "ruleset_params")
-        if not isinstance(ruleset_params, dict):
-            raise CommandExecutionError("ruleset_params need to be a dict")
-        if require_params is not True:
-            if missing := require_params.difference(ruleset_params):
-                raise CommandExecutionError(
-                    f"The following ruleset_params are required, but not defined: {', '.join(missing)}"
-                )
 
-    params = filter_unset(
+    return filter_unset(
         {
             "ruleset_type": ruleset_type,
             "owner": owner,
             "repo_name": repo_name,
             "org_name": org_name,
+            "headers": header_dict,
             "ruleset_id": ruleset_id,
             "ruleset_params": ruleset_params,
         }
     )
 
-    return action, header_dict, params
+
+def _ruleset_error_ret(err):
+    """
+    Format a :class:`GitHubApiError` into the legacy ruleset return shape.
+    """
+    ret = {"status": err.status, "error": str(err)}
+    if err.data is not None:
+        ret["dict"] = err.data
+    ret["comment"] = f"GitHub Response Status Code: {err}"
+    ret["result"] = False
+    return ret
 
 
 def get_ruleset(profile="github", **kwargs):
@@ -1924,20 +1456,16 @@ def get_ruleset(profile="github", **kwargs):
         salt myminion github.get_ruleset
         salt myminion github.get_ruleset ruleset_id=1
     """
-    action, header_dict, _ = _check_ruleset_params(profile, require_id=True, **kwargs)
-
+    params = _resolve_ruleset_params(profile, require_id=True, **kwargs)
+    params.pop("ruleset_params", None)
     try:
-        ret = _query(profile, action, header_dict=header_dict)
-        if not ret.get("error"):
-            return ret["dict"]
-        ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
-        ret["result"] = False
+        return gh_rulesets.get(
+            _get_conn(profile), params.pop("ruleset_id"), params.pop("ruleset_type"), **params
+        )
+    except GitHubApiError as err:
+        return _ruleset_error_ret(err)
     except CommandExecutionError:
-        ret = {}
-        ret["result"] = False
-        ret["comment"] = "Error getting ruleset"
-
-    return ret
+        return {"result": False, "comment": "Error getting ruleset"}
 
 
 def delete_ruleset(profile="github", **kwargs):
@@ -1972,20 +1500,16 @@ def delete_ruleset(profile="github", **kwargs):
         salt myminion github.delete_ruleset
         salt myminion github.delete_ruleset ruleset_id=1
     """
-    action, header_dict, params = _check_ruleset_params(profile, require_id=True, **kwargs)
-
+    params = _resolve_ruleset_params(profile, require_id=True, **kwargs)
+    params.pop("ruleset_params", None)
+    ruleset_id = params.pop("ruleset_id")
     try:
-        ret = _query(profile, action, method="DELETE", header_dict=header_dict)
-        if ret.get("error"):
-            ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
-            ret["result"] = False
-        else:
-            ret["comment"] = f"ruleset {params['ruleset_id']} successfully deleted"
+        gh_rulesets.delete(_get_conn(profile), ruleset_id, params.pop("ruleset_type"), **params)
+        return {"comment": f"ruleset {ruleset_id} successfully deleted"}
+    except GitHubApiError as err:
+        return _ruleset_error_ret(err)
     except CommandExecutionError:
-        ret = {}
-        ret["result"] = False
-        ret["comment"] = "Error deleting ruleset"
-    return ret
+        return {"result": False, "comment": "Error deleting ruleset"}
 
 
 def update_ruleset(profile="github", **kwargs):
@@ -2014,7 +1538,7 @@ def update_ruleset(profile="github", **kwargs):
         headers to pass to Github API.
 
     ruleset_params
-        number of returned results (max 100).
+        The updated ruleset definition.
 
     CLI Example:
 
@@ -2023,26 +1547,22 @@ def update_ruleset(profile="github", **kwargs):
         salt myminion github.update_ruleset
         salt myminion github.update_ruleset ruleset_id=1
     """
-    action, header_dict, params = _check_ruleset_params(
-        profile, require_id=True, require_params=True, **kwargs
-    )
-
+    params = _resolve_ruleset_params(profile, require_id=True, require_params=True, **kwargs)
+    ruleset_id = params.pop("ruleset_id")
+    ruleset_params = params.pop("ruleset_params")
+    gh_rulesets.check_params(ruleset_params)
     try:
-        ret = _query(
-            profile,
-            action,
-            method="PUT",
-            data=params["ruleset_params"],
-            header_dict=header_dict,
+        return gh_rulesets.update(
+            _get_conn(profile),
+            ruleset_id,
+            ruleset_params,
+            params.pop("ruleset_type"),
+            **params,
         )
-        if not ret.get("error"):
-            return ret["dict"]
-        ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
-        ret["result"] = False
+    except GitHubApiError as err:
+        return _ruleset_error_ret(err)
     except CommandExecutionError:
-        ret = {"result": False, "comment": "Error updating ruleset"}
-
-    return ret
+        return {"result": False, "comment": "Error updating ruleset"}
 
 
 def add_ruleset(profile="github", **kwargs):
@@ -2068,7 +1588,8 @@ def add_ruleset(profile="github", **kwargs):
         headers to pass to Github API.
 
     ruleset_params
-        number of returned results (max 100).
+        The ruleset definition. Must contain at least ``name`` and
+        ``enforcement``.
 
     CLI Example:
 
@@ -2076,25 +1597,18 @@ def add_ruleset(profile="github", **kwargs):
 
         salt myminion github.add_ruleset
     """
-    action, header_dict, params = _check_ruleset_params(
-        profile, require_params={"name", "enforcement"}, **kwargs
-    )
-
+    params = _resolve_ruleset_params(profile, require_params=True, **kwargs)
+    params.pop("ruleset_id", None)
+    ruleset_params = params.pop("ruleset_params")
+    gh_rulesets.check_params(ruleset_params, required={"name", "enforcement"})
     try:
-        ret = _query(
-            profile,
-            action,
-            method="POST",
-            data=params["ruleset_params"],
-            header_dict=header_dict,
+        return gh_rulesets.create(
+            _get_conn(profile), ruleset_params, params.pop("ruleset_type"), **params
         )
-        if not ret.get("error"):
-            return ret["dict"]
-        ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
-        ret["result"] = False
+    except GitHubApiError as err:
+        return _ruleset_error_ret(err)
     except CommandExecutionError:
-        ret = {"result": False, "comment": "Error adding ruleset"}
-    return ret
+        return {"result": False, "comment": "Error adding ruleset"}
 
 
 def list_rulesets(profile="github", *, per_page=None, **kwargs):
@@ -2128,18 +1642,20 @@ def list_rulesets(profile="github", *, per_page=None, **kwargs):
 
         salt myminion github.list_rulesets
     """
-    action, header_dict, _ = _check_ruleset_params(profile, **kwargs)
+    params = _resolve_ruleset_params(profile, **kwargs)
+    params.pop("ruleset_id", None)
+    params.pop("ruleset_params", None)
     try:
         per_page = per_page if per_page is not None else _get_config_value(profile, "per_page")
     except CommandExecutionError:
         per_page = None
 
     try:
-        ret = _query(profile, action, header_dict=header_dict, per_page=per_page)
-        if not ret.get("error"):
-            return {"rulesets": ret["dict"] or None}
-        ret["comment"] = f"GitHub Response Status Code: {ret.get('error')}"
-        ret["result"] = False
+        rulesets = gh_rulesets.list_all(
+            _get_conn(profile), params.pop("ruleset_type"), per_page=per_page, **params
+        )
+        return {"rulesets": rulesets or None}
+    except GitHubApiError as err:
+        return _ruleset_error_ret(err)
     except CommandExecutionError:
-        ret = {"result": False, "comment": "Error getting rulesets"}
-    return ret
+        return {"result": False, "comment": "Error getting rulesets"}

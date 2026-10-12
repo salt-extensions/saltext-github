@@ -1,11 +1,22 @@
 """
-Connection library for GitHub
+Connection library for GitHub.
+
+The submodules of this package provide reusable primitives for talking
+to the GitHub API on behalf of an organization, built around
+:class:`~saltext.github.utils.github.client.GitHubConnection`.
+They raise :class:`~saltext.github.utils.github.exceptions.GitHubApiError`
+(or its more specific subclass
+:class:`~saltext.github.utils.github.exceptions.GitHubNotFoundError`)
+on API errors.
 """
 
 import logging
 
 import salt.utils.http
 import salt.utils.json
+
+from saltext.github.utils.github.exceptions import GitHubApiError  # noqa: F401
+from saltext.github.utils.github.exceptions import GitHubNotFoundError  # noqa: F401
 
 log = logging.getLogger(__name__)
 
