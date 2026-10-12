@@ -3,9 +3,10 @@ Verify that all module functions honor a non-default profile, including
 internal cache refreshes (which used to fall back to the default profile).
 """
 
-import github as pygithub
 import pytest
 from salt.exceptions import CommandExecutionError
+
+from saltext.github.utils.github.exceptions import GitHubNotFoundError
 
 
 @pytest.fixture(scope="module")
@@ -25,7 +26,7 @@ def test_add_team_uses_profile(github, fake_org):
 
 def test_module_functions_honor_profile(github):
     assert set(github.list_repos(profile="primary")) == {"repo-a", "repo-b"}
-    with pytest.raises(pygithub.UnknownObjectException):
+    with pytest.raises(GitHubNotFoundError):
         github.list_repos()
 
 
