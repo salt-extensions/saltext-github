@@ -144,6 +144,12 @@ class APIBase:
             headers["Link"] = (
                 f"<{self.base_url}{path}?per_page={per_page}&page={page + 1}>; " f'rel="next"'
             )
+        elif page > 1:
+            # Like the real API, later pages always carry a Link header,
+            # even when there is no next page.
+            headers["Link"] = (
+                f"<{self.base_url}{path}?per_page={per_page}&page={page - 1}>; " f'rel="prev"'
+            )
         return status, headers, chunk
 
     # ------------------------------------------------------------------

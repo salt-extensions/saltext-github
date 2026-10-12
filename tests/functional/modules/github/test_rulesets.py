@@ -87,3 +87,18 @@ def test_delete_ruleset(github, fake_org):
 def test_delete_ruleset_missing(github):
     ret = github.delete_ruleset(ruleset_type="org", ruleset_id=999)
     assert ret["result"] is False
+
+
+def test_list_rulesets_invalid_type(github):
+    with pytest.raises(CommandExecutionError, match="Invalid ruleset type"):
+        github.list_rulesets(ruleset_type="bogus")
+
+
+def test_list_rulesets_ignores_non_mapping_header_dict(github):
+    ret = github.list_rulesets(ruleset_type="org", header_dict="bogus")
+    assert [ruleset["name"] for ruleset in ret["rulesets"]] == ["org-rules"]
+
+
+def test_add_ruleset_params_must_be_mapping(github):
+    with pytest.raises(CommandExecutionError, match="need to be a dict"):
+        github.add_ruleset(ruleset_type="org", ruleset_params="bogus")

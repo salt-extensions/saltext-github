@@ -416,6 +416,8 @@ def get_issue_comments(issue_number, repo_name=None, profile="github", since=Non
         args["since"] = since
 
     comments = _query(profile, action=action, command=command, args=args)
+    if comments.get("error"):
+        raise CommandExecutionError(comments["error"])
 
     ret = {}
     for comment in comments.get("dict", {}):
@@ -548,6 +550,8 @@ def get_issues(
 
     ret = {}
     issues = _query(profile, action=action, command="issues", args=args)
+    if issues.get("error"):
+        raise CommandExecutionError(issues["error"])
 
     for issue in issues.get("dict", {}):
         # Pull requests are included in the issue list from GitHub
@@ -630,6 +634,8 @@ def get_milestones(
 
     ret = {}
     milestones = _query(profile, action=action, command="milestones", args=args)
+    if milestones.get("error"):
+        raise CommandExecutionError(milestones["error"])
 
     for milestone in milestones.get("dict", {}):
         milestone_id = milestone.get("id")
@@ -1467,7 +1473,8 @@ def is_team_member(name, team_name, profile="github"):
 
         salt myminion github.is_team_member 'user_name' 'team_name'
     """
-    return name.lower() in list_team_members(team_name, profile=profile)
+    # list_team_members returns False for missing teams
+    return name.lower() in (list_team_members(team_name, profile=profile) or [])
 
 
 def add_team_member(name, team_name, profile="github"):
@@ -1689,6 +1696,8 @@ def get_prs(
 
     ret = {}
     prs = _query(profile, action=action, command="pulls", args=args)
+    if prs.get("error"):
+        raise CommandExecutionError(prs["error"])
 
     for pr_ in prs.get("dict", {}):
         pr_id = pr_.get("id")

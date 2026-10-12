@@ -1,0 +1,1 @@
+Fixed ``get_issues``, ``get_issue_comments``, ``get_prs`` and ``get_milestones`` crashing with an ``AttributeError`` when the API returned an error. They now raise a ``CommandExecutionError`` carrying the API error message.

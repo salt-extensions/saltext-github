@@ -9,69 +9,111 @@ def _instant_sleep(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
 
 
-def test_repo_present_create(github, fake_org, _instant_sleep):
-    ret = github.repo_present(name="new-repo", description="Fancy")
-    assert ret.result is True
+def test_repo_present_create(github, fake_github, fake_org, _instant_sleep, testmode):
+    before = len(fake_github.mutations())
+    ret = github.repo_present(name="new-repo", description="Fancy", test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
     assert "repo" in ret.changes
-    assert fake_org.get_repo("new-repo").description == "Fancy"
+    assert (len(fake_github.mutations()) == before) is testmode
+    if testmode:
+        with pytest.raises(NotFound):
+            fake_org.get_repo("new-repo")
+    else:
+        assert fake_org.get_repo("new-repo").description == "Fancy"
 
 
-def test_repo_present_idempotent(github):
-    ret = github.repo_present(name="repo-a", description="Test repo repo-a")
+def test_repo_present_idempotent(github, testmode):
+    ret = github.repo_present(name="repo-a", description="Test repo repo-a", test=testmode)
     assert ret.result is True
     assert not ret.changes
 
 
-def test_repo_present_converges_drift(github, fake_org):
-    ret = github.repo_present(name="repo-a", description="Managed description")
-    assert ret.result is True
+def test_repo_present_converges_drift(github, fake_github, fake_org, testmode):
+    before = len(fake_github.mutations())
+    ret = github.repo_present(name="repo-a", description="Managed description", test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
     assert "repo" in ret.changes
-    assert fake_org.get_repo("repo-a").description == "Managed description"
+    assert (len(fake_github.mutations()) == before) is testmode
+    expected = "Test repo repo-a" if testmode else "Managed description"
+    assert fake_org.get_repo("repo-a").description == expected
+    if not testmode:
+        rerun = github.repo_present(name="repo-a", description="Managed description")
+        assert rerun.result is True
+        assert not rerun.changes
 
-    rerun = github.repo_present(name="repo-a", description="Managed description")
-    assert rerun.result is True
-    assert not rerun.changes
 
-
-def test_repo_present_test_mode(github, fake_github, fake_org):
+def test_repo_present_create_with_teams(github, fake_github, fake_org, _instant_sleep, testmode):
     before = len(fake_github.mutations())
-    ret = github.repo_present(name="ghost-repo", description="Would be", test=True)
-    assert ret.result is None
-    assert ret.changes
-    assert len(fake_github.mutations()) == before
-    with pytest.raises(NotFound):
-        fake_org.get_repo("ghost-repo")
-
-
-def test_repo_present_manages_teams(github, fake_org):
-    ret = github.repo_present(name="repo-a", teams={"Team A": "push"})
-    assert ret.result is True
+    ret = github.repo_present(name="new-repo", teams={"Team A": "push"}, test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
+    assert "repo" in ret.changes
     assert "Team A" in ret.changes
-    team_a = fake_org.get_team("team-a")
-    assert team_a.repos["repo-a"] == "push"
-
-    # An empty teams dict removes the repo from unlisted teams
-    removal = github.repo_present(name="repo-a", teams={})
-    assert removal.result is True
-    assert "Team A" in removal.changes
-    assert "repo-a" not in fake_org.get_team("team-a").repos
+    assert (len(fake_github.mutations()) == before) is testmode
+    if testmode:
+        assert "new-repo" not in fake_org.repos
+    else:
+        assert fake_org.get_team("team-a").repos["new-repo"] == "push"
 
 
-def test_repo_absent(github, fake_org):
-    ret = github.repo_absent(name="repo-a")
-    assert ret.result is True
-    assert ret.changes
-    with pytest.raises(NotFound):
-        fake_org.get_repo("repo-a")
-
-    rerun = github.repo_absent(name="repo-a")
-    assert rerun.result is True
-    assert not rerun.changes
-
-
-def test_repo_absent_test_mode(github, fake_github, fake_org):
+def test_repo_present_adds_repo_to_team(github, fake_github, fake_org, testmode):
     before = len(fake_github.mutations())
-    ret = github.repo_absent(name="repo-b", test=True)
-    assert ret.result is None
-    assert len(fake_github.mutations()) == before
-    fake_org.get_repo("repo-b")
+    ret = github.repo_present(name="repo-b", teams={"Team A": "push"}, test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
+    assert "Team A" in ret.changes
+    assert (len(fake_github.mutations()) == before) is testmode
+    team = fake_org.get_team("team-a")
+    if testmode:
+        assert "repo-b" not in team.repos
+    else:
+        assert team.repos["repo-b"] == "push"
+
+
+def test_repo_present_team_permission_change(github, fake_github, fake_org, testmode):
+    before = len(fake_github.mutations())
+    ret = github.repo_present(name="repo-a", teams={"Team A": "push"}, test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
+    assert "Team A" in ret.changes
+    assert (len(fake_github.mutations()) == before) is testmode
+    expected = "pull" if testmode else "push"
+    assert fake_org.get_team("team-a").repos["repo-a"] == expected
+
+
+def test_repo_present_team_removal(github, fake_github, fake_org, testmode):
+    # An empty teams dict removes the repo from unlisted teams
+    before = len(fake_github.mutations())
+    ret = github.repo_present(name="repo-a", teams={}, test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
+    assert "Team A" in ret.changes
+    assert (len(fake_github.mutations()) == before) is testmode
+    assert ("repo-a" in fake_org.get_team("team-a").repos) is testmode
+
+
+def test_repo_present_missing_team(github):
+    ret = github.repo_present(name="repo-b", teams={"Ghost": "pull"})
+    assert ret.result is False
+    assert "Failed" in ret.comment
+
+
+def test_repo_absent(github, fake_github, fake_org, testmode):
+    before = len(fake_github.mutations())
+    ret = github.repo_absent(name="repo-a", test=testmode)
+    assert ret.result is not False
+    assert (ret.result is None) is testmode
+    assert (len(fake_github.mutations()) == before) is testmode
+    assert ret.changes == {"old": "Repo repo-a exists", "new": "Repo repo-a deleted"}
+    if testmode:
+        assert "will be deleted" in ret.comment
+        fake_org.get_repo("repo-a")
+    else:
+        with pytest.raises(NotFound):
+            fake_org.get_repo("repo-a")
+
+        rerun = github.repo_absent(name="repo-a")
+        assert rerun.result is True
+        assert not rerun.changes

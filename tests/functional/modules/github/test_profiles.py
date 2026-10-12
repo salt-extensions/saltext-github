@@ -5,6 +5,7 @@ internal cache refreshes (which used to fall back to the default profile).
 
 import github as pygithub
 import pytest
+from salt.exceptions import CommandExecutionError
 
 
 @pytest.fixture(scope="module")
@@ -26,3 +27,8 @@ def test_module_functions_honor_profile(github):
     assert set(github.list_repos(profile="primary")) == {"repo-a", "repo-b"}
     with pytest.raises(pygithub.UnknownObjectException):
         github.list_repos()
+
+
+def test_unconfigured_profile(github):
+    with pytest.raises(CommandExecutionError, match="could not be found"):
+        github.list_repos(profile="unconfigured")

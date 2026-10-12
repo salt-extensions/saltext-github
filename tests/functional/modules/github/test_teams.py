@@ -46,6 +46,35 @@ def test_remove_team_missing(github):
     assert github.remove_team("ghost") is False
 
 
+def test_add_team_duplicate(github):
+    # The API refuses to create a team whose slug already exists
+    assert github.add_team("Team A") is False
+
+
+def test_edit_team_missing(github):
+    assert github.edit_team("ghost", description="Nope") is False
+
+
+def test_edit_team_privacy_permission(github, fake_org):
+    assert github.edit_team("Team A", privacy="secret", permission="push") is True
+    team = fake_org.get_team("team-a")
+    assert team.privacy == "secret"
+    assert team.permission == "push"
+
+
+def test_edit_team_stale_cache(github, fake_org):
+    # A team known to the module cache but deleted on the server side
+    github.list_teams()
+    fake_org.remove_team("team-a")
+    assert github.edit_team("Team A", description="Nope") is False
+
+
+def test_remove_team_stale_cache(github, fake_org):
+    github.list_teams()
+    fake_org.remove_team("team-a")
+    assert github.remove_team("Team A") is False
+
+
 def test_list_team_repos(github):
     ret = github.list_team_repos("Team A")
     assert set(ret) == {"repo-a"}
@@ -80,6 +109,73 @@ def test_add_team_member(github, fake_org):
 def test_remove_team_member(github, fake_org):
     assert github.remove_team_member("user1", "Team A") is True
     assert "user1" not in fake_org.get_team("team-a").members
+
+
+def test_list_team_repos_missing_team(github):
+    assert github.list_team_repos("ghost") is False
+
+
+def test_list_team_repos_uses_cache(github, fake_org):
+    assert set(github.list_team_repos("Team A")) == {"repo-a"}
+    fake_org.get_team("team-a").add_repo("repo-b", "admin")
+    # Cached result is returned until the cache is bypassed
+    assert set(github.list_team_repos("Team A")) == {"repo-a"}
+    refreshed = github.list_team_repos("Team A", ignore_cache=True)
+    assert set(refreshed) == {"repo-a", "repo-b"}
+    assert refreshed["repo-b"]["permission"] == "admin"
+
+
+def test_list_team_repos_stale_cache(github, fake_org):
+    # A team known to the module cache but deleted on the server side
+    github.list_teams()
+    fake_org.remove_team("team-a")
+    assert github.list_team_repos("Team A") == {}
+
+
+def test_list_team_members_missing_team(github):
+    assert github.list_team_members("ghost") is False
+
+
+def test_list_team_members_stale_cache(github, fake_org):
+    github.list_teams()
+    fake_org.remove_team("team-a")
+    assert github.list_team_members("Team A") == []
+
+
+def test_is_team_member_missing_team(github):
+    assert github.is_team_member("user1", "ghost") is False
+
+
+def test_add_team_repo_missing_team(github):
+    assert github.add_team_repo("repo-a", "ghost") is False
+
+
+def test_add_team_repo_missing_repo(github):
+    assert github.add_team_repo("ghost", "Team A") is False
+
+
+def test_remove_team_repo_missing_team(github):
+    assert github.remove_team_repo("repo-a", "ghost") is False
+
+
+def test_remove_team_repo_missing_repo(github):
+    assert github.remove_team_repo("ghost", "Team A") is False
+
+
+def test_add_team_member_missing_team(github):
+    assert github.add_team_member("user1", "ghost") is False
+
+
+def test_add_team_member_missing_user(github):
+    assert github.add_team_member("ghost", "Team A") is False
+
+
+def test_remove_team_member_missing_team(github):
+    assert github.remove_team_member("user1", "ghost") is False
+
+
+def test_remove_team_member_missing_user(github):
+    assert github.remove_team_member("ghost", "Team A") is False
 
 
 def test_list_members_without_mfa(github, fake_github):

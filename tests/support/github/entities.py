@@ -548,6 +548,56 @@ class Repo(Entity):
             raise exc(f"Milestone with number {number} does not exist for repo {self.data.repo_id}")
         return Milestone(self.gh, self.gh.milestones[self.data.repo_id][number])
 
+    @property
+    def issues(self) -> "EntityView[str, Issue]":
+        return EntityView(
+            {
+                data.title: Issue(self.gh, data)
+                for data in self.gh.issues[self.data.repo_id].values()
+            }
+        )
+
+    @property
+    def pulls(self) -> "EntityView[str, PullRequest]":
+        return EntityView(
+            {
+                data.title: PullRequest(self.gh, data)
+                for data in self.gh.pulls[self.data.repo_id].values()
+            }
+        )
+
+    def add_issue(self, title: str, creator: User | UserData | UserName, **params) -> "Issue":
+        issue = IssueData(
+            title,
+            self.data.repo_id,
+            creator if isinstance(creator, UserName) else creator.login,
+            **params,
+        )
+        return self.gh.add(issue)
+
+    def get_issue(self, number: int | str, *, exc=NotFound) -> "Issue":
+        number = int(number)
+        if number not in self.gh.issues[self.data.repo_id]:
+            raise exc(f"Issue with number {number} does not exist for repo {self.data.repo_id}")
+        return Issue(self.gh, self.gh.issues[self.data.repo_id][number])
+
+    def add_pull(self, title: str, creator: User | UserData | UserName, **params) -> "PullRequest":
+        pull = PullRequestData(
+            title,
+            self.data.repo_id,
+            creator if isinstance(creator, UserName) else creator.login,
+            **params,
+        )
+        return self.gh.add(pull)
+
+    def get_pull(self, number: int | str, *, exc=NotFound) -> "PullRequest":
+        number = int(number)
+        if number not in self.gh.pulls[self.data.repo_id]:
+            raise exc(
+                f"Pull request with number {number} does not exist for repo {self.data.repo_id}"
+            )
+        return PullRequest(self.gh, self.gh.pulls[self.data.repo_id][number])
+
     def team_payload(self, permission, /, **ovrr):
         rend = self.payload()
         rend["permissions"] = {
@@ -715,6 +765,165 @@ class Ruleset(Entity):
             "Repository" if isinstance(self.data, RepoRulesetData) else "Organization"
         )
         return rend | ovrr
+
+
+@dataclass
+class IssueCommentData(EntityData):
+    issue: int
+    repo: RepoId
+    creator: UserName
+    body: str
+    _: KW_ONLY
+    created_at: str = CREATED_AT
+    updated_at: str = CREATED_AT
+
+    def __post_init__(self):
+        # Comments carry no login/name/title, derive the ID from their contents.
+        self.id = zlib.crc32(f"{type(self).__name__}/{self.repo}#{self.issue}/{self.body}".encode())
+
+
+@dataclass
+class IssueComment(Entity):
+    data: IssueCommentData
+
+    @property
+    def user(self) -> User:
+        return self.gh.get_user(self.data.creator)
+
+    def payload(self, /, **ovrr):
+        rend = asdict(self.data)
+        rend.pop("issue")
+        rend.pop("repo")
+        rend.pop("creator")
+        return (
+            rend
+            | {
+                "url": f"{self.gh.base_url}/repos/{self.data.repo}/issues/comments/{self.data.id}",
+                "html_url": (
+                    f"https://github.example.com/{self.data.repo}/issues/"
+                    f"{self.data.issue}#issuecomment-{self.data.id}"
+                ),
+                "user": self.user.payload(),
+            }
+            | ovrr
+        )
+
+
+@dataclass
+class IssueData(EntityData):
+    title: str
+    repo: RepoId
+    creator: UserName
+    number: int = -1
+    _: KW_ONLY
+    state: str = "open"
+    body: str = ""
+    labels: list[str] = field(default_factory=list)
+    assignee: UserName | None = None
+    milestone: str | None = None  # milestone title
+    created_at: str = CREATED_AT
+    updated_at: str = CREATED_AT
+    comments: dict[int, IssueCommentData] = field(default_factory=dict)
+
+
+@dataclass
+class Issue(Entity):
+    data: IssueData
+
+    @property
+    def user(self) -> User:
+        return self.gh.get_user(self.data.creator)
+
+    @property
+    def comment_list(self) -> "EntityView[int, IssueComment]":
+        return EntityView(
+            {cid: IssueComment(self.gh, data) for cid, data in self.data.comments.items()}
+        )
+
+    def add_comment(self, creator: User | UserData | UserName, body: str, **params) -> IssueComment:
+        login = creator if isinstance(creator, UserName) else creator.login
+        comment = IssueCommentData(self.data.number, self.data.repo, login, body, **params)
+        self.data.comments[comment.id] = comment
+        return IssueComment(self.gh, comment)
+
+    def payload(self, /, **ovrr):
+        rend = asdict(self.data)
+        rend.pop("comments")
+        rend.pop("creator")
+        rend.pop("repo")
+        rend["labels"] = [{"name": label} for label in self.data.labels]
+        rend["assignee"] = {"login": self.data.assignee} if self.data.assignee else None
+        rend["milestone"] = {"title": self.data.milestone} if self.data.milestone else None
+        return (
+            rend
+            | {
+                "url": f"{self.gh.base_url}/repos/{self.data.repo}/issues/{self.data.number}",
+                "html_url": f"https://github.example.com/{self.data.repo}/issues/{self.data.number}",
+                "user": self.user.payload(),
+            }
+            | ovrr
+        )
+
+
+@dataclass
+class PullRequestData(EntityData):
+    title: str
+    repo: RepoId
+    creator: UserName
+    number: int = -1
+    _: KW_ONLY
+    state: str = "open"
+    body: str = ""
+    base: str = "main"
+    head: str = "feature"
+    created_at: str = CREATED_AT
+    updated_at: str = CREATED_AT
+
+
+@dataclass
+class PullRequest(Entity):
+    data: PullRequestData
+
+    @property
+    def user(self) -> User:
+        return self.gh.get_user(self.data.creator)
+
+    def payload(self, /, **ovrr):
+        rend = asdict(self.data)
+        rend.pop("creator")
+        rend.pop("repo")
+        rend["base"] = {"ref": self.data.base}
+        rend["head"] = {"ref": self.data.head}
+        return (
+            rend
+            | {
+                "url": f"{self.gh.base_url}/repos/{self.data.repo}/pulls/{self.data.number}",
+                "html_url": f"https://github.example.com/{self.data.repo}/pull/{self.data.number}",
+                "user": self.user.payload(),
+            }
+            | ovrr
+        )
+
+    def issue_payload(self, /, **ovrr):
+        """
+        Render the pull request as it appears in the issues list, which
+        includes pull requests marked with a ``pull_request`` key.
+        """
+        rend = self.payload()
+        rend.pop("base")
+        rend.pop("head")
+        return (
+            rend
+            | {
+                "labels": [],
+                "assignee": None,
+                "milestone": None,
+                "pull_request": {
+                    "url": f"{self.gh.base_url}/repos/{self.data.repo}/pulls/{self.data.number}",
+                },
+            }
+            | ovrr
+        )
 
 
 @dataclass

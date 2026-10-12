@@ -1,0 +1,1 @@
+All states now report the projected changes in test mode, matching the changes reported on actual application. Exception: ``team_present`` does not project member/repo changes for teams that do not exist yet.
