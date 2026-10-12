@@ -8,6 +8,13 @@ def test_list_repos(github):
     assert set(github.list_repos()) == {"repo-a", "repo-b"}
 
 
+def test_list_repos_uses_cache(github, fake_org):
+    assert set(github.list_repos()) == {"repo-a", "repo-b"}
+    fake_org.add_repo("repo-c")
+    # The repo list is cached (and offers no cache bypass)
+    assert set(github.list_repos()) == {"repo-a", "repo-b"}
+
+
 def test_list_private_repos(github):
     assert github.list_private_repos() == ["repo-b"]
 

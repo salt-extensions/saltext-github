@@ -40,6 +40,13 @@ def test_get_ruleset(github, fake_org):
     assert ret["enforcement"] == "disabled"
 
 
+def test_get_ruleset_org(github, fake_org):
+    rs_id = fake_org.rulesets["org-rules"].id
+    ret = github.get_ruleset(ruleset_type="org", ruleset_id=rs_id)
+    assert ret["name"] == "org-rules"
+    assert ret["enforcement"] == "active"
+
+
 def test_get_ruleset_missing(github):
     ret = github.get_ruleset(ruleset_type="org", ruleset_id=999)
     assert ret["result"] is False
@@ -51,6 +58,15 @@ def test_add_ruleset(github, fake_org):
     ret = github.add_ruleset(ruleset_type="org", ruleset_params=params)
     assert ret["id"]
     assert next(rs for rs in fake_org.rulesets if rs.id == ret["id"]).name == "new-rules"
+
+
+def test_add_ruleset_repo(github, fake_org):
+    params = {"name": "more-rules", "enforcement": "active"}
+    ret = github.add_ruleset(
+        ruleset_type="repo", owner="testorg", repo_name="repo-b", ruleset_params=params
+    )
+    assert ret["id"]
+    assert "more-rules" in fake_org.get_repo("repo-b").rulesets
 
 
 def test_add_ruleset_requires_enforcement(github):

@@ -1,3 +1,10 @@
+from tests.support.github import Team
+
+
+def _raise_api_error(*args, **kwargs):
+    raise RuntimeError("induced API failure")
+
+
 def test_list_teams(github, fake_github):
     ret = github.list_teams()
     assert "Team A" in ret
@@ -10,6 +17,14 @@ def test_list_teams(github, fake_github):
         "/orgs/testorg",
         "/orgs/testorg/teams",
     ]
+
+
+def test_list_teams_uses_cache(github, fake_org):
+    assert "Team A" in github.list_teams()
+    fake_org.add_team("Team B")
+    # Cached result is returned until the cache is bypassed
+    assert "Team B" not in github.list_teams()
+    assert "Team B" in github.list_teams(ignore_cache=True)
 
 
 def test_get_team(github):
@@ -151,12 +166,26 @@ def test_is_team_member_missing_team(github):
     assert github.is_team_member("user1", "ghost") is False
 
 
+def test_list_team_members_uses_cache(github, fake_org):
+    assert github.list_team_members("Team A") == ["user1"]
+    fake_org.get_team("team-a").add_member("user2")
+    # Cached result is returned until the cache is bypassed
+    assert github.list_team_members("Team A") == ["user1"]
+    assert sorted(github.list_team_members("Team A", ignore_cache=True)) == ["user1", "user2"]
+
+
 def test_add_team_repo_missing_team(github):
     assert github.add_team_repo("repo-a", "ghost") is False
 
 
 def test_add_team_repo_missing_repo(github):
     assert github.add_team_repo("ghost", "Team A") is False
+
+
+def test_add_team_repo_api_failure(github, monkeypatch):
+    # The fake responds with an error status when the operation raises
+    monkeypatch.setattr(Team, "add_repo", _raise_api_error)
+    assert github.add_team_repo("repo-b", "Team A", permission="push") is False
 
 
 def test_remove_team_repo_missing_team(github):
@@ -175,12 +204,31 @@ def test_add_team_member_missing_user(github):
     assert github.add_team_member("ghost", "Team A") is False
 
 
+def test_add_team_member_api_failure(github, monkeypatch):
+    monkeypatch.setattr(Team, "add_member", _raise_api_error)
+    assert github.add_team_member("user2", "Team A") is False
+
+
+def test_remove_team_member_not_removed(github, monkeypatch):
+    # The API reports success, but the member is still present afterwards
+    monkeypatch.setattr(Team, "remove_member", lambda *args, **kwargs: None)
+    assert github.remove_team_member("user1", "Team A") is False
+
+
 def test_remove_team_member_missing_team(github):
     assert github.remove_team_member("user1", "ghost") is False
 
 
 def test_remove_team_member_missing_user(github):
     assert github.remove_team_member("ghost", "Team A") is False
+
+
+def test_list_members_without_mfa_uses_cache(github, fake_state):
+    assert github.list_members_without_mfa() == ["user2"]
+    fake_state.get_user("user1").data.two_factor_authentication = False
+    # Cached result is returned until the cache is bypassed
+    assert github.list_members_without_mfa() == ["user2"]
+    assert sorted(github.list_members_without_mfa(ignore_cache=True)) == ["user1", "user2"]
 
 
 def test_list_members_without_mfa(github, fake_github):

@@ -66,6 +66,10 @@ def test_get_issues_filter_args(github, fake_github, repo_a):
         assert req.query[key] == value
 
 
+def test_get_issues_label_filter_mismatch(github):
+    assert github.get_issues("repo-a", labels="nonexistent") == {}
+
+
 def test_get_issues_repo_name_from_profile(github, repo_a):
     bug = repo_a.issues["Found a bug"]
     assert bug.id in github.get_issues()

@@ -9,6 +9,7 @@ from tests.support.github.entities import NotFound
 from tests.support.github.entities import OrgName
 from tests.support.github.entities import RepoId
 from tests.support.github.entities import Team
+from tests.support.github.entities import TeamMember
 from tests.support.github.routing import DELETE
 from tests.support.github.routing import GET
 from tests.support.github.routing import PATCH
@@ -18,14 +19,15 @@ from tests.support.github.routing import PUT
 
 def _team_uris(resource=""):
     """
-    Render the three URI flavors (modern by slug, modern by ID, legacy by ID)
-    of a team resource. Repos are addressed by full name in all flavors.
+    Render the two URI flavors (by slug, by ID) of a team resource.
+    The deprecated legacy ``/teams/{team_id}/...`` paths are intentionally
+    unsupported so that their usage fails tests with a 404.
+    Repos are addressed by full name in both flavors.
     """
     resource = resource.replace("<repo>", "<owner>/<repo>")
-    modern_slug = f"orgs/<org>/teams/<team_slug>/{resource}".rstrip("/")
-    modern_id = f"organizations/<org_id>/team/<team_id>/{resource}".rstrip("/")
-    legacy = f"teams/<team_id>/{resource}".rstrip("/")
-    return modern_slug, modern_id, legacy
+    by_slug = f"orgs/<org>/teams/<team_slug>/{resource}".rstrip("/")
+    by_id = f"organizations/<org_id>/team/<team_id>/{resource}".rstrip("/")
+    return by_slug, by_id
 
 
 class TeamRoutes(APIBase):
@@ -124,34 +126,16 @@ class TeamRoutes(APIBase):
             member.user.payload() for member in sorted(team.members, key=lambda x: x.data.login)
         ]
 
-    @GET("teams/<team_id>/members/<login>")
-    def _team_is_member(self, match, query, body):
-        # legacy only
-        team = self._resolve_team(match)
-        login = match["login"]
-        if login in team.data.members:
-            return 204
-        raise NotFound(login)
-
     @GET(*_team_uris("memberships/<login>"))
     def _team_get_member(self, match, query, body):
         team = self._resolve_team(match)
         login = match["login"]
         if login in team.data.members:
-            return 204
+            return 200, TeamMember(self.state, team.data.members[login]).payload()
         raise NotFound(login)
 
-    @DELETE(
-        "orgs/<org>/teams/<team_slug>/memberships/<login>",
-        "teams/<team_id>/memberships/<login>",
-    )
+    @DELETE(*_team_uris("memberships/<login>"))
     def _delete_membership(self, match, query, body):
-        team = self._resolve_team(match)
-        team.remove_member(match["login"])
-        return 204
-
-    @DELETE(*_team_uris("members/<login>"))
-    def _team_remove_member_legacy(self, match, query, body):
         team = self._resolve_team(match)
         team.remove_member(match["login"])
         return 204

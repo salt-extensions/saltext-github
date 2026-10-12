@@ -83,6 +83,14 @@ def test_repo_present_team_permission_change(github, fake_github, fake_org, test
     assert fake_org.get_team("team-a").repos["repo-a"] == expected
 
 
+def test_repo_present_team_permission_unchanged(github, fake_github, fake_org, testmode):
+    ret = github.repo_present(name="repo-a", teams={"Team A": "pull"}, test=testmode)
+    assert ret.result is True
+    assert not ret.changes
+    assert not fake_github.mutations()
+    assert fake_org.get_team("team-a").repos["repo-a"] == "pull"
+
+
 def test_repo_present_team_removal(github, fake_github, fake_org, testmode):
     # An empty teams dict removes the repo from unlisted teams
     before = len(fake_github.mutations())
