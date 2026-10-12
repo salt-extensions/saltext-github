@@ -2,6 +2,14 @@ def test_list_users(github):
     assert sorted(github.list_users()) == ["user1", "user2"]
 
 
+def test_list_users_uses_cache(github, fake_org):
+    assert sorted(github.list_users()) == ["user1", "user2"]
+    fake_org.add_member("newuser")
+    # Cached result is returned until the cache is bypassed
+    assert sorted(github.list_users()) == ["user1", "user2"]
+    assert sorted(github.list_users(ignore_cache=True)) == ["newuser", "user1", "user2"]
+
+
 def test_get_user_member_shortcut(github):
     assert github.get_user("user1") is True
 

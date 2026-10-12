@@ -1158,7 +1158,7 @@ def edit_team(name, description=None, privacy=None, permission=None, profile="gi
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(team["id"])
+        team = organization.get_team_by_slug(team["slug"])
         team.edit(
             name,
             **filter_unset(
@@ -1198,7 +1198,7 @@ def remove_team(name, profile="github"):
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(team_info["id"])
+        team = organization.get_team_by_slug(team_info["slug"])
         team.delete()
         return list_teams(ignore_cache=True, profile=profile).get(name) is None
     except github.GithubException:
@@ -1238,7 +1238,7 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(cached_team["id"])
+        team = organization.get_team_by_slug(cached_team["slug"])
     except UnknownObjectException:
         log.exception("Resource not found: %s", cached_team["id"])
         return {}
@@ -1290,7 +1290,7 @@ def add_team_repo(repo_name, team_name, profile="github", permission=None):
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(team_info["id"])
+        team = organization.get_team_by_slug(team_info["slug"])
         repo = organization.get_repo(repo_name)
     except UnknownObjectException:
         log.exception("Resource not found: %s", team_info["id"])
@@ -1333,7 +1333,7 @@ def remove_team_repo(repo_name, team_name, profile="github"):
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(team_info["id"])
+        team = organization.get_team_by_slug(team_info["slug"])
         repo = organization.get_repo(repo_name)
     except UnknownObjectException:
         log.exception("Resource not found: %s", team_info["id"])
@@ -1372,7 +1372,7 @@ def list_team_members(team_name, profile="github", ignore_cache=False):
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(cached_team["id"])
+        team = organization.get_team_by_slug(cached_team["slug"])
     except UnknownObjectException:
         log.exception("Resource not found: %s", cached_team["id"])
         return []
@@ -1464,7 +1464,7 @@ def add_team_member(name, team_name, profile="github"):
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(team_info["id"])
+        team = organization.get_team_by_slug(team_info["slug"])
         member = client.get_user(name)
     except UnknownObjectException:
         log.exception("Resource not found: %s", team_info["id"])
@@ -1504,7 +1504,7 @@ def remove_team_member(name, team_name, profile="github"):
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        team = organization.get_team(team_info["id"])
+        team = organization.get_team_by_slug(team_info["slug"])
         member = client.get_user(name)
 
     except UnknownObjectException:
@@ -1512,7 +1512,12 @@ def remove_team_member(name, team_name, profile="github"):
         return False
 
     team.remove_membership(member)
-    return not team.has_in_members(member)
+    try:
+        # There is no non-deprecated endpoint for checking plain membership
+        team.get_team_membership(member)
+    except UnknownObjectException:
+        return True
+    return False
 
 
 def list_teams(profile="github", ignore_cache=False):

@@ -66,7 +66,7 @@ class RepoId(NamedTuple):
     def from_str(cls, inpt):
         try:
             owner, name = inpt.split("/", maxsplit=1)
-        except (AttributeError, ValueError) as err:
+        except (AttributeError, ValueError) as err:  # pragma: no cover
             raise TypeError(f"Invalid repo_id: {inpt=}") from err
         return cls(owner, name)
 
@@ -74,7 +74,7 @@ class RepoId(NamedTuple):
     def from_seq(cls, inpt):
         try:
             owner, name = inpt
-        except (TypeError, ValueError) as err:
+        except (TypeError, ValueError) as err:  # pragma: no cover
             raise TypeError(f"Invalid repo_id: {inpt=}") from err
         return cls(owner, name)
 
@@ -99,7 +99,7 @@ class EntityData:
             if key := getattr(self, attr, None):
                 self.id = zlib.crc32(f"{type(self).__name__}/{key}".encode())
                 return
-        raise RuntimeError("Cannot generate ID, missing login, name or title")
+        raise RuntimeError("Cannot generate ID, missing login, name or title")  # pragma: no cover
 
 
 @dataclass
@@ -444,7 +444,10 @@ class TeamMember(Entity):
         return (
             ret
             | {
-                "url": f"{self.gh.base_url}/teams/{self.team.id}/memberships/{self.data.login}",
+                "url": (
+                    f"{self.gh.base_url}/organizations/{self.org.id}"
+                    f"/team/{self.team.id}/memberships/{self.data.login}"
+                ),
             }
             | ovrr
         )
@@ -719,12 +722,14 @@ class Team(Entity):
         rend = asdict(self.data)
         rend.pop("members")
         rend.pop("repos")
+        org = self.org
         return (
             rend
             | {
-                "url": f"{self.gh.base_url}/teams/{self.data.id}",
+                # Like the real API, advertise the modern by-ID URL
+                "url": f"{self.gh.base_url}/organizations/{org.id}/team/{self.data.id}",
                 "html_url": f"https://github.example.com/orgs/{self.data.org}/teams/{self.data.slug}",
-                "organization": self.org.payload(),
+                "organization": org.payload(),
             }
             | ovrr
         )
