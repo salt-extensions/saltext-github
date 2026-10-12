@@ -1,0 +1,1 @@
+The execution module now exclusively relies on public PyGithub APIs instead of internal ones (``_requester``, ``_identity``, ``_rawData``, manual ``PaginatedList`` construction). The minimum supported PyGithub version is now 2.2.

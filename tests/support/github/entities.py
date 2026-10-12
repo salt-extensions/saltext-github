@@ -724,6 +724,7 @@ class Team(Entity):
             | {
                 "url": f"{self.gh.base_url}/teams/{self.data.id}",
                 "html_url": f"https://github.example.com/orgs/{self.data.org}/teams/{self.data.slug}",
+                "organization": self.org.payload(),
             }
             | ovrr
         )

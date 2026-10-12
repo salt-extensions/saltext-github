@@ -1,17 +1,5 @@
 """
-Github User State Module
-
-.. versionadded:: 2016.3.0
-
-This state is used to ensure presence of users in the Organization.
-
-.. code-block:: yaml
-
-    ensure user test is present in github:
-        github.present:
-            - name: 'Example TestUser1'
-            - email: example@domain.com
-            - username: 'gitexample'
+Manage organization teams/members, repositories and rulesets.
 """
 
 import datetime
@@ -29,7 +17,7 @@ def __virtual__():
     """
     if "github.list_users" in __salt__:
         return "github"
-    return (False, "github module could not be loaded")
+    return (False, "github module could not be loaded")  # pragma: no cover
 
 
 def present(name, profile="github", **kwargs):
@@ -40,9 +28,7 @@ def present(name, profile="github", **kwargs):
 
         ensure user test is present in github:
             github.present:
-                - name: 'gitexample'
-
-    The following parameters are required:
+                - name: gitexample
 
     name
         This is the github handle of the user in the organization
@@ -91,15 +77,12 @@ def absent(name, profile="github", **kwargs):
 
         ensure user test is absent in github:
             github.absent:
-                - name: 'Example TestUser1'
+                - name: Example TestUser1
                 - email: example@domain.com
-                - username: 'gitexample'
-
-    The following parameters are required:
+                - username: gitexample
 
     name
         Github handle of the user in organization
-
     """
 
     ret = {
@@ -166,27 +149,27 @@ def team_present(
         The names of repositories to add the team to.
 
     privacy
-        The level of privacy for the team, can be 'secret' or 'closed'. Defaults
+        The level of privacy for the team, can be ``secret`` or ``closed``. Defaults
         to secret.
 
     permission
         The default permission for new repositories added to the team, can be
-        'pull', 'push' or 'admin'. Defaults to pull.
+        ``pull``, ``push`` or ``admin``. Defaults to pull.
 
     members
         The members belonging to the team, specified as a dict of member name to
-        optional configuration. Options include 'enforce_mfa_from' and 'mfa_exempt'.
+        optional configuration. Options include ``enforce_mfa_from`` and ``mfa_exempt``.
 
     enforce_mfa
         Whether to enforce MFA requirements on members of the team. If True then
-        all members without `mfa_exempt: True` configured will be removed from
-        the team. Note that `no_mfa_grace_seconds` may be set to allow members
+        all members without ``mfa_exempt: True`` configured will be removed from
+        the team. Note that ``no_mfa_grace_seconds`` may be set to allow members
         a grace period.
 
     no_mfa_grace_seconds
         The number of seconds of grace time that a member will have to enable MFA
         before being removed from the team. The grace period will begin from
-        `enforce_mfa_from` on the member configuration, which defaults to
+        ``enforce_mfa_from`` on the member configuration, which defaults to
         1970/01/01.
 
     Example:
@@ -195,20 +178,18 @@ def team_present(
 
         Ensure team test is present in github:
             github.team_present:
-                - name: 'test'
+                - name: test
                 - members:
                     user1: {}
                     user2: {}
 
         Ensure team test_mfa is present in github:
             github.team_present:
-                - name: 'test_mfa'
+                - name: test_mfa
                 - members:
                     user1:
                         enforce_mfa_from: 2016/06/15
                 - enforce_mfa: True
-
-    .. versionadded:: 2016.11.0
     """
     ret = {"name": name, "changes": {}, "result": True, "comment": ""}
 
@@ -328,7 +309,9 @@ def team_present(
 
     manage_members = members is not None
 
-    mfa_deadline = datetime.datetime.utcnow() - datetime.timedelta(seconds=no_mfa_grace_seconds)
+    mfa_deadline = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(
+        seconds=no_mfa_grace_seconds
+    )
     members_no_mfa = __salt__["github.list_members_without_mfa"](profile=profile)
 
     members_lower = {}
@@ -417,7 +400,7 @@ def _member_violates_mfa(member, member_info, mfa_deadline, members_without_mfa)
         return False
     enforce_mfa_from = datetime.datetime.strptime(
         member_info.get("enforce_mfa_from", "1970/01/01"), "%Y/%m/%d"
-    )
+    ).replace(tzinfo=datetime.timezone.utc)
     return member.lower() in members_without_mfa and (mfa_deadline > enforce_mfa_from)
 
 
@@ -431,15 +414,11 @@ def team_absent(name, profile="github", **kwargs):
 
         ensure team test is present in github:
             github.team_absent:
-                - name: 'test'
+                - name: test
 
-
-    The following parameters are required:
 
     name
         This is the name of the team in the organization.
-
-    .. versionadded:: 2016.11.0
     """
     ret = {"name": name, "changes": {}, "result": None, "comment": ""}
 
@@ -521,9 +500,7 @@ def repo_present(
 
     teams
         The teams for which this repo should belong to, specified as a dict of
-        team name to permission ('pull', 'push' or 'admin').
-
-        .. versionadded:: 2017.7.0
+        team name to permission (``pull``, ``push`` or ``admin``).
 
     Example:
 
@@ -531,10 +508,8 @@ def repo_present(
 
         Ensure repo my-repo is present in github:
             github.repo_present:
-                - name: 'my-repo'
-                - description: 'My very important repository'
-
-    .. versionadded:: 2016.11.0
+                - name: my-repo
+                - description: My very important repository
     """
     ret = {"name": name, "changes": {}, "result": True, "comment": ""}
 
@@ -690,7 +665,7 @@ def repo_present(
                         f"Failed to determine current permission for team {team_name} in repo {name}"
                     )
                     return ret
-                elif current_permission != permission:
+                if current_permission != permission:
                     team_change = {
                         "old": f"Repo {name} in team {team_name} has permission {current_permission}",
                         "new": f"Repo {name} in team {team_name} has permission {permission}",
@@ -723,14 +698,10 @@ def repo_absent(name, profile="github", **kwargs):
 
         ensure repo test is absent in github:
             github.repo_absent:
-                - name: 'test'
-
-    The following parameters are required:
+                - name: test
 
     name
         This is the name of the repository in the organization.
-
-    .. versionadded:: 2016.11.0
     """
     ret = {"name": name, "changes": {}, "result": None, "comment": ""}
 
@@ -778,17 +749,16 @@ def ruleset_absent(
 
         ensure rulset test is absent in github:
             github.ruleset_absent:
-                - name: 'test'
-                - ruleset_type: 'repo'
+                - name: test
+                - ruleset_type: repo
                 - owner: test
                 - repo_name: test_repo
 
-    The following parameters are required:
-
     name
         name of the ruleset.
+
     ruleset_type
-        type of ruleset ('org' or 'repo')
+        type of ruleset (``org`` or ``repo``)
     """
 
     ret = {"name": name, "changes": {}, "result": None, "comment": ""}
@@ -867,15 +837,14 @@ def ruleset_present(
                     target: branch
                     enforcement: disabled
 
-    The following parameters are required:
-
     name
         name of the ruleset.
-    ruleset_type
-        type of ruleset ('org' or 'repo')
-    ruleset_params
-        parameters to set the ruleset rules. i.e {'enforcement': 'disabled'}
 
+    ruleset_type
+        type of ruleset (``org`` or ``repo``)
+
+    ruleset_params
+        parameters to set the ruleset rules. i.e ``{enforcement: disabled}``
     """
     ret = {"name": name, "changes": {}, "result": True, "comment": ""}
 

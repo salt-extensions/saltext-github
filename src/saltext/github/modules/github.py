@@ -8,7 +8,7 @@ Configuration
 
 Configure this module by specifying the name of a configuration
 profile in the minion config, minion pillar, or master config. The module
-will use the 'github' key by default, if defined.
+will use the ``github`` key by default, if defined.
 
 For example:
 
@@ -32,10 +32,10 @@ For example:
       api_url: https://api.github.com
 """
 
+import json
 import logging
 import re
 
-import salt.utils.json
 from salt.exceptions import CommandExecutionError
 
 from saltext.github.utils import filter_unset
@@ -43,14 +43,11 @@ from saltext.github.utils import filter_unset
 try:
     # pylint: disable=no-name-in-module
     import github
-    import github.NamedUser
-    import github.PaginatedList
-    import github.Repository
     from github.GithubException import UnknownObjectException
 
     # pylint: enable=no-name-in-module
     HAS_LIBS = True
-except ImportError:
+except ImportError:  # pragma: no cover
     HAS_LIBS = False
 
 log = logging.getLogger(__name__)
@@ -66,7 +63,7 @@ def __virtual__():
     """
     if HAS_LIBS:
         return __virtualname__
-    return (
+    return (  # pragma: no cover
         False,
         "The github execution module cannot be loaded: PyGithub library is not installed.",
     )
@@ -127,39 +124,17 @@ def _get_client(profile) -> github.Github:
     return __context__[key]
 
 
-def _get_members(organization, params=None):
-    return github.PaginatedList.PaginatedList(
-        github.NamedUser.NamedUser,
-        organization._requester,
-        organization.url + "/members",
-        params,
-    )
-
-
-def _get_repos(profile, params=None, ignore_cache=False):
-    # Use cache when no params are given
+def _get_repos(profile, ignore_cache=False):
     org_name = _get_config_value(profile, "org_name")
     key = f"github.{org_name}:repos"
 
-    if key not in __context__ or ignore_cache or params is not None:
-        org_name = _get_config_value(profile, "org_name")
+    if key not in __context__ or ignore_cache:
         client = _get_client(profile)
         organization = client.get_organization(org_name)
 
-        result = github.PaginatedList.PaginatedList(
-            github.Repository.Repository,
-            organization._requester,
-            organization.url + "/repos",
-            params,
-        )
-
-        # Only cache results if no params were given (full scan)
-        if params is not None:
-            return result
-
         next_result = []
 
-        for repo in result:
+        for repo in organization.get_repos():
             next_result.append(repo)
 
             # Cache a copy of each repo for single lookups
@@ -193,7 +168,7 @@ def list_users(profile="github", ignore_cache=False):
     if key not in __context__ or ignore_cache:
         client = _get_client(profile)
         organization = client.get_organization(org_name)
-        __context__[key] = [member.login for member in _get_members(organization, None)]
+        __context__[key] = [member.login for member in organization.get_members()]
     return __context__[key]
 
 
@@ -246,16 +221,14 @@ def get_user(name, profile="github", user_details=False):
     response["url"] = user.url
 
     try:
-        _, data = organization._requester.requestJsonAndCheck(
-            "GET", organization.url + "/memberships/" + user._identity
-        )
+        membership = user.get_organization_membership(organization)
     except UnknownObjectException:
         response["membership_state"] = "nonexistent"
         response["in_org"] = False
         return response
 
     response["in_org"] = organization.has_in_members(user)
-    response["membership_state"] = data.get("state")
+    response["membership_state"] = membership.state
 
     return response
 
@@ -286,8 +259,9 @@ def add_user(name, profile="github"):
         log.exception("Resource not found")
         return False
 
-    _, data = organization._requester.requestJsonAndCheck(
-        "PUT", organization.url + "/memberships/" + github_named_user._identity
+    # There is no public method that also returns the resulting membership state
+    _, data = client.requester.requestJsonAndCheck(
+        "PUT", organization.url + "/memberships/" + github_named_user.login
     )
 
     return data.get("state") == "pending"
@@ -768,14 +742,10 @@ def get_repo_info(repo_name, profile="github", ignore_cache=False):
     if key not in __context__ or ignore_cache:
         client = _get_client(profile)
         try:
+            # With lazy fetching, client.get_repo returns a Repository object
+            # even if the repo does not exist - the exception is only raised
+            # once attributes of the object are accessed.
             repo = client.get_repo("/".join([org_name, repo_name]))
-            if not repo:
-                return {}
-
-            # client.get_repo can return a github.Repository.Repository object,
-            # even if the repo is invalid. We need to catch the exception when
-            # we try to perform actions on the repo object, rather than above
-            # the if statement.
             ret = _repo_to_dict(repo)
 
             __context__[key] = ret
@@ -817,7 +787,7 @@ def get_repo_teams(repo_name, profile="github"):
         teams = repo.get_teams()
         for team in teams:
             ret.append({"id": team.id, "name": team.name, "permission": team.permission})
-    except github.UnknownObjectException as exc:
+    except github.UnknownObjectException as exc:  # pragma: no cover
         raise CommandExecutionError(
             f"Unable to retrieve teams for repository '{repo_name}' under the '{org_name}' organization."
         ) from exc
@@ -958,11 +928,7 @@ def add_repo(
                 "license_template": license_template,
             }
         )
-        parameters["name"] = name
-
-        organization._requester.requestJsonAndCheck(
-            "POST", organization.url + "/repos", input=parameters
-        )
+        organization.create_repo(name, **parameters)
         return True
     except github.GithubException:
         log.exception("Error creating a repo")
@@ -1028,21 +994,17 @@ def edit_repo(
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
         repo = organization.get_repo(name)
-
-        given_params = {
-            "description": description,
-            "homepage": homepage,
-            "private": private,
-            "has_issues": has_issues,
-            "has_wiki": has_wiki,
-            "has_downloads": has_downloads,
-        }
-        parameters = {"name": name}
-        for param_name, param_value in given_params.items():
-            if param_value is not None:
-                parameters[param_name] = param_value
-
-        organization._requester.requestJsonAndCheck("PATCH", repo.url, input=parameters)
+        parameters = filter_unset(
+            {
+                "description": description,
+                "homepage": homepage,
+                "private": private,
+                "has_issues": has_issues,
+                "has_wiki": has_wiki,
+                "has_downloads": has_downloads,
+            }
+        )
+        repo.edit(name, **parameters)
         get_repo_info(name, profile=profile, ignore_cache=True)  # Refresh cache
         return True
     except github.GithubException:
@@ -1124,11 +1086,11 @@ def add_team(
         The names of repositories to add the team to.
 
     privacy
-        The level of privacy for the team, can be 'secret' or 'closed'.
+        The level of privacy for the team, can be ``secret`` or ``closed``.
 
     permission
         The default permission for new repositories added to the team, can be
-        'pull', 'push' or 'admin'.
+        ``pull``, ``push`` or ``admin``.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -1142,21 +1104,20 @@ def add_team(
     try:
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
-        parameters = {}
-        parameters["name"] = name
-
-        if description is not None:
-            parameters["description"] = description
-        if repo_names is not None:
-            parameters["repo_names"] = repo_names
-        if permission is not None:
-            parameters["permission"] = permission
-        if privacy is not None:
-            parameters["privacy"] = privacy
-
-        organization._requester.requestJsonAndCheck(
-            "POST", organization.url + "/teams", input=parameters
+        parameters = filter_unset(
+            {
+                "description": description,
+                "permission": permission,
+                "privacy": privacy,
+            }
         )
+        if repo_names is not None:
+            # create_team expects Repository objects, resolve the (full) names
+            parameters["repo_names"] = [
+                client.get_repo(repo) if "/" in repo else organization.get_repo(repo)
+                for repo in repo_names
+            ]
+        organization.create_team(name, **parameters)
         list_teams(ignore_cache=True, profile=profile)  # Refresh cache
         return True
     except github.GithubException:
@@ -1175,11 +1136,11 @@ def edit_team(name, description=None, privacy=None, permission=None, profile="gi
         The description of the team.
 
     privacy
-        The level of privacy for the team, can be 'secret' or 'closed'.
+        The level of privacy for the team, can be ``secret`` or ``closed``.
 
     permission
         The default permission for new repositories added to the team, can be
-        'pull', 'push' or 'admin'.
+        ``pull``, ``push`` or ``admin``.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -1198,18 +1159,16 @@ def edit_team(name, description=None, privacy=None, permission=None, profile="gi
         client = _get_client(profile)
         organization = client.get_organization(_get_config_value(profile, "org_name"))
         team = organization.get_team(team["id"])
-
-        parameters = {}
-        if name is not None:
-            parameters["name"] = name
-        if description is not None:
-            parameters["description"] = description
-        if privacy is not None:
-            parameters["privacy"] = privacy
-        if permission is not None:
-            parameters["permission"] = permission
-
-        team._requester.requestJsonAndCheck("PATCH", team.url, input=parameters)
+        team.edit(
+            name,
+            **filter_unset(
+                {
+                    "description": description,
+                    "privacy": privacy,
+                    "permission": permission,
+                }
+            ),
+        )
         return True
     except UnknownObjectException:
         log.exception("Resource not found")
@@ -1295,7 +1254,7 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
             repos[repo.name.lower()] = {"permission": permission}
         cached_team["repos"] = repos
         return repos
-    except UnknownObjectException:
+    except UnknownObjectException:  # pragma: no cover
         log.exception("Resource not found: %s", cached_team["id"])
         return {}
 
@@ -1314,8 +1273,8 @@ def add_team_repo(repo_name, team_name, profile="github", permission=None):
         The name of the profile configuration to use. Defaults to ``github``.
 
     permission
-        The permission for team members within the repository, can be 'pull',
-        'push' or 'admin'. If not specified, the default permission specified on
+        The permission for team members within the repository, can be ``pull``,
+        ``push`` or ``admin``. If not specified, the default permission specified on
         the team will be used.
 
     CLI Example:
@@ -1336,11 +1295,13 @@ def add_team_repo(repo_name, team_name, profile="github", permission=None):
     except UnknownObjectException:
         log.exception("Resource not found: %s", team_info["id"])
         return False
-    params = None
-    if permission is not None:
-        params = {"permission": permission}
-
-    team._requester.requestJsonAndCheck("PUT", team.url + "/repos/" + repo._identity, input=params)
+    if permission is None:
+        team.add_to_repos(repo)
+    elif not team.update_team_repository(repo, permission):
+        log.error(
+            "Failed setting permission %s on repo %s for team %s", permission, repo_name, team_name
+        )
+        return False
     # Try to refresh cache
     list_team_repos(team_name, profile=profile, ignore_cache=True)
     return True
@@ -1418,7 +1379,7 @@ def list_team_members(team_name, profile="github", ignore_cache=False):
     try:
         cached_team["members"] = [member.login.lower() for member in team.get_members()]
         return cached_team["members"]
-    except UnknownObjectException:
+    except UnknownObjectException:  # pragma: no cover
         log.exception("Resource not found: %s", cached_team["id"])
         return []
 
@@ -1448,7 +1409,7 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
         organization = client.get_organization(_get_config_value(profile, "org_name"))
 
         __context__[key] = [
-            m.login.lower() for m in _get_members(organization, {"filter": "2fa_disabled"})
+            m.login.lower() for m in organization.get_members(filter_="2fa_disabled")
         ]
     return __context__[key]
 
@@ -1510,14 +1471,7 @@ def add_team_member(name, team_name, profile="github"):
         return False
 
     try:
-        # Can't use team.add_membership due to this bug that hasn't made it into
-        # a PyGithub release yet https://github.com/PyGithub/PyGithub/issues/363
-        team._requester.requestJsonAndCheck(
-            "PUT",
-            team.url + "/memberships/" + member._identity,
-            input={"role": "member"},
-            parameters={"role": "member"},
-        )
+        team.add_membership(member, "member")
     except github.GithubException:
         log.exception("Error in adding a member to a team")
         return False
@@ -1557,12 +1511,7 @@ def remove_team_member(name, team_name, profile="github"):
         log.exception("Resource not found: %s", team_info["id"])
         return False
 
-    try:
-        remove = team.remove_membership
-    except AttributeError:
-        remove = team.remove_from_members
-
-    remove(member)
+    team.remove_membership(member)
     return not team.has_in_members(member)
 
 
@@ -1592,16 +1541,15 @@ def list_teams(profile="github", ignore_cache=False):
         teams_data = organization.get_teams()
         teams = {}
         for team in teams_data:
-            # Note that _rawData is used to access some properties here as they
-            # are not exposed in older versions of PyGithub. It's VERY important
-            # to use team._rawData instead of team.raw_data, as the latter forces
-            # an API call to retrieve team details again.
+            # These attributes are all present in the list response. Take care
+            # not to access any lazily completable attributes missing from it
+            # here since each one would trigger a separate request per team.
             teams[team.name] = {
                 "id": team.id,
                 "slug": team.slug,
-                "description": team._rawData["description"],
+                "description": team.description,
                 "permission": team.permission,
-                "privacy": team._rawData["privacy"],
+                "privacy": team.privacy,
             }
         __context__[key] = teams
 
@@ -1816,7 +1764,7 @@ def _query(
         args["per_page"] = per_page
 
     if isinstance(data, str):
-        data = salt.utils.json.loads(data)
+        data = json.loads(data)
 
     requester = _get_client(profile).requester
 
@@ -1834,7 +1782,7 @@ def _query(
         except Exception as err:  # pylint: disable=broad-except
             raise CommandExecutionError(f"GitHub API request failed: {err}") from err
         log.debug("GitHub Response Status Code: %s", status)
-        decoded = salt.utils.json.loads(text) if text else None
+        decoded = json.loads(text) if text else None
 
         if status not in (200, 201, 204):
             message = decoded.get("message", text) if isinstance(decoded, dict) else text
@@ -1944,7 +1892,7 @@ def get_ruleset(profile="github", **kwargs):
         The name of the profile configuration to use. Defaults to ``github``.
 
     ruleset_type
-        The type of ruleset. 'repo' or 'org'.
+        The type of ruleset. ``repo`` or ``org``.
 
     ruleset_id
         Id of the ruleset.
@@ -1992,7 +1940,7 @@ def delete_ruleset(profile="github", **kwargs):
         The name of the profile configuration to use. Defaults to ``github``.
 
     ruleset_type
-        The type of ruleset. 'repo' or 'org'.
+        The type of ruleset. ``repo`` or ``org``.
 
     owner
         The account owner of the repository.
@@ -2040,7 +1988,7 @@ def update_ruleset(profile="github", **kwargs):
         The name of the profile configuration to use. Defaults to ``github``.
 
     ruleset_type
-        The type of ruleset. 'repo' or 'org'.
+        The type of ruleset. ``repo`` or ``org``.
 
     ruleset_id
         Id of the ruleset.
@@ -2100,7 +2048,7 @@ def add_ruleset(profile="github", **kwargs):
         The name of the profile configuration to use. Defaults to ``github``.
 
     ruleset_type
-        The type of ruleset. 'repo' or 'org'.
+        The type of ruleset. ``repo`` or ``org``.
 
     owner
         The account owner of the repository.
@@ -2155,7 +2103,7 @@ def list_rulesets(profile="github", *, per_page=None, **kwargs):
         The name of the profile configuration to use. Defaults to ``github``.
 
     ruleset_type
-        The type of ruleset. 'repo' or 'org'.
+        The type of ruleset. ``repo`` or ``org``.
 
     owner
         The account owner of the repository.

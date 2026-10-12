@@ -1,10 +1,15 @@
-def test_list_teams(github):
+def test_list_teams(github, fake_github):
     ret = github.list_teams()
     assert "Team A" in ret
     assert ret["Team A"]["slug"] == "team-a"
     assert ret["Team A"]["description"] == "Awesome Team: Team A"
     assert ret["Team A"]["privacy"] == "closed"
     assert ret["Team A"]["permission"] == "pull"
+    # Rendering the team list must not trigger per-team completion requests
+    assert [req.path for req in fake_github.requests] == [
+        "/orgs/testorg",
+        "/orgs/testorg/teams",
+    ]
 
 
 def test_get_team(github):
