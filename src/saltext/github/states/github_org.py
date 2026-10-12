@@ -35,7 +35,11 @@ def member_present(name, profile="github"):
         try:
             info = __salt__["github_org.get_member"](name, profile=profile)
         except GitHubNotFoundError as err:
-            raise CommandExecutionError(f"User {name} does not exist") from err
+            # astroid on Python 3.10 fails to infer `err` as an exception
+            # FIXME: Remove this once CI lint runs on a more recent Python version
+            raise CommandExecutionError(  # pylint: disable=bad-exception-cause
+                f"User {name} does not exist"
+            ) from err
 
         if info["in_org"]:
             ret["comment"] = f"User {name} is already a member of the organization"
