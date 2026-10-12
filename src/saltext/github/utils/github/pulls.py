@@ -55,11 +55,11 @@ def list_all(
 
 
 def format_pr(pr_):
-    """
+    r"""
     Format API return information into a more manageable
     and useful dictionary for pull request information.
 
-    pr_
+    pr\_
         The pull request to format.
     """
     ret = {
