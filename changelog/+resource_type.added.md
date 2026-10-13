@@ -1,0 +1,1 @@
+Added the {py:mod}`github <saltext.github.resources.github>` {ref}`Salt resource type <repo-resources>` for Salt 3008.3+, exposing each GitHub repository as an individually targetable resource with per-repository grains and repository-implicit execution and state modules

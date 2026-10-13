@@ -473,7 +473,7 @@ class TeamMember(Entity):
 
 
 @dataclass
-class RepoData(EntityData):
+class RepoData(EntityData):  # pylint: disable=too-many-instance-attributes
     name: RepoName
     owner: ActorName
     _: KW_ONLY
@@ -482,6 +482,7 @@ class RepoData(EntityData):
     homepage: str | None = None
     private: bool = False
     fork: bool = False
+    archived: bool = False
     language: str = "Python"
     default_branch: str = "main"
     has_issues: bool = True

@@ -5,6 +5,8 @@ Operations on GitHub repository (deployment) environments.
 import logging
 from urllib.parse import quote
 
+from salt.exceptions import CommandExecutionError
+
 from saltext.github.utils import filter_unset
 from saltext.github.utils.gh import client
 
@@ -16,6 +18,29 @@ def _path(conn, owner, repo_name, *suffix):
     return ["repos", owner or conn.owner, repo_name, "environments"] + [
         quote(str(segment), safe="") for segment in suffix
     ]
+
+
+def branch_policy_from_patterns(deployment_branches):
+    """
+    Map a ``deployment_branches`` specification (``all``, ``protected``
+    or a list of branch name patterns) onto the API's
+    ``deployment_branch_policy`` setting.
+
+    deployment_branches
+        Which branches can deploy. Either ``all``, ``protected``
+        (branches with branch protection rules) or a list of branch
+        name patterns.
+    """
+    if deployment_branches == "all":
+        return None
+    if deployment_branches == "protected":
+        return {"protected_branches": True, "custom_branch_policies": False}
+    if isinstance(deployment_branches, list):
+        return {"protected_branches": False, "custom_branch_policies": True}
+    raise CommandExecutionError(
+        "deployment_branches must be 'all', 'protected' or a list of branch "
+        f"name patterns, got: {deployment_branches!r}"
+    )
 
 
 def normalize(env):
