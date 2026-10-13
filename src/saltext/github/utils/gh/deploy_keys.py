@@ -13,6 +13,17 @@ def _path(conn, owner, repo_name, *suffix):
     return ["repos", owner or conn.owner, repo_name, "keys", *suffix]
 
 
+def key_body(key):
+    """
+    Reduce an SSH public key to its comparable part (type + base64 body),
+    ignoring whitespace variations and the comment.
+
+    key
+        SSH public key.
+    """
+    return " ".join(key.split()[:2])
+
+
 def list_all(conn, repo_name, *, owner=None):
     """
     Return all deploy keys of a repository.

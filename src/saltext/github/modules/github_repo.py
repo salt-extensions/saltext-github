@@ -63,13 +63,11 @@ __func_alias__ = {"list_": "list"}
 
 
 def _get_conn(profile):
-    return gh_profile.get_conn(profile, __salt__=__salt__, __context__=__context__)
+    return gh_profile.get_conn(profile, opts=__opts__, context=__context__)
 
 
 def _get_config_value(profile, config_name):
-    return gh_profile.get_config_value(
-        profile, config_name, __salt__=__salt__, __context__=__context__
-    )
+    return gh_profile.get_config_value(profile, config_name, opts=__opts__, context=__context__)
 
 
 def list_(private=None, owner=None, fields=None, ignore_cache=False, profile="github"):

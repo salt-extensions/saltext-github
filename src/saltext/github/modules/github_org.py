@@ -40,7 +40,6 @@ from saltext.github.utils.gh import members as gh_members
 from saltext.github.utils.gh import profile as gh_profile
 from saltext.github.utils.gh import rulesets as gh_rulesets
 from saltext.github.utils.gh import teams as gh_teams
-from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -48,25 +47,14 @@ __virtualname__ = "github_org"
 
 
 def _get_conn(profile):
-    return gh_profile.get_conn(profile, __salt__=__salt__, __context__=__context__)
+    return gh_profile.get_conn(profile, opts=__opts__, context=__context__)
 
 
 def _get_team(conn, name, owner=None):
     """
     Return a team's cached details, raising when it does not exist.
-    Teams are matched by exact display name first, then by slug and
-    case-insensitive display name since GitHub derives team identity
-    (the slug) case-insensitively.
     """
-    team = gh_teams.get(conn, name, owner=owner)
-    if team is None:
-        for candidate in gh_teams.list_all(conn, owner=owner).values():
-            if name == candidate["slug"] or name.lower() == candidate["name"].lower():
-                return candidate
-        raise GitHubNotFoundError(
-            f"Team {name} does not exist in organization {owner or conn.owner}."
-        )
-    return team
+    return gh_teams.find(conn, name, owner=owner)
 
 
 def list_members(owner=None, ignore_cache=False, profile="github"):

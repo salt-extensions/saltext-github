@@ -10,6 +10,7 @@ import logging
 
 from saltext.github.utils import filter_unset
 from saltext.github.utils.gh.client import api_request
+from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +65,36 @@ def get(conn, name, *, owner=None):
         Organization owning the team. Defaults to the connection's owner.
     """
     return list_all(conn, owner=owner).get(name)
+
+
+def find(conn, name, *, owner=None):
+    """
+    Return a team's cached details, raising when it does not exist.
+    Teams are matched by exact display name first, then by slug and
+    case-insensitive display name since GitHub derives team identity
+    (the slug) case-insensitively.
+
+    conn
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+
+    name
+        Team name or slug.
+
+    owner
+        Organization owning the team. Defaults to the connection's owner.
+
+    Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
+    if the team does not exist.
+    """
+    team = get(conn, name, owner=owner)
+    if team is None:
+        for candidate in list_all(conn, owner=owner).values():
+            if name == candidate["slug"] or name.lower() == candidate["name"].lower():
+                return candidate
+        raise GitHubNotFoundError(
+            f"Team {name} does not exist in organization {owner or conn.owner}."
+        )
+    return team
 
 
 @api_request

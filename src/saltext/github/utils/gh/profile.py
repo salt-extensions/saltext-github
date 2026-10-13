@@ -1,7 +1,16 @@
 """
 Resolution of Salt profile configuration into GitHub connections,
 shared between the ``github``, ``github_org`` and ``github_repo``
-execution modules.
+execution modules as well as the ``github`` resource type.
+
+Profiles are resolved directly from ``opts``, mirroring ``config.get``'s
+lookup order: minion configuration, then grains, then pillar, then
+master configuration (which reaches the minion via the master's
+``pillar_opts`` setting, rendered under ``pillar["master"]``). SDB URIs
+in profile values are rendered on access, like ``config.get`` renders
+them. ``config.get`` itself cannot serve as the backend since it is
+unavailable to parts of the resource subsystem (type discovery runs
+before the minion's module loader exists).
 """
 
 import hashlib
@@ -14,12 +23,27 @@ from saltext.github.utils.gh.client import GitHubConnection
 
 log = logging.getLogger(__name__)
 
+_UNSET = object()
 
-def get_config_value(profile, config_name, *, __salt__, __context__):
+
+def _render_value(value, opts, utils=None):
+    """
+    Render ``sdb://`` URIs in scalar configuration values, mirroring
+    what ``config.get`` does for profile values.
+    """
+    if isinstance(value, str) and value.startswith("sdb://"):
+        # Only required to resolve SDB URIs
+        import salt.utils.sdb  # pylint: disable=import-outside-toplevel
+
+        return salt.utils.sdb.sdb_get(value, opts, utils=utils)
+    return value
+
+
+def get_config_value(profile, config_name, *, opts, context=None, utils=None, default=_UNSET):
     """
     Return a profile's configuration value based on the supplied
-    configuration name. Values are rendered via ``config.get``
-    (resolving SDB URIs) and cached in ``context``.
+    configuration name. See the module docstring for the lookup order
+    and SDB handling; the first scope carrying the requested value wins.
 
     profile
         Profile name that contains configuration information.
@@ -27,56 +51,84 @@ def get_config_value(profile, config_name, *, __salt__, __context__):
     config_name
         Configuration item name to look up.
 
-    __salt__
-        Pass ``__salt__``.
+    opts
+        The minion configuration (``__opts__``).
 
-    __context__
-        Pass ``__context__``.
+    context
+        Pass ``__context__`` to cache rendered values, saving repeated
+        SDB lookups.
+
+    utils
+        Pass ``__utils__`` when available to avoid building a fresh
+        utils loader for SDB rendering.
+
+    default
+        Value to return when the profile does not carry the item.
+        Without it, a missing item raises a ``CommandExecutionError``.
     """
-    if "gh_profile" not in __context__ or profile not in __context__["gh_profile"]:
-        if not __salt__["config.get"](profile):
+    cache = None
+    if context is not None:
+        cache = context.setdefault("gh_profile", {}).setdefault(profile, {})
+    if cache is None or config_name not in cache:
+        pillar = opts.get("pillar") or {}
+        master_pillar = pillar.get("master")
+        scopes = (
+            opts,
+            opts.get("grains") or {},
+            pillar,
+            master_pillar if isinstance(master_pillar, dict) else {},
+        )
+        configs = [
+            scope[profile]
+            for scope in scopes
+            if isinstance(scope.get(profile), dict) and scope[profile]
+        ]
+        if not configs:
             raise CommandExecutionError(
                 f"Authentication information could not be found for the '{profile}' profile."
             )
-        __context__.setdefault("gh_profile", {})[profile] = {}
+        value = None
+        for config in configs:
+            found = config.get(config_name)
+            if found is not None:
+                value = _render_value(found, opts, utils=utils)
+                break
+        if cache is not None:
+            cache[config_name] = value
+    else:
+        value = cache[config_name]
 
-    cache = __context__["gh_profile"][profile]
-    if config_name not in cache:
-        # Unlike config.option, config.get resolves SDB URIs in scalar values,
-        # hence request each value separately and cache the rendered result.
-        cache[config_name] = __salt__["config.get"](f"{profile}:{config_name}", default=None)
-
-    config_value = cache[config_name]
-    if config_value is None:
+    if value is None:
+        if default is not _UNSET:
+            return default
         raise CommandExecutionError(
             f"The '{config_name}' parameter was not found in the '{profile}' profile."
         )
+    return value
 
-    return config_value
 
-
-def get_api_url(profile, *, __salt__, __context__):
+def get_api_url(profile, *, opts, context=None, utils=None):
     """
     Return the configured GitHub API base URL, defaulting to the public one.
 
     profile
         Profile name that contains configuration information.
 
-    __salt__
-        Pass ``__salt__``.
+    opts
+        The minion configuration (``__opts__``).
 
-    __context__
-        Pass ``__context__``.
+    context
+        Pass ``__context__`` to cache rendered values.
+
+    utils
+        Pass ``__utils__`` when available (SDB rendering).
     """
-    try:
-        return get_config_value(
-            profile, "api_url", __salt__=__salt__, __context__=__context__
-        ).rstrip("/")
-    except CommandExecutionError:
-        return API_URL_DEFAULT
+    return get_config_value(
+        profile, "api_url", opts=opts, context=context, utils=utils, default=API_URL_DEFAULT
+    ).rstrip("/")
 
 
-def get_owner(profile, *, __salt__, __context__):
+def get_owner(profile, *, opts, context=None, utils=None):
     """
     Return the configured default repository owner: the profile's
     ``owner``, falling back to the legacy ``org_name`` alias. Returns
@@ -86,21 +138,25 @@ def get_owner(profile, *, __salt__, __context__):
     profile
         Profile name that contains configuration information.
 
-    __salt__
-        Pass ``__salt__``.
+    opts
+        The minion configuration (``__opts__``).
 
-    __context__
-        Pass ``__context__``.
+    context
+        Pass ``__context__`` to cache rendered values.
+
+    utils
+        Pass ``__utils__`` when available (SDB rendering).
     """
     for key in ("owner", "org_name"):
-        try:
-            return get_config_value(profile, key, __salt__=__salt__, __context__=__context__)
-        except CommandExecutionError:
-            continue
+        owner = get_config_value(
+            profile, key, opts=opts, context=context, utils=utils, default=None
+        )
+        if owner is not None:
+            return owner
     return None
 
 
-def get_conn(profile, *, __salt__, __context__):
+def get_conn(profile, *, opts, context, utils=None):
     """
     Return a :class:`~saltext.github.utils.gh.client.GitHubConnection`
     for a profile, cached in ``context`` for performance.
@@ -108,19 +164,177 @@ def get_conn(profile, *, __salt__, __context__):
     profile
         Profile name that contains configuration information.
 
-    salt
-        Pass ``__salt__``.
+    opts
+        The minion configuration (``__opts__``).
 
     context
-        Pass ``__context__``.
+        Pass ``__context__``. Caches the connection and rendered
+        profile values.
+
+    utils
+        Pass ``__utils__`` when available (SDB rendering).
     """
-    token = get_config_value(profile, "token", __salt__=__salt__, __context__=__context__)
-    owner = get_owner(profile, __salt__=__salt__, __context__=__context__)
-    api_url = get_api_url(profile, __salt__=__salt__, __context__=__context__)
+    token = get_config_value(profile, "token", opts=opts, context=context, utils=utils)
+    owner = get_owner(profile, opts=opts, context=context, utils=utils)
+    api_url = get_api_url(profile, opts=opts, context=context, utils=utils)
+    return _conn_for(token, owner, api_url, context)
+
+
+def _conn_for(token, owner, api_url, context):
+    """
+    Return the connection for the resolved profile values, cached in
+    ``context`` for performance.
+    """
     # Hash the token to keep the secret out of context dumps
     token_hash = hashlib.sha256(token.encode()).hexdigest()[:16]
     key = f"github.{token_hash}:{owner}:{api_url}"
 
-    if key not in __context__:
-        __context__[key] = GitHubConnection(token, owner, api_url=api_url)
-    return __context__[key]
+    if key not in context:
+        context[key] = GitHubConnection(token, owner, api_url=api_url)
+    return context[key]
+
+
+def resource_decl(opts):
+    """
+    Return the ``github`` resource type's declaration from the resource
+    pillar subtree (``{}`` when unset or not a mapping).
+
+    opts
+        The minion configuration (``__opts__``).
+    """
+    # Local import: the resource subsystem only exists in Salt >= 3008,
+    # while this module is also imported on earlier releases.
+    import salt.utils.resources  # pylint: disable=import-outside-toplevel
+
+    decl = salt.utils.resources.pillar_resources_tree(opts).get("github")
+    return decl if isinstance(decl, dict) else {}
+
+
+def resource_profile(opts):
+    """
+    Return the default profile name configured in the ``github``
+    resource declaration, defaulting to ``github``.
+
+    opts
+        The minion configuration (``__opts__``).
+    """
+    return resource_decl(opts).get("profile") or "github"
+
+
+def resource_owners(opts):
+    """
+    Return the owners named in the ``github`` resource declaration as a
+    list (an empty one when unset). The declaration's ``owners`` may be
+    a plain list of owner names or a mapping of owner name to per-owner
+    settings (``profile``, ``repos``, ``exclude``, ``include_archived``).
+
+    opts
+        The minion configuration (``__opts__``).
+    """
+    owners = resource_decl(opts).get("owners")
+    if isinstance(owners, dict):
+        return list(owners)
+    return list(owners or [])
+
+
+def _owner_settings(opts, owner):
+    """
+    Return one owner's settings mapping from the declaration's
+    ``owners``, matched case-insensitively (``{}`` when the owners are
+    a plain list or the owner carries no settings).
+    """
+    owners = resource_decl(opts).get("owners")
+    if isinstance(owners, dict) and owner is not None:
+        for name, settings in owners.items():
+            if name.lower() == owner.lower() and isinstance(settings, dict):
+                return settings
+    return {}
+
+
+def resource_owner_setting(opts, owner, key, default=None):
+    """
+    Return a declaration setting for one owner: the owner's own value
+    from the ``owners`` mapping when set, otherwise the
+    declaration-level value, otherwise ``default``.
+
+    opts
+        The minion configuration (``__opts__``).
+
+    owner
+        Owner (organization or user) login.
+
+    key
+        Setting name (``profile``, ``repos``, ``exclude``,
+        ``include_archived``).
+
+    default
+        Value to return when neither the owner nor the declaration
+        carries the setting.
+    """
+    value = _owner_settings(opts, owner).get(key)
+    if value is None:
+        value = resource_decl(opts).get(key)
+    return value if value is not None else default
+
+
+def resource_owner_profile(opts, owner):
+    """
+    Return the profile name to use for one owner's repositories: the
+    owner's ``profile`` override from the declaration's ``owners``
+    mapping when present, otherwise the declaration's default profile.
+    Owner names are matched case-insensitively.
+
+    opts
+        The minion configuration (``__opts__``).
+
+    owner
+        Owner (organization or user) login.
+    """
+    return resource_owner_setting(opts, owner, "profile", "github")
+
+
+def resource_profiles(opts):
+    """
+    Return all distinct profile names referenced by the ``github``
+    resource declaration: the default one plus any per-owner overrides.
+
+    opts
+        The minion configuration (``__opts__``).
+    """
+    profiles = [resource_profile(opts)]
+    owners = resource_decl(opts).get("owners")
+    if isinstance(owners, dict):
+        for settings in owners.values():
+            if isinstance(settings, dict) and settings.get("profile"):
+                if settings["profile"] not in profiles:
+                    profiles.append(settings["profile"])
+    return profiles
+
+
+def resource_conn(opts, context, *, profile=None, owner=None, utils=None):
+    """
+    Return the :class:`~saltext.github.utils.gh.client.GitHubConnection`
+    for a ``github`` resource context, resolved from ``opts``.
+
+    opts
+        The minion configuration (``__opts__``).
+
+    context
+        Cache mapping for the connection (``__context__``).
+
+    profile
+        Profile name override. When unset, the profile is resolved from
+        the resource declaration: the targeted ``owner``'s override when
+        declared, otherwise the declaration's default profile
+        (``github`` when unset).
+
+    owner
+        Owner the connection is for, used to resolve per-owner profile
+        overrides. Ignored when ``profile`` is passed.
+
+    utils
+        Pass ``__utils__`` when available (SDB rendering).
+    """
+    return get_conn(
+        profile or resource_owner_profile(opts, owner), opts=opts, context=context, utils=utils
+    )

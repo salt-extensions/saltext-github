@@ -12,6 +12,9 @@ Salt Extension for interacting with GitHub:
   query their issues, milestones and pull requests via the
   :py:mod:`github_repo <saltext.github.modules.github_repo>` execution
   and state modules.
+* On Salt 3008.3+, optionally manage each repository as an individually
+  targetable Salt resource with per-repository grains, execution and
+  state modules via the ``github`` :ref:`resource type <repo-resources>`.
 * Works against GitHub Enterprise Server instances via the
   :ghconf:`api_url` profile parameter.
 
@@ -22,6 +25,7 @@ Salt Extension for interacting with GitHub:
 
   topics/installation
   topics/configuration
+  topics/repo_resources
 
 .. toctree::
   :maxdepth: 2
@@ -31,6 +35,14 @@ Salt Extension for interacting with GitHub:
   ref/modules/index
   ref/states/index
   ref/utils/index
+
+.. toctree::
+  :maxdepth: 3
+  :caption: Provided Resources
+  :hidden:
+  :glob:
+
+  ref/resources/*
 
 .. toctree::
   :maxdepth: 2
