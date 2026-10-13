@@ -2,9 +2,33 @@ import pytest
 from salt.exceptions import CommandExecutionError
 
 
+@pytest.fixture(scope="module")
+def minion_config_defaults(github_profile):
+    # A profile relying on the shared owner parameter instead of the
+    # legacy org_name/owner ruleset profile parameters
+    owner_profile = {
+        "token": github_profile["token"],
+        "owner": github_profile["org_name"],
+        "api_url": github_profile["api_url"],
+    }
+    return {"github": github_profile, "github_owner": owner_profile}
+
+
 def test_list_rulesets_repo(github):
     ret = github.list_rulesets(ruleset_type="repo", owner="testorg", repo_name="repo-a")
     assert [ruleset["name"] for ruleset in ret["rulesets"]] == ["repo-rules"]
+
+
+def test_list_rulesets_repo_owner_fallback(github):
+    # Without an explicit owner, the profile's owner/org_name is used
+    ret = github.list_rulesets(ruleset_type="repo", repo_name="repo-a")
+    assert [ruleset["name"] for ruleset in ret["rulesets"]] == ["repo-rules"]
+
+
+def test_list_rulesets_org_owner_profile(github):
+    # Profiles keyed with owner instead of org_name work as well
+    ret = github.list_rulesets(ruleset_type="org", profile="github_owner")
+    assert [ruleset["name"] for ruleset in ret["rulesets"]] == ["org-rules"]
 
 
 def test_list_rulesets_org(github):

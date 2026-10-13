@@ -131,7 +131,7 @@ def present(
 
     private
         Repository visibility. Changing this on an existing repository
-        requires ``allow_repo_privacy_changes`` to be enabled in the profile.
+        requires :ghconf:`allow_repo_privacy_changes` to be enabled in the profile.
 
     has_issues
         Enable issues for this repository.
@@ -166,7 +166,7 @@ def present(
         only supported for organization-owned repositories.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
         Repository creation is only supported for organizations and
         the authenticated user.
 
@@ -276,7 +276,7 @@ def absent(name, owner=None, profile="github"):
         Name of the repository.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -332,10 +332,10 @@ def ruleset_present(name, ruleset_params=None, repo_name=None, owner=None, profi
         this state's ``name``.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -401,10 +401,10 @@ def ruleset_absent(name, repo_name=None, owner=None, profile="github"):
         Ruleset name to manage.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -474,10 +474,10 @@ def deploy_key_present(name, key, read_only=False, repo_name=None, owner=None, p
         Deny write access to the repository for this key. Defaults to false.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -530,10 +530,10 @@ def deploy_key_absent(name, repo_name=None, owner=None, profile="github"):
         Display title of the deploy key.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -591,10 +591,10 @@ def actions_secret_present(
         Defaults to false.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -649,10 +649,10 @@ def actions_secret_absent(name, repo_name=None, owner=None, profile="github"):
         case-insensitively.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -711,7 +711,7 @@ def workflow_permissions_managed(
         Name of the repository, if it differs from ``name``.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -829,10 +829,10 @@ def environment_present(
         of branch name patterns.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -931,10 +931,10 @@ def environment_absent(name, repo_name=None, owner=None, profile="github"):
         Name of the environment.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -992,10 +992,10 @@ def label_present(name, color=None, description=None, repo_name=None, owner=None
         Short description of the label.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1063,10 +1063,10 @@ def label_absent(name, repo_name=None, owner=None, profile="github"):
         Name of the label.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1138,7 +1138,7 @@ def pages_present(
         Name of the repository, if it differs from ``name``.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1236,7 +1236,7 @@ def pages_absent(name, repo_name=None, owner=None, profile="github"):
         Name of the repository, if it differs from ``name``.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.

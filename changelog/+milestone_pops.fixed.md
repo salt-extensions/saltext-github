@@ -1,1 +1,1 @@
-Fixed `get_milestones`/`get_milestone` crashing on API payloads missing optional keys
+Fixed {py:func}`github.get_milestones <saltext.github.modules.github.get_milestones>` / {py:func}`github.get_milestone <saltext.github.modules.github.get_milestone>` crashing on API payloads missing optional keys

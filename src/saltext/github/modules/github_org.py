@@ -3,9 +3,10 @@ Manage a GitHub organization: members, teams and organization rulesets.
 
 .. versionadded:: 1.1.0
 
-Unlike the legacy :py:mod:`github <saltext.github.modules.github>` module,
+Unlike the legacy functions in the :py:mod:`github <saltext.github.modules.github>` module,
 the functions in this module raise errors (usually subclasses of
-``CommandExecutionError``) instead of logging them and returning ``False``.
+:py:class:`CommandExecutionError <salt.exceptions.CommandExecutionError>`)
+instead of logging them and returning ``False``.
 
 Collections with a unique natural key (teams, team repositories) are
 returned as mappings keyed by it, id-addressed collections (rulesets)
@@ -14,7 +15,7 @@ as lists.
 .. note::
 
     This module is organization-scoped: all functions target an
-    organization, defaulting to the profile's ``owner`` (which hence
+    organization, defaulting to the profile's :ghconf:`owner` (which hence
     must be an organization) and accepting an ``owner`` argument to
     manage another organization. Repository listing and creation live
     in the :py:mod:`github_repo <saltext.github.modules.github_repo>`
@@ -25,27 +26,9 @@ as lists.
 Configuration
 -------------
 
-This module uses similar configuration profiles as the
-:py:mod:`github <saltext.github.modules.github>` module:
-
-.. code-block:: yaml
-
-    github:
-      token: abc1234
-
-      # Optional: The default owner (organization or user) whose
-      # resources are managed. org_name is supported as a legacy alias.
-      # Defaults to the token's user, so organization management and
-      # tokens without an associated user account (e.g. GitHub App
-      # installation tokens) require it to be set.
-      owner: my_organization
-
-      # Optional: Allow automated repository privacy modifications.
-      allow_repo_privacy_changes: False
-
-      # Optional: Base URL of the GitHub API. Set this when targeting
-      # a GitHub Enterprise Server instance, e.g. https://github.example.com/api/v3
-      api_url: https://api.github.com
+This module reads its configuration from profiles, which are described
+in the :ref:`configuration guide <github-configuration>`. The profile's
+:ghconf:`owner` must be set to the managed organization.
 """
 
 import logging
@@ -198,7 +181,7 @@ def list_teams(owner=None, fields=None, ignore_cache=False, profile="github"):
         salt-call github_org.list_teams
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     fields
         Only include these fields in the output. A single field name
@@ -228,7 +211,7 @@ def get_team(name, owner=None, profile="github"):
         Name of the team.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -272,7 +255,7 @@ def add_team(
         ``pull``, ``push`` or ``admin``.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -315,7 +298,7 @@ def edit_team(name, description=None, privacy=None, permission=None, owner=None,
         ``pull``, ``push`` or ``admin``.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -347,7 +330,7 @@ def remove_team(name, owner=None, profile="github"):
         Name of the team to remove.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -372,7 +355,7 @@ def list_team_repos(team_name, owner=None, fields=None, ignore_cache=False, prof
         Name of the team from which to list repos.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     fields
         Only include these fields in the output. A single field name
@@ -413,7 +396,7 @@ def add_team_repo(repo_name, team_name, permission=None, owner=None, profile="gi
         ``push`` or ``admin``. If not specified, the team's default permission is used.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -445,7 +428,7 @@ def remove_team_repo(repo_name, team_name, owner=None, profile="github"):
         Name of the team to remove the repository from.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -469,7 +452,7 @@ def list_team_members(team_name, owner=None, ignore_cache=False, profile="github
         Name of the team from which to list members.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     ignore_cache
         Bypass the use of cached team members.
@@ -500,7 +483,7 @@ def is_team_member(name, team_name, owner=None, profile="github"):
         Name of the team to check membership in.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -525,7 +508,7 @@ def add_team_member(name, team_name, owner=None, profile="github"):
         Name of the team to add the user to.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -552,7 +535,7 @@ def remove_team_member(name, team_name, owner=None, profile="github"):
         Name of the team to remove the user from.
 
     owner
-        Organization owning the team. Defaults to the profile's ``owner``.
+        Organization owning the team. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.

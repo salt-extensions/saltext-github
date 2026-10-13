@@ -1,9 +1,11 @@
 """
-Module for interacting with the GitHub v3 API.
+General module for interacting with the GitHub v3 API.
+
+**Currently only contains deprecated (legacy) functions**.
 
 :depends: PyGithub python module
 
-.. note::
+.. important::
 
     All organization- and repository-related functions in this module are
     deprecated in favor of the :py:mod:`github_org
@@ -16,52 +18,9 @@ Module for interacting with the GitHub v3 API.
 Configuration
 -------------
 
-Configure this module by specifying the name of a configuration
-profile in the minion config, minion pillar, or master config. The module
-will use the ``github`` key by default, if defined.
-
-.. versionadded:: 1.1.0
-
-    Added the ``api_url`` configuration option to override the API endpoint
-    we run against. Can be used for GitHub Enterprise instances.
-
-.. versionadded:: 1.1.0
-
-    Profile configuration values containing SDB URIs are now rendered on
-    access. Salt itself only renders them inside the minion/master
-    configuration during startup, so this makes them work in pillar-sourced
-    profiles as well:
-
-    .. code-block:: yaml
-
-        # Requires a corresponding SDB profile in the minion configuration,
-        # e.g.
-        #   osenv:
-        #     driver: env
-        github:
-          token: sdb://osenv/GITHUB_TOKEN
-          org_name: my_organization
-
-For example:
-
-.. code-block:: yaml
-
-    github:
-      token: abc1234
-      org_name: my_organization
-
-      # optional: some functions require a repo_name, which
-      # can be set in the config file, or passed in at the CLI.
-      repo_name: my_repo
-
-      # optional: it can be dangerous to change the privacy of a repository
-      # in an automated way. set this to True to allow privacy modifications
-      allow_repo_privacy_changes: False
-
-      # optional: the base URL of the GitHub API. Set this when targeting
-      # a GitHub Enterprise Server instance, e.g.
-      # https://github.example.com/api/v3
-      api_url: https://api.github.com
+This module reads its configuration from profiles, which are described
+in the :ref:`configuration guide <github-configuration>`. All functions
+accept a ``profile`` argument, defaulting to the ``github`` profile.
 """
 
 import logging
@@ -168,6 +127,14 @@ def _get_config_value(profile, config_name):
     )
 
 
+def _get_owner(profile):
+    """
+    Helper function that returns a profile's default repository owner
+    (``owner``, legacy alias ``org_name``), or None when unset.
+    """
+    return gh_profile.get_owner(profile, __salt__=__salt__, __context__=__context__)
+
+
 def list_users(profile="github", ignore_cache=False):
     """
     List all users within the organization.
@@ -259,7 +226,7 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
         The name of the repository from which to get the issue. This argument is
         required, either passed via the CLI, or defined in the configured
         profile. A ``repo_name`` passed as a CLI argument will override the
-        repo_name defined in the configured profile, if provided.
+        :ghconf:`repo_name` defined in the configured profile, if provided.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -309,7 +276,7 @@ def get_issue_comments(issue_number, repo_name=None, profile="github", since=Non
         The name of the repository to which the issue belongs. This argument is
         required, either passed via the CLI, or defined in the configured
         profile. A ``repo_name`` passed as a CLI argument will override the
-        repo_name defined in the configured profile, if provided.
+        :ghconf:`repo_name` defined in the configured profile, if provided.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -374,7 +341,7 @@ def get_issues(
         The name of the repository for which to list issues. This argument is
         required, either passed via the CLI, or defined in the configured
         profile. A ``repo_name`` passed as a CLI argument will override the
-        repo_name defined in the configured profile, if provided.
+        :ghconf:`repo_name` defined in the configured profile, if provided.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -483,7 +450,7 @@ def get_milestones(
         The name of the repository for which to list issues. This argument is
         required, either passed via the CLI, or defined in the configured
         profile. A ``repo_name`` passed as a CLI argument will override the
-        repo_name defined in the configured profile, if provided.
+        :ghconf:`repo_name` defined in the configured profile, if provided.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -555,7 +522,7 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github", outp
         The name of the repository for which to list issues. This argument is
         required, either passed via the CLI, or defined in the configured
         profile. A ``repo_name`` passed as a CLI argument will override the
-        repo_name defined in the configured profile, if provided.
+        :ghconf:`repo_name` defined in the configured profile, if provided.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -1478,11 +1445,13 @@ def _resolve_ruleset_params(
     if ruleset_type not in ("repo", "org"):
         raise CommandExecutionError(f"Invalid ruleset type: {ruleset_type}")
 
+    # Unset owners fall back to the connection default (the profile's
+    # owner or the token's user) in the ruleset utils.
     if ruleset_type == "repo":
-        owner = owner or _get_config_value(profile, "owner")
+        owner = owner or _get_owner(profile)
         repo_name = repo_name or _get_config_value(profile, "repo_name")
     else:
-        org_name = org_name or _get_config_value(profile, "org_name")
+        org_name = org_name or _get_owner(profile)
 
     # check for optional header_dict
     try:

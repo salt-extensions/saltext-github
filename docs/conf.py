@@ -93,6 +93,7 @@ extensions = [
     "sphinx_copybutton",
     "sphinxcontrib.spelling",
     "saltdomain",
+    "ghdomain",
     "sphinxcontrib.towncrier.ext",
     "myst_parser",
     "sphinx_inline_tabs",

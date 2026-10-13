@@ -1,5 +1,5 @@
 """
-Manage organization teams/members, repositories and rulesets.
+**Deprecated**: Manage organization teams/members, repositories and rulesets.
 
 .. deprecated:: 1.1.0
 

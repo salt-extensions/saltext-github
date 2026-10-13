@@ -6,9 +6,10 @@ secrets and settings, environments, labels and Pages.
 
 .. versionadded:: 1.1.0
 
-Unlike the legacy :py:mod:`github <saltext.github.modules.github>` module,
+Unlike the legacy functions in the :py:mod:`github <saltext.github.modules.github>` module,
 the functions in this module raise errors (usually subclasses of
-``CommandExecutionError``) instead of logging them and returning ``False``.
+:py:class:`CommandExecutionError <salt.exceptions.CommandExecutionError>`)
+instead of logging them and returning ``False``.
 
 Collections with a unique natural key (repositories, teams, Actions
 secrets, environments, labels) are returned as mappings keyed by it,
@@ -19,7 +20,7 @@ deploy keys, deployment branch policies) as lists.
 
     This module works on repositories of any owner (organization or
     user): all functions accept an ``owner`` argument that defaults to
-    the profile's ``owner``. Teams always belong to the owning
+    the profile's :ghconf:`owner`. Teams always belong to the owning
     organization, and repository creation (:py:func:`create
     <saltext.github.modules.github_repo.create>`, the creating branch
     of the ``github_repo.present`` state) is only supported for
@@ -30,33 +31,11 @@ deploy keys, deployment branch policies) as lists.
 Configuration
 -------------
 
-This module uses similar configuration profiles as the
-:py:mod:`github <saltext.github.modules.github>` module. All functions
-operate on the repository named in ``repo_name``, which is required
-unless a default is set in the profile:
-
-.. code-block:: yaml
-
-    github:
-      token: abc1234
-
-      # Optional: The default owner (organization or user) whose
-      # repositories are managed. org_name is supported as a legacy
-      # alias. Defaults to the token's user, so tokens without an
-      # associated user account (e.g. GitHub App installation tokens)
-      # require it to be set.
-      owner: my_organization
-
-      # optional: the default repository to operate on when no
-      # repo_name is passed.
-      repo_name: my_repo
-
-      # Optional: Allow automated repository privacy modifications.
-      allow_repo_privacy_changes: False
-
-      # Optional: Base URL of the GitHub API. Set this when targeting
-      # a GitHub Enterprise Server instance, e.g. https://github.example.com/api/v3
-      api_url: https://api.github.com
+This module reads its configuration from profiles, which are described
+in the :ref:`configuration guide <github-configuration>`. The
+repository-scoped functions operate on the repository named in
+``repo_name``, which is required unless a default is set in the
+profile (:ghconf:`repo_name`).
 """
 
 import logging
@@ -111,7 +90,7 @@ def list_(private=None, owner=None, fields=None, ignore_cache=False, profile="gi
 
     owner
         Owner (organization or user) whose repositories to list.
-        Defaults to the profile's ``owner``. Private repositories of
+        Defaults to the profile's :ghconf:`owner`. Private repositories of
         users other than the authenticated one are not visible.
 
     fields
@@ -227,10 +206,10 @@ def get_info(repo_name=None, owner=None, ignore_cache=False, profile="github"):
         salt-call github_repo.get_info my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     ignore_cache
         Bypass the use of cached repository information.
@@ -254,10 +233,10 @@ def get_teams(repo_name=None, owner=None, fields=None, profile="github"):
         salt-call github_repo.get_teams my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     fields
         Only include these fields in the output. A single field name
@@ -294,10 +273,10 @@ def update(
         salt-call github_repo.update my-repo description='Managed by Salt'
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     description
         Repository description.
@@ -306,7 +285,7 @@ def update(
         URL with more information about the repository, e.g. rendered docs.
 
     private
-        Repository visibility. Changing this requires ``allow_repo_privacy_changes``
+        Repository visibility. Changing this requires :ghconf:`allow_repo_privacy_changes`
         to be enabled in the profile.
 
     has_issues
@@ -355,10 +334,10 @@ def delete(repo_name=None, owner=None, profile="github"):
         salt-call github_repo.delete my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -395,10 +374,10 @@ def list_issues(
         salt-call github_repo.list_issues my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     milestone
         Number of a GitHub milestone, or a string of either ``*`` or ``none``.
@@ -475,10 +454,10 @@ def get_issue(number, repo_name=None, owner=None, profile="github"):
         Issue number to retrieve.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -501,10 +480,10 @@ def get_issue_comments(number, repo_name=None, owner=None, since=None, profile="
         Issue number for which to retrieve comments.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     since
         Only return comments updated at or after this time. This is a
@@ -537,10 +516,10 @@ def list_milestones(
         salt-call github_repo.list_milestones my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     state
         Filter milestones by their state. Either ``open``, ``closed``, or ``all``.
@@ -594,10 +573,10 @@ def get_milestone(number=None, name=None, repo_name=None, owner=None, profile="g
         Title of the milestone to retrieve.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -638,10 +617,10 @@ def list_pulls(
         salt-call github_repo.list_pulls my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     state
         Filter returned pull requests by their state. Can be either
@@ -698,10 +677,10 @@ def list_rulesets(repo_name=None, owner=None, per_page=None, fields=None, profil
         salt-call github_repo.list_rulesets my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     per_page
         Pagination size, maximum 100.
@@ -739,10 +718,10 @@ def get_ruleset(ruleset_id, repo_name=None, owner=None, profile="github"):
         ID of the ruleset.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -767,10 +746,10 @@ def add_ruleset(ruleset_params, repo_name=None, owner=None, profile="github"):
         Ruleset definition. Must contain at least ``name`` and ``enforcement``.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -798,10 +777,10 @@ def update_ruleset(ruleset_id, ruleset_params, repo_name=None, owner=None, profi
         Updated ruleset definition.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -832,10 +811,10 @@ def delete_ruleset(ruleset_id, repo_name=None, owner=None, profile="github"):
         ID of the ruleset.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -866,10 +845,10 @@ def list_deploy_keys(repo_name=None, owner=None, fields=None, profile="github"):
         salt-call github_repo.list_deploy_keys my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     fields
         Only include these fields in the output. A single field name
@@ -898,10 +877,10 @@ def get_deploy_key(key_id, repo_name=None, owner=None, profile="github"):
         ID of the deploy key.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -933,10 +912,10 @@ def add_deploy_key(title, key, read_only=False, repo_name=None, owner=None, prof
         Deny write access to the repository for this key. Defaults to false.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -961,10 +940,10 @@ def remove_deploy_key(key_id, repo_name=None, owner=None, profile="github"):
         ID of the deploy key.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -987,10 +966,10 @@ def list_actions_secrets(repo_name=None, owner=None, fields=None, profile="githu
         salt-call github_repo.list_actions_secrets my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     fields
         Only include these fields in the output. A single field name
@@ -1019,10 +998,10 @@ def get_actions_secret(name, repo_name=None, owner=None, profile="github"):
         Name of the secret.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1049,10 +1028,10 @@ def set_actions_secret(name, value, repo_name=None, owner=None, profile="github"
         Plaintext secret value.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1076,10 +1055,10 @@ def remove_actions_secret(name, repo_name=None, owner=None, profile="github"):
         Name of the secret.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1102,10 +1081,10 @@ def get_workflow_permissions(repo_name=None, owner=None, profile="github"):
         salt-call github_repo.get_workflow_permissions my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1139,10 +1118,10 @@ def set_workflow_permissions(
         Allow GitHub Actions to approve pull requests.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1170,10 +1149,10 @@ def list_environments(repo_name=None, owner=None, fields=None, profile="github")
         salt-call github_repo.list_environments my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     fields
         Only include these fields in the output. A single field name
@@ -1201,10 +1180,10 @@ def get_environment(name, repo_name=None, owner=None, profile="github"):
         Name of the environment.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1259,10 +1238,10 @@ def set_environment(
         <saltext.github.modules.github_repo.add_deployment_branch_policy>`.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1294,10 +1273,10 @@ def remove_environment(name, repo_name=None, owner=None, profile="github"):
         Name of the environment.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1323,10 +1302,10 @@ def list_deployment_branch_policies(
         Name of the environment.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     fields
         Only include these fields in the output. A single field name
@@ -1371,10 +1350,10 @@ def add_deployment_branch_policy(
         Defaults to ``branch``.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1404,10 +1383,10 @@ def remove_deployment_branch_policy(
         ID of the branch policy.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1431,10 +1410,10 @@ def list_labels(repo_name=None, owner=None, fields=None, profile="github"):
         salt-call github_repo.list_labels my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     fields
         Only include these fields in the output. A single field name
@@ -1462,10 +1441,10 @@ def get_label(name, repo_name=None, owner=None, profile="github"):
         Name of the label.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1495,10 +1474,10 @@ def add_label(name, color=None, description=None, repo_name=None, owner=None, pr
         Short description of the label.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1535,10 +1514,10 @@ def edit_label(
         Short description of the label.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1569,10 +1548,10 @@ def remove_label(name, repo_name=None, owner=None, profile="github"):
         Name of the label.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1593,10 +1572,10 @@ def get_pages(repo_name=None, owner=None, profile="github"):
         salt-call github_repo.get_pages my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1635,10 +1614,10 @@ def setup_pages(
         either ``/`` or ``/docs``.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1691,10 +1670,10 @@ def update_pages(
         Enforce HTTPS for the site.
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.
@@ -1723,10 +1702,10 @@ def remove_pages(repo_name=None, owner=None, profile="github"):
         salt-call github_repo.remove_pages my-repo
 
     repo_name
-        Name of the repository. Defaults to the profile's ``repo_name``.
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
 
     owner
-        Owner of the repository. Defaults to the profile's ``owner``.
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
 
     profile
         Profile configuration name to use. Defaults to ``github``.

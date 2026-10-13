@@ -286,7 +286,7 @@ def update(
         URL with more information about the repository, e.g. rendered docs.
 
     private
-        Repository visibility. Changing this requires ``allow_repo_privacy_changes``
+        Repository visibility. Changing this requires :ghconf:`allow_repo_privacy_changes`
         to be enabled in the profile.
 
     has_issues
