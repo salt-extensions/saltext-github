@@ -1,5 +1,11 @@
 """
-Manage organization teams/members, repositories and rulesets.
+**Deprecated**: Manage organization teams/members, repositories and rulesets.
+
+.. deprecated:: 1.1.0
+
+    Use the :py:mod:`github_org <saltext.github.states.github_org>` and
+    :py:mod:`github_repo <saltext.github.states.github_repo>` state modules
+    instead.
 """
 
 import datetime
@@ -25,6 +31,9 @@ def __virtual__():
 def present(name, profile="github", **kwargs):
     """
     Ensure a user is present
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.member_present <saltext.github.states.github_org.member_present>` instead.
 
     .. code-block:: yaml
 
@@ -74,6 +83,9 @@ def present(name, profile="github", **kwargs):
 def absent(name, profile="github", **kwargs):
     """
     Ensure a github user is absent
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.member_absent <saltext.github.states.github_org.member_absent>` instead.
 
     .. code-block:: yaml
 
@@ -140,6 +152,9 @@ def team_present(  # pylint: disable=too-many-statements
 ):
     """
     Ensure a team is present
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.team_present <saltext.github.states.github_org.team_present>` instead.
 
     name
         This is the name of the team in the organization.
@@ -410,6 +425,9 @@ def team_absent(name, profile="github", **kwargs):
     """
     Ensure a team is absent.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.team_absent <saltext.github.states.github_org.team_absent>` instead.
+
     Example:
 
     .. code-block:: yaml
@@ -467,6 +485,9 @@ def repo_present(
 ):
     """
     Ensure a repository is present
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.present <saltext.github.states.github_repo.present>` instead.
 
     name
         This is the name of the repository.
@@ -692,6 +713,9 @@ def repo_absent(name, profile="github", **kwargs):
     """
     Ensure a repo is absent.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.absent <saltext.github.states.github_repo.absent>` instead.
+
     Example:
 
     .. code-block:: yaml
@@ -743,6 +767,10 @@ def ruleset_absent(
 ):
     """
     Ensure a ruleset is absent.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.ruleset_absent <saltext.github.states.github_org.ruleset_absent>` or
+        :py:func:`github_repo.ruleset_absent <saltext.github.states.github_repo.ruleset_absent>` instead.
 
     Example:
 
@@ -824,6 +852,10 @@ def ruleset_present(
 ):
     """
     Ensure a ruleset is present.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.ruleset_present <saltext.github.states.github_org.ruleset_present>` or
+        :py:func:`github_repo.ruleset_present <saltext.github.states.github_repo.ruleset_present>` instead.
 
     Example:
 

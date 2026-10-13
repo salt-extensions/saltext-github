@@ -12,7 +12,10 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
 from urllib.parse import parse_qs
+from urllib.parse import unquote
 from urllib.parse import urlsplit
+
+from nacl.public import PrivateKey
 
 from tests.support.github.entities import Organization
 from tests.support.github.entities import Repo
@@ -23,6 +26,14 @@ from tests.support.github.state import GlobalState
 TOKEN = "test-token"
 ORG = "testorg"
 
+# Sample SSH public keys for deploy key tests
+DEPLOY_KEY_A = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPDeployKeyAForTesting0000000000000000000A existing"
+)
+DEPLOY_KEY_B = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPDeployKeyBForTesting0000000000000000000B replacement"
+)
+
 
 class APIBase:
     """
@@ -31,12 +42,18 @@ class APIBase:
     via the MRO on instantiation.
     """
 
-    def __init__(self, token: str = TOKEN, state: GlobalState | None = None):
+    def __init__(
+        self, token: str = TOKEN, state: GlobalState | None = None, auth_login: str = "user1"
+    ):
         self.token = token
+        # The user the token belongs to (GET /user, /user/repos)
+        self.auth_login = auth_login
         self.base_url = None
         self.lock = threading.Lock()
         self.requests = []
         self.state = state or GlobalState()
+        # Keypair for the Actions secrets sealed-box encryption
+        self.secrets_private_key = PrivateKey.generate()
         self._server = None
         self._routes: dict[HTTP_METHOD, list[tuple[tuple[re.Pattern[str], ...], Callable]]] = {}
         for name in dir(self):
@@ -77,10 +94,10 @@ class APIBase:
             groups = match.groupdict()
         else:
             groups = match
-        if "repo" not in groups:
-            raise TypeError(f"no repo specified: {groups}")  # pragma: no cover
-        org = self._resolve_org(groups)
-        return org.get_repo(groups["repo"])
+        owner = groups.get("owner") or groups.get("org")
+        if owner is None or "repo" not in groups:
+            raise TypeError(f"no owner/repo specified: {groups}")  # pragma: no cover
+        return self.state.get_repo((owner, groups["repo"]))
 
     # ------------------------------------------------------------------
     # Dispatch
@@ -211,7 +228,7 @@ class APIBase:
                 query = {key: vals[0] for key, vals in parse_qs(split.query).items()}
                 status, headers, payload = api.dispatch(
                     self.command,
-                    split.path,
+                    unquote(split.path),
                     query,
                     body,
                     self.headers.get("Authorization"),

@@ -12,7 +12,7 @@ def _state_matches(entity_state, query):
 
 
 class IssueRoutes(APIBase):
-    @GET(r"/repos/<org>/<repo>/issues")
+    @GET(r"/repos/<owner>/<repo>/issues")
     def _list_issues(self, match, query, _body):
         repo = self._resolve_repo(match)
         wanted_labels = set(filter(None, query.get("labels", "").split(",")))
@@ -30,12 +30,12 @@ class IssueRoutes(APIBase):
                     rend.append(pull.issue_payload())
         return 200, rend
 
-    @GET(r"/repos/<org>/<repo>/issues/<number>")
+    @GET(r"/repos/<owner>/<repo>/issues/<number>")
     def _get_issue(self, match, _query, _body):
         repo = self._resolve_repo(match)
         return 200, repo.get_issue(match["number"]).payload()
 
-    @GET(r"/repos/<org>/<repo>/issues/<number>/comments")
+    @GET(r"/repos/<owner>/<repo>/issues/<number>/comments")
     def _list_issue_comments(self, match, query, _body):
         repo = self._resolve_repo(match)
         issue = repo.get_issue(match["number"])
@@ -46,7 +46,7 @@ class IssueRoutes(APIBase):
             if since is None or comment.updated_at >= since
         ]
 
-    @GET(r"/repos/<org>/<repo>/pulls")
+    @GET(r"/repos/<owner>/<repo>/pulls")
     def _list_pulls(self, match, query, _body):
         repo = self._resolve_repo(match)
         return 200, [

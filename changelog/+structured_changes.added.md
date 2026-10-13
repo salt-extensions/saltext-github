@@ -1,0 +1,1 @@
+The new {py:mod}`github_org <saltext.github.states.github_org>` and {py:mod}`github_repo <saltext.github.states.github_repo>` states report machine-readable `changes` dictionaries (`created`/`deleted`/`updated` entity names, `old`/`new` setting mappings and `*_added`/`*_removed` name lists) instead of prose

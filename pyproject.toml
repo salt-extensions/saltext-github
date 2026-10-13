@@ -39,6 +39,8 @@ dynamic = ["version"]
 dependencies = [
     "salt>=3006",
     "PyGithub>=2.2",
+    # Used directly for Actions secret encryption (also a PyGithub dependency)
+    "pynacl>=1.4",
 ]
 
 [project.readme]

@@ -10,10 +10,10 @@ class GitHubApiError(CommandExecutionError):
     The GitHub API returned an error response.
 
     status
-        The HTTP status code of the response, if available.
+        HTTP status code of the response, if available.
 
     data
-        The decoded response body, if available.
+        Decoded response body, if available.
     """
 
     def __init__(self, message, *, status=None, data=None):

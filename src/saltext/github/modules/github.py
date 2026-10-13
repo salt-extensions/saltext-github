@@ -1,57 +1,26 @@
 """
-Module for interacting with the GitHub v3 API.
+General module for interacting with the GitHub v3 API.
+
+**Currently only contains deprecated (legacy) functions**.
 
 :depends: PyGithub python module
+
+.. important::
+
+    All organization- and repository-related functions in this module are
+    deprecated in favor of the :py:mod:`github_org
+    <saltext.github.modules.github_org>` and :py:mod:`github_repo
+    <saltext.github.modules.github_repo>` modules, which raise errors
+    instead of logging and returning ``False``. This module remains the
+    namespace for functionality that is not tied to a single organization,
+    e.g. looking up arbitrary users.
 
 Configuration
 -------------
 
-Configure this module by specifying the name of a configuration
-profile in the minion config, minion pillar, or master config. The module
-will use the ``github`` key by default, if defined.
-
-.. versionadded:: 1.1.0
-
-    Added the ``api_url`` configuration option to override the API endpoint
-    we run against. Can be used for GitHub Enterprise instances.
-
-.. versionadded:: 1.1.0
-
-    Profile configuration values containing SDB URIs are now rendered on
-    access. Salt itself only renders them inside the minion/master
-    configuration during startup, so this makes them work in pillar-sourced
-    profiles as well:
-
-    .. code-block:: yaml
-
-        # Requires a corresponding SDB profile in the minion configuration,
-        # e.g.
-        #   osenv:
-        #     driver: env
-        github:
-          token: sdb://osenv/GITHUB_TOKEN
-          org_name: my_organization
-
-For example:
-
-.. code-block:: yaml
-
-    github:
-      token: abc1234
-      org_name: my_organization
-
-      # optional: some functions require a repo_name, which
-      # can be set in the config file, or passed in at the CLI.
-      repo_name: my_repo
-
-      # optional: it can be dangerous to change the privacy of a repository
-      # in an automated way. set this to True to allow privacy modifications
-      allow_repo_privacy_changes: False
-
-      # optional: the base URL of the GitHub API. Set this when targeting
-      # a GitHub Enterprise Server instance, e.g.
-      # https://github.example.com/api/v3
-      api_url: https://api.github.com
+This module reads its configuration from profiles, which are described
+in the :ref:`configuration guide <github-configuration>`. All functions
+accept a ``profile`` argument, defaulting to the ``github`` profile.
 """
 
 import logging
@@ -61,14 +30,14 @@ from salt.exceptions import CommandExecutionError
 from saltext.github.utils import filter_unset
 
 try:
-    from saltext.github.utils.gh import client as gh_client
     from saltext.github.utils.gh import issues as gh_issues
+    from saltext.github.utils.gh import members as gh_members
     from saltext.github.utils.gh import milestones as gh_milestones
+    from saltext.github.utils.gh import profile as gh_profile
     from saltext.github.utils.gh import pulls as gh_pulls
     from saltext.github.utils.gh import repos as gh_repos
     from saltext.github.utils.gh import rulesets as gh_rulesets
     from saltext.github.utils.gh import teams as gh_teams
-    from saltext.github.utils.gh import users as gh_users
     from saltext.github.utils.gh.exceptions import GitHubApiError
     from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
@@ -78,15 +47,10 @@ except ImportError:  # pragma: no cover
 
 log = logging.getLogger(__name__)
 
-API_URL_DEFAULT = "https://api.github.com"
-
 __virtualname__ = "github"
 
 
 def __virtual__():
-    """
-    Only load this module if PyGithub is installed on this minion.
-    """
     if HAS_LIBS:
         return __virtualname__
     return (  # pragma: no cover
@@ -95,86 +59,22 @@ def __virtual__():
     )
 
 
-def _get_config_value(profile, config_name):
-    """
-    Helper function that returns a profile's configuration value based on
-    the supplied configuration name.
-
-    profile
-        The profile name that contains configuration information.
-
-    config_name
-        The configuration item's name to use to return configuration values.
-    """
-    if "gh_profile" not in __context__ or profile not in __context__["gh_profile"]:
-        if not __salt__["config.get"](profile):
-            raise CommandExecutionError(
-                f"Authentication information could not be found for the '{profile}' profile."
-            )
-        __context__.setdefault("gh_profile", {})[profile] = {}
-
-    cache = __context__["gh_profile"][profile]
-    if config_name not in cache:
-        # Unlike config.option, config.get resolves SDB URIs in scalar values,
-        # hence request each value separately and cache the rendered result.
-        cache[config_name] = __salt__["config.get"](f"{profile}:{config_name}", default=None)
-
-    config_value = cache[config_name]
-    if config_value is None:
-        raise CommandExecutionError(
-            f"The '{config_name}' parameter was not found in the '{profile}' profile."
-        )
-
-    return config_value
-
-
-def _get_api_url(profile):
-    """
-    Return the configured GitHub API base URL, defaulting to the public one.
-    """
-    try:
-        return _get_config_value(profile, "api_url").rstrip("/")
-    except CommandExecutionError:  # pragma: no cover
-        return API_URL_DEFAULT
-
-
 def _get_conn(profile):
     """
     Return the GitHub connection, cached into __context__ for performance
     """
-    token = _get_config_value(profile, "token")
-    org_name = _get_config_value(profile, "org_name")
-    api_url = _get_api_url(profile)
-    key = f"github.{token}:{org_name}:{api_url}"
-
-    if key not in __context__:
-        __context__[key] = gh_client.GitHubConnection(token, org_name, api_url=api_url)
-    return __context__[key]
-
-
-def list_users(profile="github", ignore_cache=False):
-    """
-    List all users within the organization.
-
-    profile
-        The name of the profile configuration to use. Defaults to ``github``.
-
-    ignore_cache
-        Bypasses the use of cached users.
-
-    CLI Example:
-
-    .. code-block:: bash
-
-        salt myminion github.list_users
-        salt myminion github.list_users profile='my-github-profile'
-    """
-    return gh_users.list_members(_get_conn(profile), ignore_cache=ignore_cache)
+    return gh_profile.get_conn(profile, __salt__=__salt__, __context__=__context__)
 
 
 def get_user(name, profile="github", user_details=False):
     """
     Get a GitHub user by name.
+
+    .. deprecated:: 1.1.0
+        Despite its name, this function looks up the user's membership in
+        the profile's organization, not a generic user account. Use
+        :py:func:`github_org.get_member <saltext.github.modules.github_org.get_member>`
+        instead.
 
     name
         The user for which to obtain information.
@@ -201,15 +101,69 @@ def get_user(name, profile="github", user_details=False):
         return True
 
     try:
-        return gh_users.get_user_info(_get_conn(profile), name)
+        return gh_members.get_info(_get_conn(profile), name)
     except GitHubNotFoundError:
         log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
 
 
+# Anything below here is deprecated. Replacement functions are in github_org/github_repo.
+# This module is intended for non-org/non-repo functionality now.
+
+
+def _get_config_value(profile, config_name):
+    """
+    Helper function that returns a profile's configuration value based on
+    the supplied configuration name.
+
+    profile
+        The profile name that contains configuration information.
+
+    config_name
+        The configuration item's name to use to return configuration values.
+    """
+    return gh_profile.get_config_value(
+        profile, config_name, __salt__=__salt__, __context__=__context__
+    )
+
+
+def _get_owner(profile):
+    """
+    Helper function that returns a profile's default repository owner
+    (``owner``, legacy alias ``org_name``), or None when unset.
+    """
+    return gh_profile.get_owner(profile, __salt__=__salt__, __context__=__context__)
+
+
+def list_users(profile="github", ignore_cache=False):
+    """
+    List all users within the organization.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_members <saltext.github.modules.github_org.list_members>` instead.
+
+    profile
+        The name of the profile configuration to use. Defaults to ``github``.
+
+    ignore_cache
+        Bypasses the use of cached users.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt myminion github.list_users
+        salt myminion github.list_users profile='my-github-profile'
+    """
+    return gh_members.list_all(_get_conn(profile), ignore_cache=ignore_cache)
+
+
 def add_user(name, profile="github"):
     """
     Add a GitHub user.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_member <saltext.github.modules.github_org.add_member>` instead.
 
     name
         The user for which to obtain information.
@@ -225,7 +179,7 @@ def add_user(name, profile="github"):
     """
 
     try:
-        return gh_users.invite_member(_get_conn(profile), name)
+        return gh_members.invite(_get_conn(profile), name)
     except GitHubNotFoundError:
         log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
@@ -234,6 +188,9 @@ def add_user(name, profile="github"):
 def remove_user(name, profile="github"):
     """
     Remove a Github user by name.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.remove_member <saltext.github.modules.github_org.remove_member>` instead.
 
     name
         The user for which to obtain information.
@@ -249,7 +206,7 @@ def remove_user(name, profile="github"):
     """
 
     try:
-        return gh_users.remove_member(_get_conn(profile), name)
+        return gh_members.remove(_get_conn(profile), name)
     except GitHubNotFoundError:
         log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
@@ -259,6 +216,9 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
     """
     Return information about a single issue in a named repository.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.get_issue <saltext.github.modules.github_repo.get_issue>` instead.
+
     issue_number
         The number of the issue to retrieve.
 
@@ -266,7 +226,7 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
         The name of the repository from which to get the issue. This argument is
         required, either passed via the CLI, or defined in the configured
         profile. A ``repo_name`` passed as a CLI argument will override the
-        repo_name defined in the configured profile, if provided.
+        :ghconf:`repo_name` defined in the configured profile, if provided.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -306,6 +266,9 @@ def get_issue_comments(issue_number, repo_name=None, profile="github", since=Non
     """
     Return information about the comments for a given issue in a named repository.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.get_issue_comments <saltext.github.modules.github_repo.get_issue_comments>` instead.
+
     issue_number
         The number of the issue for which to retrieve comments.
 
@@ -313,7 +276,7 @@ def get_issue_comments(issue_number, repo_name=None, profile="github", since=Non
         The name of the repository to which the issue belongs. This argument is
         required, either passed via the CLI, or defined in the configured
         profile. A ``repo_name`` passed as a CLI argument will override the
-        repo_name defined in the configured profile, if provided.
+        :ghconf:`repo_name` defined in the configured profile, if provided.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -371,11 +334,14 @@ def get_issues(
     """
     Returns information for all issues in a given repository, based on the search options.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.list_issues <saltext.github.modules.github_repo.list_issues>` instead.
+
     repo_name
         The name of the repository for which to list issues. This argument is
         required, either passed via the CLI, or defined in the configured
         profile. A ``repo_name`` passed as a CLI argument will override the
-        repo_name defined in the configured profile, if provided.
+        :ghconf:`repo_name` defined in the configured profile, if provided.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -477,11 +443,14 @@ def get_milestones(
     """
     Return information about milestones for a given repository.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.list_milestones <saltext.github.modules.github_repo.list_milestones>` instead.
+
     repo_name
         The name of the repository for which to list issues. This argument is
         required, either passed via the CLI, or defined in the configured
         profile. A ``repo_name`` passed as a CLI argument will override the
-        repo_name defined in the configured profile, if provided.
+        :ghconf:`repo_name` defined in the configured profile, if provided.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -539,6 +508,9 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github", outp
     """
     Return information about a single milestone in a named repository.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.get_milestone <saltext.github.modules.github_repo.get_milestone>` instead.
+
     number
         The number of the milestone to retrieve. If provided, this option
         will be favored over ``name``.
@@ -550,7 +522,7 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github", outp
         The name of the repository for which to list issues. This argument is
         required, either passed via the CLI, or defined in the configured
         profile. A ``repo_name`` passed as a CLI argument will override the
-        repo_name defined in the configured profile, if provided.
+        :ghconf:`repo_name` defined in the configured profile, if provided.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -600,6 +572,9 @@ def get_repo_info(repo_name, profile="github", ignore_cache=False):
     """
     Return information for a given repo.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.get_info <saltext.github.modules.github_repo.get_info>` instead.
+
     repo_name
         The name of the repository.
 
@@ -613,12 +588,23 @@ def get_repo_info(repo_name, profile="github", ignore_cache=False):
         salt myminion github.get_repo_info salt
         salt myminion github.get_repo_info salt profile='my-github-profile'
     """
-    return gh_repos.get_info(_get_conn(profile), repo_name, ignore_cache=ignore_cache)
+    info = gh_repos.get_info(_get_conn(profile), repo_name, ignore_cache=ignore_cache)
+    # The legacy output contained GitHub's deprecated alias fields
+    return {
+        **info,
+        "watchers_count": info["stargazers_count"],
+        "watchers": info["stargazers_count"],
+        "forks": info["forks_count"],
+        "open_issues": info["open_issues_count"],
+    }
 
 
 def get_repo_teams(repo_name, profile="github"):
     """
     Return teams belonging to a repository.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.get_teams <saltext.github.modules.github_repo.get_teams>` instead.
 
     repo_name
         The name of the repository from which to retrieve teams.
@@ -642,6 +628,9 @@ def list_repos(profile="github"):
     repositories within the organization Dependent upon the access rights of
     the profile token.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_repos <saltext.github.modules.github_org.list_repos>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -660,6 +649,9 @@ def list_private_repos(profile="github"):
     List private repositories within the organization. Dependent upon the access
     rights of the profile token.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_repos <saltext.github.modules.github_org.list_repos>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -676,6 +668,9 @@ def list_private_repos(profile="github"):
 def list_public_repos(profile="github"):
     """
     List public repositories within the organization.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_repos <saltext.github.modules.github_org.list_repos>` instead.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -705,6 +700,9 @@ def add_repo(
 ):
     """
     Create a new github repository.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_repo <saltext.github.modules.github_org.add_repo>` instead.
 
     name
         The name of the team to be created.
@@ -779,6 +777,9 @@ def edit_repo(
     """
     Updates an existing Github repository.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.update <saltext.github.modules.github_repo.update>` instead.
+
     name
         The name of the team to be created.
 
@@ -838,6 +839,9 @@ def remove_repo(name, profile="github"):
     """
     Remove a Github repository.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.delete <saltext.github.modules.github_repo.delete>` instead.
+
     name
         The name of the repository to be removed.
 
@@ -869,6 +873,9 @@ def get_team(name, profile="github"):
     Returns the team details if a team with the given name exists, or None
     otherwise.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.get_team <saltext.github.modules.github_org.get_team>` instead.
+
     name
         The team name for which to obtain information.
 
@@ -894,6 +901,9 @@ def add_team(
 ):
     """
     Create a new Github team within an organization.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_team <saltext.github.modules.github_org.add_team>` instead.
 
     name
         The name of the team to be created.
@@ -938,6 +948,9 @@ def add_team(
 def edit_team(name, description=None, privacy=None, permission=None, profile="github"):
     """
     Updates an existing Github team.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.edit_team <saltext.github.modules.github_org.edit_team>` instead.
 
     name
         The name of the team to be edited.
@@ -985,6 +998,9 @@ def remove_team(name, profile="github"):
     """
     Remove a github team.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.remove_team <saltext.github.modules.github_org.remove_team>` instead.
+
     name
         The name of the team to be removed.
 
@@ -1014,6 +1030,9 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
     """
     Gets the repo details for a given team as a dict from repo_name to repo details.
     Note that repo names are always in lower case.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_team_repos <saltext.github.modules.github_org.list_team_repos>` instead.
 
     team_name
         The name of the team from which to list repos.
@@ -1046,6 +1065,9 @@ def list_team_repos(team_name, profile="github", ignore_cache=False):
 def add_team_repo(repo_name, team_name, profile="github", permission=None):
     """
     Adds a repository to a team with team_name.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_team_repo <saltext.github.modules.github_org.add_team_repo>` instead.
 
     repo_name
         The name of the repository to add.
@@ -1091,6 +1113,9 @@ def remove_team_repo(repo_name, team_name, profile="github"):
     """
     Removes a repository from a team with team_name.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.remove_team_repo <saltext.github.modules.github_org.remove_team_repo>` instead.
+
     repo_name
         The name of the repository to remove.
 
@@ -1121,6 +1146,9 @@ def remove_team_repo(repo_name, team_name, profile="github"):
 def list_team_members(team_name, profile="github", ignore_cache=False):
     """
     Gets the names of team members in lower case.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_team_members <saltext.github.modules.github_org.list_team_members>` instead.
 
     team_name
         The name of the team from which to list members.
@@ -1154,6 +1182,11 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
     """
     List all members (in lower case) without MFA turned on.
 
+    .. deprecated:: 1.1.0
+        Deprecated without replacement, along with the per-team MFA
+        enforcement of the ``github.team_present`` state. Require 2FA
+        organization-wide in the GitHub settings instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1166,13 +1199,16 @@ def list_members_without_mfa(profile="github", ignore_cache=False):
 
         salt myminion github.list_members_without_mfa
     """
-    return gh_users.list_members_without_mfa(_get_conn(profile), ignore_cache=ignore_cache)
+    return gh_members.list_without_mfa(_get_conn(profile), ignore_cache=ignore_cache)
 
 
 def is_team_member(name, team_name, profile="github"):
     """
     Returns True if the github user is in the team with team_name, or False
     otherwise.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.is_team_member <saltext.github.modules.github_org.is_team_member>` instead.
 
     name
         The name of the user whose membership to check.
@@ -1196,6 +1232,9 @@ def is_team_member(name, team_name, profile="github"):
 def add_team_member(name, team_name, profile="github"):
     """
     Adds a team member to a team with team_name.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_team_member <saltext.github.modules.github_org.add_team_member>` instead.
 
     name
         The name of the team member to add.
@@ -1232,6 +1271,9 @@ def remove_team_member(name, team_name, profile="github"):
     """
     Removes a team member from a team with team_name.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.remove_team_member <saltext.github.modules.github_org.remove_team_member>` instead.
+
     name
         The name of the team member to remove.
 
@@ -1263,6 +1305,9 @@ def list_teams(profile="github", ignore_cache=False):
     """
     Lists all teams with the organization.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_teams <saltext.github.modules.github_org.list_teams>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1292,6 +1337,9 @@ def get_prs(
     """
     Returns information for all pull requests in a given repository, based on
     the search options provided.
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_repo.list_pulls <saltext.github.modules.github_repo.list_pulls>` instead.
 
     repo_name
         The name of the repository for which to list pull requests. This
@@ -1397,11 +1445,13 @@ def _resolve_ruleset_params(
     if ruleset_type not in ("repo", "org"):
         raise CommandExecutionError(f"Invalid ruleset type: {ruleset_type}")
 
+    # Unset owners fall back to the connection default (the profile's
+    # owner or the token's user) in the ruleset utils.
     if ruleset_type == "repo":
-        owner = owner or _get_config_value(profile, "owner")
+        owner = owner or _get_owner(profile)
         repo_name = repo_name or _get_config_value(profile, "repo_name")
     else:
-        org_name = org_name or _get_config_value(profile, "org_name")
+        org_name = org_name or _get_owner(profile)
 
     # check for optional header_dict
     try:
@@ -1450,6 +1500,10 @@ def get_ruleset(profile="github", **kwargs):
     """
     Get information of specific ruleset.
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.get_ruleset <saltext.github.modules.github_org.get_ruleset>` or
+        :py:func:`github_repo.get_ruleset <saltext.github.modules.github_repo.get_ruleset>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1494,6 +1548,10 @@ def delete_ruleset(profile="github", **kwargs):
     """
     Delete ruleset
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.delete_ruleset <saltext.github.modules.github_org.delete_ruleset>` or
+        :py:func:`github_repo.delete_ruleset <saltext.github.modules.github_repo.delete_ruleset>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1537,6 +1595,10 @@ def delete_ruleset(profile="github", **kwargs):
 def update_ruleset(profile="github", **kwargs):
     """
     Update ruleset
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.update_ruleset <saltext.github.modules.github_org.update_ruleset>` or
+        :py:func:`github_repo.update_ruleset <saltext.github.modules.github_repo.update_ruleset>` instead.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
@@ -1591,6 +1653,10 @@ def add_ruleset(profile="github", **kwargs):
     """
     Add ruleset
 
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.add_ruleset <saltext.github.modules.github_org.add_ruleset>` or
+        :py:func:`github_repo.add_ruleset <saltext.github.modules.github_repo.add_ruleset>` instead.
+
     profile
         The name of the profile configuration to use. Defaults to ``github``.
 
@@ -1636,6 +1702,10 @@ def add_ruleset(profile="github", **kwargs):
 def list_rulesets(profile="github", *, per_page=None, **kwargs):
     """
     List rulesets
+
+    .. deprecated:: 1.1.0
+        Use :py:func:`github_org.list_rulesets <saltext.github.modules.github_org.list_rulesets>` or
+        :py:func:`github_repo.list_rulesets <saltext.github.modules.github_repo.list_rulesets>` instead.
 
     profile
         The name of the profile configuration to use. Defaults to ``github``.
