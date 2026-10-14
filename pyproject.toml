@@ -81,16 +81,22 @@ docs = [
 ]
 docsauto = ["sphinx-autobuild"]
 lint = [
-    "pylint==4.0.4",
+    "pylint==4.0.9",
 ]
 tests = [
     "pytest>=7.2.0",
     "pytest-salt-factories>=1.0.0",
     "pytest-instafail",
+    "pytest-xdist",
 ]
 
 [project.entry-points."salt.loader"]
 "saltext.github" = "saltext.github"
+
+[tool.pytest.ini_options]
+# Best test distribution for the module-scoped functional fixtures.
+# Only effective when parallelizing via ``-n <workers>``/``-n auto``.
+addopts = "--dist=loadscope"
 
 [tool.uv]
 # Salt's legacy setup.py requires old setuptools.
