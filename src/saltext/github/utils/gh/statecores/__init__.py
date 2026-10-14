@@ -14,6 +14,52 @@ The cores return complete state return dictionaries (``name``,
 failures, which the wrappers translate into a failed state return.
 """
 
+import functools
+
+from salt.exceptions import CommandExecutionError
+
+
+class StateError(CommandExecutionError):
+    """
+    Raised when applying state changes failed. Compound states can
+    attach the changes that were applied before the failure, which
+    :func:`failed`/:func:`catch_errors` include in the state return.
+    """
+
+    def __init__(self, message, *, changes=None):
+        super().__init__(message)
+        self.changes = changes or {}
+
+
+def failed(name, err):
+    """
+    Render a raised error into a failed state return, including
+    partially applied changes carried by the error (:class:`StateError`).
+    """
+    return {
+        "name": name,
+        "changes": getattr(err, "changes", None) or {},
+        "result": False,
+        "comment": str(err),
+    }
+
+
+def catch_errors(func):
+    """
+    Wrap a state function to render raised
+    :class:`CommandExecutionError <salt.exceptions.CommandExecutionError>`
+    into a failed state return instead of a traceback.
+    """
+
+    @functools.wraps(func)
+    def wrapper(name, *args, **kwargs):
+        try:
+            return func(name, *args, **kwargs)
+        except CommandExecutionError as err:
+            return failed(name, err)
+
+    return wrapper
+
 
 def differs(current, desired):
     """

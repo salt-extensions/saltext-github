@@ -8,16 +8,13 @@ from urllib.parse import quote
 from salt.exceptions import CommandExecutionError
 
 from saltext.github.utils import filter_unset
-from saltext.github.utils.gh import client
 
 log = logging.getLogger(__name__)
 
 
-def _path(conn, owner, repo_name, *suffix):
+def _path(*suffix):
     # Environment names can contain characters that are invalid in URL paths
-    return ["repos", owner or conn.owner, repo_name, "environments"] + [
-        quote(str(segment), safe="") for segment in suffix
-    ]
+    return ["environments"] + [quote(str(segment), safe="") for segment in suffix]
 
 
 def branch_policy_from_patterns(deployment_branches):
@@ -84,7 +81,7 @@ def list_all(conn, repo_name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, _path(conn, owner, repo_name), per_page=100)["environments"]
+    return conn.repo_query(owner, repo_name, "environments", per_page=100)["environments"]
 
 
 def get(conn, repo_name, name, *, owner=None):
@@ -106,7 +103,7 @@ def get(conn, repo_name, name, *, owner=None):
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the environment does not exist.
     """
-    return client.query(conn, _path(conn, owner, repo_name, name))
+    return conn.repo_query(owner, repo_name, *_path(name))
 
 
 def set_(
@@ -164,7 +161,7 @@ def set_(
         }
     )
     data["deployment_branch_policy"] = deployment_branch_policy
-    return client.query(conn, _path(conn, owner, repo_name, name), method="PUT", data=data)
+    return conn.repo_query(owner, repo_name, *_path(name), method="PUT", data=data)
 
 
 def delete(conn, repo_name, name, *, owner=None):
@@ -183,7 +180,7 @@ def delete(conn, repo_name, name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    client.query(conn, _path(conn, owner, repo_name, name), method="DELETE")
+    conn.repo_query(owner, repo_name, *_path(name), method="DELETE")
 
 
 def list_branch_policies(conn, repo_name, environment, *, owner=None):
@@ -202,9 +199,10 @@ def list_branch_policies(conn, repo_name, environment, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(
-        conn,
-        _path(conn, owner, repo_name, environment, "deployment-branch-policies"),
+    return conn.repo_query(
+        owner,
+        repo_name,
+        *_path(environment, "deployment-branch-policies"),
         per_page=100,
     )["branch_policies"]
 
@@ -237,9 +235,10 @@ def create_branch_policy(conn, repo_name, environment, name, *, typ="branch", ow
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(
-        conn,
-        _path(conn, owner, repo_name, environment, "deployment-branch-policies"),
+    return conn.repo_query(
+        owner,
+        repo_name,
+        *_path(environment, "deployment-branch-policies"),
         method="POST",
         data={"name": name, "type": typ},
     )
@@ -264,8 +263,9 @@ def delete_branch_policy(conn, repo_name, environment, policy_id, *, owner=None)
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    client.query(
-        conn,
-        _path(conn, owner, repo_name, environment, "deployment-branch-policies", policy_id),
+    conn.repo_query(
+        owner,
+        repo_name,
+        *_path(environment, "deployment-branch-policies", policy_id),
         method="DELETE",
     )

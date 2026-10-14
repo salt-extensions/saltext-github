@@ -4,9 +4,12 @@ State core managing repository (deployment) environments.
 
 import logging
 
+from salt.exceptions import CommandExecutionError
+
 from saltext.github.utils import filter_unset
 from saltext.github.utils.gh import environments as gh_environments
 from saltext.github.utils.gh.exceptions import GitHubNotFoundError
+from saltext.github.utils.gh.statecores import StateError
 
 log = logging.getLogger(__name__)
 
@@ -145,13 +148,28 @@ def present(
         ret["comment"] = f"Environment {name} would have been {verb}"
         return ret
 
-    if current is None or settings_diff:
-        gh_environments.set_(conn, repo_name, name, owner=owner, **set_kwargs)
-    for pattern in branches_added:
-        gh_environments.create_branch_policy(conn, repo_name, name, pattern, owner=owner)
-    for policy in current_policies:
-        if policy["name"] in branches_removed:
-            gh_environments.delete_branch_policy(conn, repo_name, name, policy["id"], owner=owner)
+    applied = {}
+    try:
+        if current is None or settings_diff:
+            gh_environments.set_(conn, repo_name, name, owner=owner, **set_kwargs)
+            if current is None:
+                applied["created"] = name
+            else:
+                applied["old"] = ret["changes"]["old"]
+                applied["new"] = ret["changes"]["new"]
+        for pattern in branches_added:
+            gh_environments.create_branch_policy(conn, repo_name, name, pattern, owner=owner)
+            applied.setdefault("deployment_branches", {}).setdefault("added", []).append(pattern)
+        for policy in current_policies:
+            if policy["name"] in branches_removed:
+                gh_environments.delete_branch_policy(
+                    conn, repo_name, name, policy["id"], owner=owner
+                )
+                applied.setdefault("deployment_branches", {}).setdefault("removed", []).append(
+                    policy["name"]
+                )
+    except CommandExecutionError as err:
+        raise StateError(str(err), changes=applied) from err
     ret["comment"] = f"Environment {name} has been {verb}"
     return ret
 

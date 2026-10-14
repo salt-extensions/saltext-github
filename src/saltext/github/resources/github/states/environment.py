@@ -11,38 +11,19 @@ the resource declaration.
 
 import logging
 
-from salt.exceptions import CommandExecutionError
+from salt.utils.functools import namespaced_function
 
-from saltext.github.utils.gh import profile as gh_profile
+from saltext.github.utils.gh import resource as gh_resource
+from saltext.github.utils.gh.statecores import catch_errors
 from saltext.github.utils.gh.statecores import environments as sc_environments
 
 log = logging.getLogger(__name__)
 
 
-def _ident():
-    """
-    Resource identity. Salt's authoring docs promise ``__resource__``
-    inside state overrides, but no released Salt packs it there — fall
-    back to the ``repo.ident`` execution override, which does see it.
-    """
-    try:
-        rid = __resource__["id"]
-    except NameError:
-        return __salt__["repo.ident"]()
-    owner, _, repo_name = rid.partition("/")
-    return {"id": rid, "owner": owner, "repo": repo_name}
+_core_args = namespaced_function(gh_resource.core_args, globals())
 
 
-def _core_args(profile):
-    ident = _ident()
-    conn = gh_profile.resource_conn(__opts__, __context__, profile=profile, owner=ident["owner"])
-    return conn, ident["owner"], ident["repo"]
-
-
-def _failed(name, err):
-    return {"name": name, "changes": {}, "result": False, "comment": str(err)}
-
-
+@catch_errors
 def present(
     name,
     wait_timer=None,
@@ -88,23 +69,21 @@ def present(
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    try:
-        conn, owner, repo_name = _core_args(profile)
-        return sc_environments.present(
-            conn,
-            name,
-            repo_name,
-            wait_timer=wait_timer,
-            prevent_self_review=prevent_self_review,
-            reviewers=reviewers,
-            deployment_branches=deployment_branches,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    conn, owner, repo_name = _core_args(profile)
+    return sc_environments.present(
+        conn,
+        name,
+        repo_name,
+        wait_timer=wait_timer,
+        prevent_self_review=prevent_self_review,
+        reviewers=reviewers,
+        deployment_branches=deployment_branches,
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def absent(name, profile=None):
     """
     Ensure an environment is absent from the targeted repository.
@@ -116,8 +95,5 @@ def absent(name, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    try:
-        conn, owner, repo_name = _core_args(profile)
-        return sc_environments.absent(conn, name, repo_name, owner=owner, test=__opts__["test"])
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    conn, owner, repo_name = _core_args(profile)
+    return sc_environments.absent(conn, name, repo_name, owner=owner, test=__opts__["test"])

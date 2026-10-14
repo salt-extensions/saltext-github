@@ -10,23 +10,18 @@ defaults to the :ghconf:`profile <resource:profile>` named in the resource decla
 
 import logging
 
+from salt.utils.functools import namespaced_function
+
 from saltext.github.utils import filter_fields
 from saltext.github.utils.gh import issues as gh_issues
-from saltext.github.utils.gh import profile as gh_profile
+from saltext.github.utils.gh import resource as gh_resource
 
 log = logging.getLogger(__name__)
 
 __func_alias__ = {"list_": "list"}
 
 
-def _conn(profile=None):
-    owner, _ = _ident()
-    return gh_profile.resource_conn(__opts__, __context__, profile=profile, owner=owner)
-
-
-def _ident():
-    owner, _, repo_name = __resource__["id"].partition("/")
-    return owner, repo_name
+_core_args = namespaced_function(gh_resource.core_args, globals())
 
 
 def list_(
@@ -97,9 +92,9 @@ def list_(
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     issues = gh_issues.list_all(
-        _conn(profile),
+        conn,
         repo_name,
         milestone=milestone,
         state=state,
@@ -133,8 +128,8 @@ def get(number, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    return gh_issues.get(_conn(profile), repo_name, number, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    return gh_issues.get(conn, repo_name, number, owner=owner)
 
 
 def get_comments(number, *, since=None, profile=None):
@@ -158,5 +153,5 @@ def get_comments(number, *, since=None, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    return gh_issues.get_comments(_conn(profile), repo_name, number, since=since, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    return gh_issues.get_comments(conn, repo_name, number, since=since, owner=owner)

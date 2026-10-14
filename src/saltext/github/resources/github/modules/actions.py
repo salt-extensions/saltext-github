@@ -11,21 +11,16 @@ defaults to the :ghconf:`profile <resource:profile>` named in the resource decla
 
 import logging
 
+from salt.utils.functools import namespaced_function
+
 from saltext.github.utils import filter_fields
 from saltext.github.utils.gh import actions as gh_actions
-from saltext.github.utils.gh import profile as gh_profile
+from saltext.github.utils.gh import resource as gh_resource
 
 log = logging.getLogger(__name__)
 
 
-def _conn(profile=None):
-    owner, _ = _ident()
-    return gh_profile.resource_conn(__opts__, __context__, profile=profile, owner=owner)
-
-
-def _ident():
-    owner, _, repo_name = __resource__["id"].partition("/")
-    return owner, repo_name
+_core_args = namespaced_function(gh_resource.core_args, globals())
 
 
 def list_secrets(*, fields=None, profile=None):
@@ -48,8 +43,8 @@ def list_secrets(*, fields=None, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    secrets = gh_actions.list_secrets(_conn(profile), repo_name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    secrets = gh_actions.list_secrets(conn, repo_name, owner=owner)
     return filter_fields({secret["name"]: secret for secret in secrets}, fields)
 
 
@@ -71,8 +66,8 @@ def get_secret(name, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    return gh_actions.get_secret(_conn(profile), repo_name, name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    return gh_actions.get_secret(conn, repo_name, name, owner=owner)
 
 
 def set_secret(name, value, *, profile=None):
@@ -97,8 +92,8 @@ def set_secret(name, value, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    gh_actions.set_secret(_conn(profile), repo_name, name, value, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    gh_actions.set_secret(conn, repo_name, name, value, owner=owner)
     return True
 
 
@@ -119,8 +114,8 @@ def remove_secret(name, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    gh_actions.delete_secret(_conn(profile), repo_name, name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    gh_actions.delete_secret(conn, repo_name, name, owner=owner)
     return True
 
 
@@ -140,8 +135,8 @@ def get_workflow_permissions(*, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    return gh_actions.get_workflow_permissions(_conn(profile), repo_name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    return gh_actions.get_workflow_permissions(conn, repo_name, owner=owner)
 
 
 def set_workflow_permissions(
@@ -169,9 +164,9 @@ def set_workflow_permissions(
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     gh_actions.set_workflow_permissions(
-        _conn(profile),
+        conn,
         repo_name,
         default_workflow_permissions=default_workflow_permissions,
         can_approve_pull_request_reviews=can_approve_pull_request_reviews,

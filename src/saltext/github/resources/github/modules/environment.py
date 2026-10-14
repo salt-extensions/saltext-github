@@ -10,23 +10,18 @@ defaults to the :ghconf:`profile <resource:profile>` named in the resource decla
 
 import logging
 
+from salt.utils.functools import namespaced_function
+
 from saltext.github.utils import filter_fields
 from saltext.github.utils.gh import environments as gh_environments
-from saltext.github.utils.gh import profile as gh_profile
+from saltext.github.utils.gh import resource as gh_resource
 
 log = logging.getLogger(__name__)
 
 __func_alias__ = {"list_": "list", "set_": "set"}
 
 
-def _conn(profile=None):
-    owner, _ = _ident()
-    return gh_profile.resource_conn(__opts__, __context__, profile=profile, owner=owner)
-
-
-def _ident():
-    owner, _, repo_name = __resource__["id"].partition("/")
-    return owner, repo_name
+_core_args = namespaced_function(gh_resource.core_args, globals())
 
 
 def list_(*, fields=None, profile=None):
@@ -48,8 +43,8 @@ def list_(*, fields=None, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    environments = gh_environments.list_all(_conn(profile), repo_name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    environments = gh_environments.list_all(conn, repo_name, owner=owner)
     return filter_fields({env["name"]: env for env in environments}, fields)
 
 
@@ -70,8 +65,8 @@ def get(name, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    return gh_environments.get(_conn(profile), repo_name, name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    return gh_environments.get(conn, repo_name, name, owner=owner)
 
 
 def set_(
@@ -122,9 +117,9 @@ def set_(
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     return gh_environments.set_(
-        _conn(profile),
+        conn,
         repo_name,
         name,
         wait_timer=wait_timer,
@@ -152,8 +147,8 @@ def remove(name, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    gh_environments.delete(_conn(profile), repo_name, name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    gh_environments.delete(conn, repo_name, name, owner=owner)
     return True
 
 
@@ -179,9 +174,9 @@ def list_branch_policies(environment, *, fields=None, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     return filter_fields(
-        gh_environments.list_branch_policies(_conn(profile), repo_name, environment, owner=owner),
+        gh_environments.list_branch_policies(conn, repo_name, environment, owner=owner),
         fields,
     )
 
@@ -214,9 +209,9 @@ def add_branch_policy(environment, name, *, typ="branch", profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     return gh_environments.create_branch_policy(
-        _conn(profile), repo_name, environment, name, typ=typ, owner=owner
+        conn, repo_name, environment, name, typ=typ, owner=owner
     )
 
 
@@ -241,8 +236,6 @@ def remove_branch_policy(environment, policy_id, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    gh_environments.delete_branch_policy(
-        _conn(profile), repo_name, environment, policy_id, owner=owner
-    )
+    conn, owner, repo_name = _core_args(profile)
+    gh_environments.delete_branch_policy(conn, repo_name, environment, policy_id, owner=owner)
     return True

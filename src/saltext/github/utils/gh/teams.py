@@ -10,6 +10,7 @@ import logging
 
 from saltext.github.utils import filter_unset
 from saltext.github.utils.gh.client import api_request
+from saltext.github.utils.gh.exceptions import GitHubApiError
 from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
 log = logging.getLogger(__name__)
@@ -242,7 +243,7 @@ def list_repos(conn, team_info, *, owner=None, ignore_cache=False):
 def add_repo(conn, team_info, repo_name, permission=None, *, owner=None):
     """
     Add a repository to a team, or update the permission the team has
-    on it. Returns false if updating the permission failed.
+    on it. Raises when updating the permission failed.
 
     conn
         :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
@@ -266,9 +267,11 @@ def add_repo(conn, team_info, repo_name, permission=None, *, owner=None):
     if permission is None:
         team.add_to_repos(repo)
     elif not team.update_team_repository(repo, permission):
-        return False
+        raise GitHubApiError(
+            f"Failed setting permission {permission} on repo {repo_name} "
+            f"for team {team_info['name']}."
+        )
     list_repos(conn, team_info, owner=owner, ignore_cache=True)  # Refresh cache
-    return True
 
 
 @api_request

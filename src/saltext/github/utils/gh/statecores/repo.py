@@ -9,6 +9,7 @@ from salt.exceptions import CommandExecutionError
 from saltext.github.utils.gh import repos as gh_repos
 from saltext.github.utils.gh import teams as gh_teams
 from saltext.github.utils.gh.exceptions import GitHubNotFoundError
+from saltext.github.utils.gh.statecores import StateError
 from saltext.github.utils.gh.statecores import differs
 
 log = logging.getLogger(__name__)
@@ -57,24 +58,11 @@ def _repo_teams_diff(ret, conn, name, teams, owner):
 
 def _set_team_repo(conn, name, team_name, permission, owner):
     """
-    Add a repository to a team or update the team's permission on it,
-    raising when setting the permission failed.
+    Add a repository to a team or update the team's permission on it.
     """
-    if not gh_teams.add_repo(
+    gh_teams.add_repo(
         conn, gh_teams.find(conn, team_name, owner=owner), name, permission=permission, owner=owner
-    ):
-        raise CommandExecutionError(
-            f"Failed setting permission {permission} on repo {name} for team {team_name}."
-        )
-
-
-def _create_repo(conn, name, create_params, teams, owner):
-    """
-    Create a repository and associate the requested teams.
-    """
-    gh_repos.create(conn, name, owner=owner, **create_params)
-    for team_name, permission in (teams or {}).items():
-        _set_team_repo(conn, name, team_name, permission, owner)
+    )
 
 
 def present(
@@ -177,41 +165,51 @@ def present(
         ret["comment"] = f"Repo {name} would have been {verb}"
         return ret
 
-    if target is None:
-        _create_repo(
-            conn,
-            name,
-            {
-                "description": description,
-                "homepage": homepage,
-                "private": private,
-                "has_issues": has_issues,
-                "has_wiki": has_wiki,
-                "has_downloads": has_downloads,
-                "auto_init": auto_init,
-                "gitignore_template": gitignore_template,
-                "license_template": license_template,
-            },
-            teams,
-            owner,
-        )
-    else:
-        if update_params:
-            gh_repos.update(
+    applied = {}
+    try:
+        if target is None:
+            gh_repos.create(
                 conn,
                 name,
                 owner=owner,
-                allow_privacy_change=allow_privacy_change,
-                **update_params,
+                description=description,
+                homepage=homepage,
+                private=private,
+                has_issues=has_issues,
+                has_wiki=has_wiki,
+                has_downloads=has_downloads,
+                auto_init=auto_init,
+                gitignore_template=gitignore_template,
+                license_template=license_template,
             )
-        for team_name in teams_added:
-            _set_team_repo(conn, name, team_name, teams[team_name], owner)
-        for team_name in teams_removed:
-            gh_teams.remove_repo(
-                conn, gh_teams.find(conn, team_name, owner=owner), name, owner=owner
-            )
-        for team_name in team_permissions:
-            _set_team_repo(conn, name, team_name, teams[team_name], owner)
+            applied["created"] = name
+            for team_name in sorted(teams or {}):
+                _set_team_repo(conn, name, team_name, teams[team_name], owner)
+                applied.setdefault("teams_added", []).append(team_name)
+        else:
+            if update_params:
+                gh_repos.update(
+                    conn,
+                    name,
+                    owner=owner,
+                    allow_privacy_change=allow_privacy_change,
+                    **update_params,
+                )
+                applied["old"] = ret["changes"]["old"]
+                applied["new"] = ret["changes"]["new"]
+            for team_name in teams_added:
+                _set_team_repo(conn, name, team_name, teams[team_name], owner)
+                applied.setdefault("teams_added", []).append(team_name)
+            for team_name in teams_removed:
+                gh_teams.remove_repo(
+                    conn, gh_teams.find(conn, team_name, owner=owner), name, owner=owner
+                )
+                applied.setdefault("teams_removed", []).append(team_name)
+            for team_name, permission in team_permissions.items():
+                _set_team_repo(conn, name, team_name, teams[team_name], owner)
+                applied.setdefault("team_permissions", {})[team_name] = permission
+    except CommandExecutionError as err:
+        raise StateError(str(err), changes=applied) from err
     ret["comment"] = f"Repo {name} has been {verb}"
     return ret
 

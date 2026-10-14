@@ -4,8 +4,6 @@ Operations on GitHub repository pull requests.
 
 import logging
 
-from saltext.github.utils.gh import client
-
 log = logging.getLogger(__name__)
 
 
@@ -75,7 +73,7 @@ def list_all(
     if direction and direction != "desc":
         params["direction"] = direction
 
-    return client.query(conn, ["repos", owner or conn.owner, repo_name, "pulls"], params=params)
+    return conn.repo_query(owner, repo_name, "pulls", params=params)
 
 
 def format_pr(pr_):

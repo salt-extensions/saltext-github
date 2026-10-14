@@ -11,38 +11,20 @@ the resource declaration.
 
 import logging
 
-from salt.exceptions import CommandExecutionError
+from salt.utils.functools import namespaced_function
 
 from saltext.github.utils.gh import profile as gh_profile
+from saltext.github.utils.gh import resource as gh_resource
+from saltext.github.utils.gh.statecores import catch_errors
 from saltext.github.utils.gh.statecores import repo as sc_repo
 
 log = logging.getLogger(__name__)
 
 
-def _ident():
-    """
-    Resource identity. Salt's authoring docs promise ``__resource__``
-    inside state overrides, but no released Salt packs it there — fall
-    back to the ``repo.ident`` execution override, which does see it.
-    """
-    try:
-        rid = __resource__["id"]
-    except NameError:
-        return __salt__["repo.ident"]()
-    owner, _, repo_name = rid.partition("/")
-    return {"id": rid, "owner": owner, "repo": repo_name}
+_core_args = namespaced_function(gh_resource.core_args, globals())
 
 
-def _core_args(profile):
-    ident = _ident()
-    conn = gh_profile.resource_conn(__opts__, __context__, profile=profile, owner=ident["owner"])
-    return conn, ident["owner"], ident["repo"]
-
-
-def _failed(name, err):
-    return {"name": name, "changes": {}, "result": False, "comment": str(err)}
-
-
+@catch_errors
 def managed(
     name,
     description=None,
@@ -98,32 +80,29 @@ def managed(
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    try:
-        conn, owner, repo_name = _core_args(profile)
-        allow_privacy_change = gh_profile.get_config_value(
-            profile or gh_profile.resource_owner_profile(__opts__, owner),
-            "allow_repo_privacy_changes",
-            opts=__opts__,
-            context=__context__,
-            default=False,
-        )
-        ret = sc_repo.present(
-            conn,
-            repo_name,
-            owner=owner,
-            description=description,
-            homepage=homepage,
-            private=private,
-            has_issues=has_issues,
-            has_wiki=has_wiki,
-            has_downloads=has_downloads,
-            default_branch=default_branch,
-            teams=teams,
-            allow_privacy_change=allow_privacy_change,
-            allow_create=False,
-            test=__opts__["test"],
-        )
-        ret["name"] = name
-        return ret
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    conn, owner, repo_name = _core_args(profile)
+    allow_privacy_change = gh_profile.get_config_value(
+        profile or gh_profile.resource_owner_profile(__opts__, owner),
+        "allow_repo_privacy_changes",
+        opts=__opts__,
+        context=__context__,
+        default=False,
+    )
+    ret = sc_repo.present(
+        conn,
+        repo_name,
+        owner=owner,
+        description=description,
+        homepage=homepage,
+        private=private,
+        has_issues=has_issues,
+        has_wiki=has_wiki,
+        has_downloads=has_downloads,
+        default_branch=default_branch,
+        teams=teams,
+        allow_privacy_change=allow_privacy_change,
+        allow_create=False,
+        test=__opts__["test"],
+    )
+    ret["name"] = name
+    return ret

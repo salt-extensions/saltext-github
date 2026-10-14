@@ -11,26 +11,17 @@ defaults to the :ghconf:`profile <resource:profile>` named in the resource decla
 
 import logging
 
+from salt.utils.functools import namespaced_function
+
 from saltext.github.utils import filter_fields
 from saltext.github.utils.gh import profile as gh_profile
 from saltext.github.utils.gh import repos as gh_repos
+from saltext.github.utils.gh import resource as gh_resource
 
 log = logging.getLogger(__name__)
 
 
-def _profile(profile):
-    owner, _ = _ident()
-    return profile or gh_profile.resource_owner_profile(__opts__, owner)
-
-
-def _conn(profile=None):
-    owner, _ = _ident()
-    return gh_profile.resource_conn(__opts__, __context__, profile=profile, owner=owner)
-
-
-def _ident():
-    owner, _, repo_name = __resource__["id"].partition("/")
-    return owner, repo_name
+_core_args = namespaced_function(gh_resource.core_args, globals())
 
 
 def ident():
@@ -45,7 +36,7 @@ def ident():
 
         salt 'github:my-org/my-repo' repo.ident
     """
-    owner, repo_name = _ident()
+    owner, _, repo_name = __resource__["id"].partition("/")
     return {"id": __resource__["id"], "owner": owner, "repo": repo_name}
 
 
@@ -66,8 +57,8 @@ def info(*, ignore_cache=False, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    return gh_repos.get_info(_conn(profile), repo_name, owner=owner, ignore_cache=ignore_cache)
+    conn, owner, repo_name = _core_args(profile)
+    return gh_repos.get_info(conn, repo_name, owner=owner, ignore_cache=ignore_cache)
 
 
 def get_teams(*, fields=None, profile=None):
@@ -89,8 +80,8 @@ def get_teams(*, fields=None, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    teams = gh_repos.get_teams(_conn(profile), repo_name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    teams = gh_repos.get_teams(conn, repo_name, owner=owner)
     return filter_fields({team["name"]: team for team in teams}, fields)
 
 
@@ -141,16 +132,16 @@ def update(
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     allow_privacy_change = gh_profile.get_config_value(
-        _profile(profile),
+        profile or gh_profile.resource_owner_profile(__opts__, owner),
         "allow_repo_privacy_changes",
         opts=__opts__,
         context=__context__,
         default=False,
     )
     return gh_repos.update(
-        _conn(profile),
+        conn,
         repo_name,
         owner=owner,
         description=description,

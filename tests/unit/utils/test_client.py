@@ -17,13 +17,18 @@ def requester():
 
 @pytest.fixture
 def conn(requester):
-    return MagicMock(client=MagicMock(requester=requester))
+    with patch(
+        "saltext.github.utils.gh.client.github.Github",
+        autospec=True,
+        return_value=MagicMock(requester=requester),
+    ):
+        yield gh_client.GitHubConnection("token")
 
 
 def test_query_decodes_json_string_data(conn, requester):
     requester.requestJson.return_value = (200, {}, '{"written": true}')
 
-    ret = gh_client.query(conn, "repos", method="POST", data='{"some": "payload"}')
+    ret = conn.query("repos", method="POST", data='{"some": "payload"}')
 
     assert ret == {"written": True}
     requester.requestJson.assert_called_once_with(
@@ -37,7 +42,7 @@ def test_query_merges_paginated_results(conn, requester):
         (200, {}, '[{"id": 2}]'),
     )
 
-    ret = gh_client.query(conn, ["repos"])
+    ret = conn.query(["repos"])
 
     assert ret == [{"id": 1}, {"id": 2}]
     assert requester.requestJson.call_args.kwargs["parameters"] == {"page": "2"}
@@ -47,7 +52,7 @@ def test_query_github_exception(conn, requester):
     requester.requestJson.side_effect = pygithub.GithubException(502, {"message": "bad gateway"})
 
     with pytest.raises(GitHubApiError, match="bad gateway") as exc:
-        gh_client.query(conn, "repos")
+        conn.query("repos")
 
     assert exc.value.status == 502
 
@@ -56,7 +61,7 @@ def test_query_error_response(conn, requester):
     requester.requestJson.return_value = (404, {}, '{"message": "Not Found"}')
 
     with pytest.raises(GitHubNotFoundError, match="404 Not Found") as exc:
-        gh_client.query(conn, "repos")
+        conn.query("repos")
 
     assert exc.value.status == 404
     assert exc.value.data == {"message": "Not Found"}
@@ -66,7 +71,7 @@ def test_query_unexpected_exception(conn, requester):
     requester.requestJson.side_effect = OSError("connection refused")
 
     with pytest.raises(CommandExecutionError, match="connection refused"):
-        gh_client.query(conn, "repos")
+        conn.query("repos")
 
 
 def test_api_request_translates_pygithub_exceptions():
@@ -93,22 +98,22 @@ def token_conn():
         yield gh_client.GitHubConnection("token")
 
 
-def test_owner_defaults_to_token_user(token_conn):
-    token_conn.client.get_user.return_value.login = "tokenuser"
-    assert token_conn.owner == "tokenuser"
-    token_conn.client.get_user.assert_called_once_with()
+def test_owner_defaults_to_token_user(conn):
+    conn.client.get_user.return_value.login = "tokenuser"
+    assert conn.owner == "tokenuser"
+    conn.client.get_user.assert_called_once_with()
     # The resolution result is cached
-    assert token_conn.owner == "tokenuser"
-    token_conn.client.get_user.assert_called_once_with()
+    assert conn.owner == "tokenuser"
+    conn.client.get_user.assert_called_once_with()
 
 
-def test_owner_lookup_failure_hints_at_profile_parameter(token_conn):
+def test_owner_lookup_failure_hints_at_profile_parameter(conn):
     # GitHub App installation tokens are not tied to a user account
-    token_conn.client.get_user.side_effect = pygithub.GithubException(
+    conn.client.get_user.side_effect = pygithub.GithubException(
         403, {"message": "Resource not accessible by integration"}, None
     )
     with pytest.raises(CommandExecutionError, match="require the 'owner' profile parameter"):
-        token_conn.owner  # pylint: disable=pointless-statement
+        conn.owner  # pylint: disable=pointless-statement
 
 
 def test_explicit_owner_skips_token_lookup():

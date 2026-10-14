@@ -4,7 +4,7 @@ Operations on GitHub repository milestones.
 
 import logging
 
-from saltext.github.utils.gh import client
+from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def get(conn, repo_name, number, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, ["repos", owner or conn.owner, repo_name, "milestones", str(number)])
+    return conn.repo_query(owner, repo_name, "milestones", str(number))
 
 
 def list_all(
@@ -78,9 +78,34 @@ def list_all(
     if direction and direction != "asc":
         params["direction"] = direction
 
-    return client.query(
-        conn, ["repos", owner or conn.owner, repo_name, "milestones"], params=params
-    )
+    return conn.repo_query(owner, repo_name, "milestones", params=params)
+
+
+def find_by_title(conn, repo_name, title, *, owner=None):
+    """
+    Return a milestone by its title. Since the GitHub API only addresses
+    milestones by number, this searches the complete list.
+
+    conn
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+
+    repo_name
+        Name of the repository the milestone is part of.
+
+    title
+        Title of the milestone.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
+
+    Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
+    if no milestone carries the title.
+    """
+    milestones = list_all(conn, repo_name, state="all", owner=owner)
+    for milestone in milestones or []:
+        if milestone.get("title") == title:
+            return milestone
+    raise GitHubNotFoundError(f"Milestone {title} was not found in repository {repo_name}.")
 
 
 def format_milestone(milestone):

@@ -9,13 +9,8 @@ from nacl import encoding
 from nacl import public
 
 from saltext.github.utils import filter_unset
-from saltext.github.utils.gh import client
 
 log = logging.getLogger(__name__)
-
-
-def _secrets_path(conn, owner, repo_name, *suffix):
-    return ["repos", owner or conn.owner, repo_name, "actions", "secrets", *suffix]
 
 
 def list_secrets(conn, repo_name, *, owner=None):
@@ -32,7 +27,7 @@ def list_secrets(conn, repo_name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, _secrets_path(conn, owner, repo_name), per_page=100)["secrets"]
+    return conn.repo_query(owner, repo_name, "actions", "secrets", per_page=100)["secrets"]
 
 
 def get_secret(conn, repo_name, name, *, owner=None):
@@ -54,7 +49,7 @@ def get_secret(conn, repo_name, name, *, owner=None):
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the secret does not exist.
     """
-    return client.query(conn, _secrets_path(conn, owner, repo_name, name))
+    return conn.repo_query(owner, repo_name, "actions", "secrets", name)
 
 
 def get_public_key(conn, repo_name, *, owner=None):
@@ -71,7 +66,7 @@ def get_public_key(conn, repo_name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, _secrets_path(conn, owner, repo_name, "public-key"))
+    return conn.repo_query(owner, repo_name, "actions", "secrets", "public-key")
 
 
 def encrypt_secret(public_key, value):
@@ -111,9 +106,9 @@ def set_secret(conn, repo_name, name, value, *, owner=None):
         Owner of the repository. Defaults to the connection's owner.
     """
     pubkey = get_public_key(conn, repo_name, owner=owner)
-    client.query(
-        conn,
-        _secrets_path(conn, owner, repo_name, name),
+    conn.repo_query(
+        owner,
+        *(repo_name, "actions", "secrets", name),
         method="PUT",
         data={
             "encrypted_value": encrypt_secret(pubkey["key"], value),
@@ -138,11 +133,7 @@ def delete_secret(conn, repo_name, name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    client.query(conn, _secrets_path(conn, owner, repo_name, name), method="DELETE")
-
-
-def _workflow_permissions_path(conn, owner, repo_name):
-    return ["repos", owner or conn.owner, repo_name, "actions", "permissions", "workflow"]
+    conn.repo_query(owner, repo_name, "actions", "secrets", name, method="DELETE")
 
 
 def get_workflow_permissions(conn, repo_name, *, owner=None):
@@ -160,7 +151,7 @@ def get_workflow_permissions(conn, repo_name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, _workflow_permissions_path(conn, owner, repo_name))
+    return conn.repo_query(owner, repo_name, "actions", "permissions", "workflow")
 
 
 def set_workflow_permissions(
@@ -191,9 +182,9 @@ def set_workflow_permissions(
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    client.query(
-        conn,
-        _workflow_permissions_path(conn, owner, repo_name),
+    conn.repo_query(
+        owner,
+        *(repo_name, "actions", "permissions", "workflow"),
         method="PUT",
         data=filter_unset(
             {

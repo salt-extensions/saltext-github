@@ -10,20 +10,15 @@ defaults to the :ghconf:`profile <resource:profile>` named in the resource decla
 
 import logging
 
+from salt.utils.functools import namespaced_function
+
 from saltext.github.utils.gh import pages as gh_pages
-from saltext.github.utils.gh import profile as gh_profile
+from saltext.github.utils.gh import resource as gh_resource
 
 log = logging.getLogger(__name__)
 
 
-def _conn(profile=None):
-    owner, _ = _ident()
-    return gh_profile.resource_conn(__opts__, __context__, profile=profile, owner=owner)
-
-
-def _ident():
-    owner, _, repo_name = __resource__["id"].partition("/")
-    return owner, repo_name
+_core_args = namespaced_function(gh_resource.core_args, globals())
 
 
 def get(*, profile=None):
@@ -41,8 +36,8 @@ def get(*, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    return gh_pages.get(_conn(profile), repo_name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    return gh_pages.get(conn, repo_name, owner=owner)
 
 
 def setup(*, build_type=None, source_branch=None, source_path=None, profile=None):
@@ -71,9 +66,9 @@ def setup(*, build_type=None, source_branch=None, source_path=None, profile=None
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     return gh_pages.create(
-        _conn(profile),
+        conn,
         repo_name,
         build_type=build_type,
         source=gh_pages.build_source(source_branch, source_path),
@@ -122,9 +117,9 @@ def update(
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     gh_pages.update(
-        _conn(profile),
+        conn,
         repo_name,
         build_type=build_type,
         source=gh_pages.build_source(source_branch, source_path),
@@ -149,6 +144,6 @@ def remove(*, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    gh_pages.delete(_conn(profile), repo_name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    gh_pages.delete(conn, repo_name, owner=owner)
     return True

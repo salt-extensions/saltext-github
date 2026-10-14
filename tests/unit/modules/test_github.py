@@ -3,25 +3,35 @@ from unittest.mock import patch
 
 import pytest
 from salt.exceptions import CommandExecutionError
-from salt.modules import config as config_mod
 
 from saltext.github.modules import github as github_mod
-from saltext.github.utils.gh import client as gh_client
 from saltext.github.utils.gh.exceptions import GitHubApiError
+
+RULESET_PARAMS = {"name": "mock_name", "enforcement": "disabled"}
+
+# Function-specific call kwargs and the comment returned on unexpected errors
+RULESET_FUNCS = {
+    "get_ruleset": ({"ruleset_id": 1}, "Error getting ruleset"),
+    "add_ruleset": ({"ruleset_params": RULESET_PARAMS}, "Error adding ruleset"),
+    "list_rulesets": ({}, "Error getting rulesets"),
+    "update_ruleset": (
+        {"ruleset_id": 1, "ruleset_params": RULESET_PARAMS},
+        "Error updating ruleset",
+    ),
+    "delete_ruleset": ({"ruleset_id": 1}, "Error deleting ruleset"),
+}
 
 
 @pytest.fixture
 def configure_loader_modules():
-    module_globals = {
-        "__salt__": {"config.get": config_mod.get},
-        "__opts__": {
-            "test_ruleset": {"ruleset_type": "mocked_value"},
-            "sdb_profile": {"token": "sdb://osenv/GITHUB_TOKEN"},
-        },
-    }
     return {
-        github_mod: module_globals,
-        config_mod: module_globals,
+        github_mod: {
+            "__opts__": {
+                "github": {"token": "token_from_default_profile"},
+                "test_ruleset": {"ruleset_type": "mocked_value"},
+                "sdb_profile": {"token": "sdb://osenv/GITHUB_TOKEN"},
+            },
+        },
     }
 
 
@@ -36,20 +46,41 @@ def params():
     }
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def conn():
-    with patch.object(github_mod, "_get_conn", return_value=MagicMock()):
-        yield
+    conn_mock = MagicMock()
+    with patch.object(github_mod, "_get_conn", autospec=True, return_value=conn_mock):
+        yield conn_mock
 
 
-def test_get_issue_without_id_returns_empty():
-    with patch.object(gh_client, "query", return_value={"message": "no id here"}):
-        assert not github_mod.get_issue(1, repo_name="repo")
+def _call_ruleset_func(func, params):
+    return getattr(github_mod, func)(profile="test_ruleset", **params, **RULESET_FUNCS[func][0])
 
 
-def test_get_milestone_without_id_returns_empty():
-    with patch.object(gh_client, "query", return_value={"message": "no id here"}):
-        assert not github_mod.get_milestone(1, repo_name="repo")
+@pytest.mark.usefixtures("conn")
+def test_add_team_repo_reports_permission_failure():
+    with (
+        patch.object(github_mod.gh_teams, "get", autospec=True, return_value={"slug": "team"}),
+        patch.object(
+            github_mod.gh_teams,
+            "add_repo",
+            autospec=True,
+            side_effect=GitHubApiError("Failed setting permission push"),
+        ),
+        patch.object(github_mod, "log", autospec=True) as log_mock,
+    ):
+        assert github_mod.add_team_repo("repo", "team", permission="push") is False
+    assert "Failed setting permission" in log_mock.error.call_args[0][0]
+
+
+def test_get_issue_without_id_returns_empty(conn):
+    conn.repo_query.return_value = {"message": "no id here"}
+    assert not github_mod.get_issue(1, repo_name="repo")
+
+
+def test_get_milestone_without_id_returns_empty(conn):
+    conn.repo_query.return_value = {"message": "no id here"}
+    assert not github_mod.get_milestone(1, repo_name="repo")
 
 
 def test__get_config_value_renders_sdb_uris():
@@ -60,7 +91,7 @@ def test__get_config_value_renders_sdb_uris():
             return "rendered-token"
         return value
 
-    with patch.object(config_mod.sdb, "sdb_get", side_effect=fake_sdb_get):
+    with patch("salt.utils.sdb.sdb_get", side_effect=fake_sdb_get):
         assert github_mod._get_config_value("sdb_profile", "token") == "rendered-token"
 
 
@@ -80,55 +111,44 @@ def test__resolve_ruleset_params():
     }
 
 
-def test_get_ruleset(params):
-    params["ruleset_id"] = 1
+@pytest.mark.parametrize(
+    "func,query_ret,expected",
+    (
+        ("get_ruleset", {"id": "1"}, {"id": "1"}),
+        ("add_ruleset", RULESET_PARAMS, RULESET_PARAMS),
+        (
+            "list_rulesets",
+            [{"name": "mock_ruleset_1"}, {"name": "mock_ruleset_2"}],
+            {"rulesets": [{"name": "mock_ruleset_1"}, {"name": "mock_ruleset_2"}]},
+        ),
+        ("list_rulesets", [], {"rulesets": None}),
+        ("update_ruleset", RULESET_PARAMS, RULESET_PARAMS),
+        ("delete_ruleset", None, {"comment": "ruleset 1 successfully deleted"}),
+    ),
+)
+def test_ruleset_funcs_success(func, query_ret, expected, params, conn):
+    conn.query.return_value = query_ret
+    assert _call_ruleset_func(func, params) == expected
 
-    # test mock 200 status
-    with patch.object(gh_client, "query", return_value={"id": "1"}):
-        assert github_mod.get_ruleset(profile="test_ruleset", **params) == {"id": "1"}
 
-    # test mock 404 error
-    expected = {
+@pytest.mark.parametrize("func", RULESET_FUNCS)
+def test_ruleset_funcs_api_error(func, params, conn):
+    conn.query.side_effect = GitHubApiError("404 not found", status=404)
+    assert _call_ruleset_func(func, params) == {
         "comment": "GitHub Response Status Code: 404 not found",
         "error": "404 not found",
         "status": 404,
         "result": False,
     }
 
-    with patch.object(gh_client, "query", side_effect=GitHubApiError("404 not found", status=404)):
-        assert github_mod.get_ruleset(profile="test_ruleset", **params) == expected
 
-    # test unexpected error
-    expected = {"comment": "Error getting ruleset", "result": False}
-    with patch.object(gh_client, "query", side_effect=CommandExecutionError):
-        assert github_mod.get_ruleset(profile="test_ruleset", **params) == expected
-
-
-def test_add_ruleset(params):
-    params["ruleset_params"] = {"name": "mock_name", "enforcement": "disabled"}
-
-    # test mock 201 status
-    expected = {"name": "mock_name", "enforcement": "disabled"}
-
-    with patch.object(gh_client, "query", return_value=expected):
-        assert github_mod.add_ruleset(profile="test_ruleset", **params) == expected
-
-    # test mock 404 error
-    expected = {
-        "comment": "GitHub Response Status Code: 404 not found",
-        "error": "404 not found",
-        "status": 404,
+@pytest.mark.parametrize("func", RULESET_FUNCS)
+def test_ruleset_funcs_unexpected_error(func, params, conn):
+    conn.query.side_effect = CommandExecutionError
+    assert _call_ruleset_func(func, params) == {
+        "comment": RULESET_FUNCS[func][1],
         "result": False,
     }
-
-    with patch.object(gh_client, "query", side_effect=GitHubApiError("404 not found", status=404)):
-        assert github_mod.add_ruleset(profile="test_ruleset", **params) == expected
-
-    # test unexpected error
-    expected = {"comment": "Error adding ruleset", "result": False}
-
-    with patch.object(gh_client, "query", side_effect=CommandExecutionError):
-        assert github_mod.add_ruleset(profile="test_ruleset", **params) == expected
 
 
 def test_add_ruleset_requires_name_and_enforcement(params):
@@ -136,90 +156,6 @@ def test_add_ruleset_requires_name_and_enforcement(params):
 
     with pytest.raises(CommandExecutionError, match="enforcement"):
         github_mod.add_ruleset(profile="test_ruleset", **params)
-
-
-def test_list_rulesets(params):
-
-    # test mock 200 status
-    with patch.object(
-        gh_client, "query", return_value=[{"name": "mock_ruleset_1"}, {"name": "mock_ruleset_2"}]
-    ):
-        assert github_mod.list_rulesets(profile="test_ruleset", **params) == {
-            "rulesets": [{"name": "mock_ruleset_1"}, {"name": "mock_ruleset_2"}]
-        }
-
-    # test mock 200 status, no rulesets returned
-    with patch.object(gh_client, "query", return_value=[]):
-        assert github_mod.list_rulesets(profile="test_ruleset", **params) == {"rulesets": None}
-
-    # test mock 404 error
-    expected = {
-        "comment": "GitHub Response Status Code: 404 not found",
-        "error": "404 not found",
-        "status": 404,
-        "result": False,
-    }
-
-    with patch.object(gh_client, "query", side_effect=GitHubApiError("404 not found", status=404)):
-        assert github_mod.list_rulesets(profile="test_ruleset", **params) == expected
-
-    # test unexpected error
-    expected = {"comment": "Error getting rulesets", "result": False}
-    with patch.object(gh_client, "query", side_effect=CommandExecutionError):
-        assert github_mod.list_rulesets(profile="test_ruleset", **params) == expected
-
-
-def test_update_ruleset(params):
-    params["ruleset_params"] = {"name": "mock_name", "enforcement": "disabled"}
-    params["ruleset_id"] = 1
-
-    # test mock 200 status
-    expected = {"name": "mock_name", "enforcement": "disabled"}
-
-    with patch.object(gh_client, "query", return_value=expected):
-        assert github_mod.update_ruleset(profile="test_ruleset", **params) == expected
-
-    # test mock 404 error
-    expected = {
-        "comment": "GitHub Response Status Code: 404 not found",
-        "error": "404 not found",
-        "status": 404,
-        "result": False,
-    }
-
-    with patch.object(gh_client, "query", side_effect=GitHubApiError("404 not found", status=404)):
-        assert github_mod.update_ruleset(profile="test_ruleset", **params) == expected
-
-    # test unexpected error
-    expected = {"comment": "Error updating ruleset", "result": False}
-    with patch.object(gh_client, "query", side_effect=CommandExecutionError):
-        assert github_mod.update_ruleset(profile="test_ruleset", **params) == expected
-
-
-def test_delete_ruleset(params):
-    params["ruleset_id"] = 1
-
-    # test mock 204 status
-    expected = {"comment": "ruleset 1 successfully deleted"}
-
-    with patch.object(gh_client, "query", return_value=None):
-        assert github_mod.delete_ruleset(profile="test_ruleset", **params) == expected
-
-    # test mock 404 error
-    expected = {
-        "comment": "GitHub Response Status Code: 404 not found",
-        "error": "404 not found",
-        "status": 404,
-        "result": False,
-    }
-
-    with patch.object(gh_client, "query", side_effect=GitHubApiError("404 not found", status=404)):
-        assert github_mod.delete_ruleset(profile="test_ruleset", **params) == expected
-
-    # test unexpected error
-    expected = {"comment": "Error deleting ruleset", "result": False}
-    with patch.object(gh_client, "query", side_effect=CommandExecutionError):
-        assert github_mod.delete_ruleset(profile="test_ruleset", **params) == expected
 
 
 def test_ruleset_error_ret_includes_response_data():
