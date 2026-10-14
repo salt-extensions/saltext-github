@@ -12,7 +12,7 @@ resource. Compared to the classic
 {py:mod}`github_repo <saltext.github.modules.github_repo>` modules,
 resources offer:
 
-- direct targeting of repositories (`salt 'github:my-org/my-repo' ...`),
+- direct targeting of repositories (`salt 'my-org/my-repo' ...`),
   including grain-based targeting across all managed repositories
 - per-repository grains (owner, default branch, visibility, ...)
 - repository-implicit execution and state modules – SLS files describe
@@ -67,7 +67,7 @@ with the SRN `github:<owner>/<repo>`.
 
 ```bash
 # One repository
-salt 'github:my-org/my-repo' test.ping
+salt 'my-org/my-repo' test.ping
 
 # By resource grain
 salt -G 'github:default_branch:master' repo.info
@@ -83,10 +83,10 @@ Jobs dispatched to a `github` resource use repository-implicit,
 entity-scoped execution modules instead of the classic ones:
 
 ```bash
-salt 'github:my-org/my-repo' repo.update description='Managed by Salt'
-salt 'github:my-org/my-repo' actions.set_secret MY_SECRET hunter2
-salt 'github:my-org/my-repo' deploy_key.list
-salt 'github:my-org/my-repo' environment.get release
+salt 'my-org/my-repo' repo.update description='Managed by Salt'
+salt 'my-org/my-repo' actions.set_secret MY_SECRET hunter2
+salt 'my-org/my-repo' deploy_key.list
+salt 'my-org/my-repo' environment.get release
 ```
 
 See the {doc}`module reference </ref/resources/saltext.github.resources.github>` for the
@@ -124,7 +124,7 @@ Workflow permissions are restricted:
 ```
 
 ```bash
-salt 'github:my-org/my-repo' state.apply repo_setup
+salt 'my-org/my-repo' state.apply repo_setup
 ```
 
 Unlike the classic {py:func}`github_repo.present <saltext.github.states.github_repo.present>` state,

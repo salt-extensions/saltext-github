@@ -47,7 +47,7 @@ def list_(
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' issue.list
+        salt 'my-org/my-repo' issue.list
 
     milestone
         Number of a GitHub milestone, or a string of either ``*`` or ``none``.
@@ -119,7 +119,7 @@ def get(number, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' issue.get 514
+        salt 'my-org/my-repo' issue.get 514
 
     number
         Issue number to retrieve.
@@ -140,7 +140,7 @@ def get_comments(number, *, since=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' issue.get_comments 514
+        salt 'my-org/my-repo' issue.get_comments 514
 
     number
         Issue number for which to retrieve comments.

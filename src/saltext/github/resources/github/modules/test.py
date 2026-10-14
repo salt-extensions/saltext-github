@@ -24,6 +24,6 @@ def ping():
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' test.ping
+        salt 'my-org/my-repo' test.ping
     """
     return __resource_funcs__["github.ping"]()

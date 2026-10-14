@@ -33,7 +33,7 @@ def list_(*, fields=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' label.list
+        salt 'my-org/my-repo' label.list
 
     fields
         Only include these fields in the output. A single field name
@@ -56,7 +56,7 @@ def get(name, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' label.get bug
+        salt 'my-org/my-repo' label.get bug
 
     name
         Name of the label.
@@ -78,7 +78,7 @@ def add(name, *, color=None, description=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' label.add release color=00ff00
+        salt 'my-org/my-repo' label.add release color=00ff00
 
     name
         Name of the label.
@@ -109,7 +109,7 @@ def edit(name, *, new_name=None, color=None, description=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' label.edit release color=00ff00
+        salt 'my-org/my-repo' label.edit release color=00ff00
 
     name
         Current name of the label.
@@ -147,7 +147,7 @@ def remove(name, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' label.remove release
+        salt 'my-org/my-repo' label.remove release
 
     name
         Name of the label.
