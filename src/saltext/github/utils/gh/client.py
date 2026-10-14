@@ -12,6 +12,10 @@ import functools
 import json
 import logging
 import re
+from dataclasses import KW_ONLY
+from dataclasses import InitVar
+from dataclasses import dataclass
+from dataclasses import field
 
 import github
 from github.GithubException import UnknownObjectException
@@ -25,6 +29,7 @@ log = logging.getLogger(__name__)
 API_URL_DEFAULT = "https://api.github.com"
 
 
+@dataclass(slots=True)
 class GitHubConnection:
     """
     An authenticated PyGithub client bound to a default repository owner
@@ -44,13 +49,19 @@ class GitHubConnection:
         Enterprise Server instance. Defaults to the public GitHub API.
     """
 
-    def __init__(self, token, owner=None, *, api_url=API_URL_DEFAULT):
-        self._owner = owner
-        self.api_url = (api_url or API_URL_DEFAULT).rstrip("/")
+    token: InitVar[str]
+    _owner: str | None = None
+    _: KW_ONLY
+    api_url: str = API_URL_DEFAULT
+
+    cache: dict = field(default_factory=dict)
+    client: github.Github = field(init=False, repr=False)
+
+    def __post_init__(self, token: str):
+        self.api_url = (self.api_url or API_URL_DEFAULT).rstrip("/")
         self.client = github.Github(
             auth=github.Auth.Token(token), base_url=self.api_url, per_page=100
         )
-        self.cache = {}
 
     @property
     def owner(self):

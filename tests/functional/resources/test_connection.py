@@ -122,8 +122,9 @@ def test_empty_decl_derived_user(resource_funcs, res_opts, github_profile, for_r
     opts = copy.deepcopy(res_opts)
     opts["github"] = {
         "token": github_profile["token"],
-        "api_url": github_profile["api_url"],
     }
+    if api_url := github_profile.get("api_url"):
+        opts["github"]["api_url"] = api_url
     opts["pillar"]["resources"]["github"] = {}
     resource_funcs["github.init"](opts)
     assert resource_funcs["github.discover"](opts) == ["user1/repo-a", "user1/user-repo"]
@@ -152,9 +153,10 @@ def test_empty_decl_profile_owner(resource_funcs, res_opts, github_profile):
     opts = copy.deepcopy(res_opts)
     opts["github"] = {
         "token": github_profile["token"],
-        "api_url": github_profile["api_url"],
         "owner": "testorg",
     }
+    if api_url := github_profile.get("api_url"):
+        opts["github"]["api_url"] = api_url
     opts["pillar"]["resources"]["github"] = {}
     resource_funcs["github.init"](opts)
     assert resource_funcs["github.discover"](opts) == ["testorg/repo-a", "testorg/repo-b"]
@@ -171,8 +173,9 @@ def test_decl_alternative_profile_with_exclude(resource_funcs, res_opts, github_
     opts.pop("github_noprivacy", None)
     opts["github_repos"] = {
         "token": github_profile["token"],
-        "api_url": github_profile["api_url"],
     }
+    if api_url := github_profile.get("api_url"):
+        opts["github_repos"]["api_url"] = api_url
     opts["pillar"]["resources"]["github"] = {
         "profile": "github_repos",
         "exclude": ["user-*"],

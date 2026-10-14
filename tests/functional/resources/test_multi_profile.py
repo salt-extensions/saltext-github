@@ -30,9 +30,10 @@ def res_opts(minion_opts, resource_decl, github_profile):
     # scoped to the other organization.
     opts["github_other"] = {
         "token": github_profile["token"],
-        "api_url": github_profile["api_url"],
         "owner": "otherorg",
     }
+    if api_url := github_profile.get("api_url"):
+        opts["github_other"]["api_url"] = api_url
     return opts
 
 
