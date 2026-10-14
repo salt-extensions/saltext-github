@@ -2,9 +2,9 @@ import pytest
 from salt.exceptions import CommandExecutionError
 
 
-def test_get_info(github_repo):
+def test_info(github_repo):
     # repo_name defaults to the profile's repo-a
-    ret = github_repo.get_info()
+    ret = github_repo.info()
     assert ret["name"] == "repo-a"
     assert ret["full_name"] == "testorg/repo-a"
     assert ret["description"] == "Test repo repo-a"
@@ -12,17 +12,17 @@ def test_get_info(github_repo):
     assert ret["default_branch"] == "main"
 
 
-def test_get_info_missing(github_repo):
+def test_info_missing(github_repo):
     with pytest.raises(CommandExecutionError, match="could not be found"):
-        github_repo.get_info(repo_name="ghost")
+        github_repo.info(repo_name="ghost")
 
 
-def test_get_info_uses_cache(github_repo, fake_org):
-    assert github_repo.get_info()["description"] == "Test repo repo-a"
+def test_info_uses_cache(github_repo, fake_org):
+    assert github_repo.info()["description"] == "Test repo repo-a"
     fake_org.get_repo("repo-a").data.description = "mutated"
     # Cached result is returned until the cache is bypassed
-    assert github_repo.get_info()["description"] == "Test repo repo-a"
-    assert github_repo.get_info(ignore_cache=True)["description"] == "mutated"
+    assert github_repo.info()["description"] == "Test repo repo-a"
+    assert github_repo.info(ignore_cache=True)["description"] == "mutated"
 
 
 def test_get_teams(github_repo):
@@ -41,7 +41,7 @@ def test_update(github_repo, fake_org):
     # The refreshed repo information is returned
     assert ret["description"] == "Updated"
     assert fake_org.get_repo("repo-a").description == "Updated"
-    assert github_repo.get_info()["description"] == "Updated"
+    assert github_repo.info()["description"] == "Updated"
 
 
 def test_update_default_branch(github_repo, fake_org):
@@ -114,7 +114,7 @@ def test_create_refreshes_caches(github_repo):
     github_repo.create("new-repo", description="Brand new")
     # Both the repo list and single-repo caches know the new repo
     assert "new-repo" in github_repo.list()
-    assert github_repo.get_info(repo_name="new-repo")["description"] == "Brand new"
+    assert github_repo.info(repo_name="new-repo")["description"] == "Brand new"
 
 
 def test_create_duplicate(github_repo):

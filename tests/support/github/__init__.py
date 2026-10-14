@@ -25,6 +25,8 @@ from tests.support.github.base import DEPLOY_KEY_A
 from tests.support.github.base import DEPLOY_KEY_B
 from tests.support.github.base import ORG
 from tests.support.github.base import TOKEN
+from tests.support.github.base import USER_KEY_A
+from tests.support.github.base import USER_KEY_B
 from tests.support.github.entities import BranchPolicy
 from tests.support.github.entities import DeployKey
 from tests.support.github.entities import Entity
@@ -52,6 +54,7 @@ from tests.support.github.routes import DeployKeyRoutes
 from tests.support.github.routes import EnvironmentRoutes
 from tests.support.github.routes import IssueRoutes
 from tests.support.github.routes import LabelRoutes
+from tests.support.github.routes import MetaRoutes
 from tests.support.github.routes import MilestoneRoutes
 from tests.support.github.routes import OrgRoutes
 from tests.support.github.routes import PagesRoutes
@@ -66,6 +69,8 @@ __all__ = [
     "DEPLOY_KEY_B",
     "ORG",
     "TOKEN",
+    "USER_KEY_A",
+    "USER_KEY_B",
     "BranchPolicy",
     "DeployKey",
     "Entity",
@@ -106,6 +111,7 @@ class FakeGitHubAPI(  # pylint: disable=too-many-ancestors
     EnvironmentRoutes,
     LabelRoutes,
     PagesRoutes,
+    MetaRoutes,
 ):
     """
     Dict-backed implementation of the consumed GitHub API surface.

@@ -6,6 +6,8 @@ from saltfactories.utils import random_string
 from saltfactories.utils.functional import Loaders
 
 from tests.support.github import DEPLOY_KEY_A
+from tests.support.github import USER_KEY_A
+from tests.support.github import USER_KEY_B
 from tests.support.github import FakeGitHubAPI
 
 log = logging.getLogger(__name__)
@@ -218,7 +220,7 @@ def fake_setup(fake_state):
     """
     Default setup for fake_state. Override this per module, if necessary.
     """
-    user1 = fake_state.add_user("user1")
+    user1 = fake_state.add_user("user1", ssh_keys=(USER_KEY_A, USER_KEY_B))
     user2 = fake_state.add_user("user2", two_factor_authentication=False)
     fake_state.add_user("newuser")
     org = fake_state.add_org("testorg")

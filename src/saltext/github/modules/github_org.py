@@ -38,6 +38,7 @@ from saltext.github.utils.gh import members as gh_members
 from saltext.github.utils.gh import profile as gh_profile
 from saltext.github.utils.gh import rulesets as gh_rulesets
 from saltext.github.utils.gh import teams as gh_teams
+from saltext.github.utils.gh import users as gh_users
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +47,30 @@ __virtualname__ = "github_org"
 
 def _get_conn(profile):
     return gh_profile.get_conn(profile, opts=__opts__, context=__context__)
+
+
+def info(name=None, profile="github"):
+    """
+    Return the public profile of an organization account. Fails when the
+    account is a user. Use :py:func:`github.account_info
+    <saltext.github.modules.github.account_info>` to look up accounts of
+    either type.
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call github_org.info github-org
+        salt-call github_org.info  # the profile's owner
+
+    name
+        Login of the organization to look up. Defaults to the organization
+        specified in the profile's :ghconf:`owner`.
+
+    profile
+        Profile configuration name to use. Defaults to ``github``.
+    """
+    return gh_users.get_info(_get_conn(profile), name, expect="Organization")
 
 
 def list_members(owner=None, ignore_cache=False, profile="github"):

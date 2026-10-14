@@ -240,6 +240,18 @@ class GitHubConnection:
         return complete_result
 
 
+def rate_limit(conn):
+    """
+    Return the API rate limit status of a connection's token, keyed by
+    resource (``core``, ``search``, ...). The deprecated top-level ``rate``
+    alias for ``core`` is excluded.
+
+    conn
+        :class:`GitHubConnection` to use.
+    """
+    return conn.query("rate_limit")["resources"]
+
+
 def _error_message(status, data, fallback=""):
     message = data.get("message", fallback) if isinstance(data, dict) else (data or fallback)
     return f"{status} {message}".strip()

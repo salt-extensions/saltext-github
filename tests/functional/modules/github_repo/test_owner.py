@@ -30,35 +30,35 @@ def minion_config_defaults(github_profile):
     }
 
 
-def test_get_info(github_repo):
-    ret = github_repo.get_info(repo_name="user-repo", owner="user1")
+def test_info(github_repo):
+    ret = github_repo.info(repo_name="user-repo", owner="user1")
     assert ret["full_name"] == "user1/user-repo"
     assert ret["owner"] == "user1"
     assert ret["private"] is True
 
 
-def test_get_info_missing_owner(github_repo):
+def test_info_missing_owner(github_repo):
     with pytest.raises(CommandExecutionError, match="could not be found"):
-        github_repo.get_info(repo_name="user-repo", owner="ghost-owner")
+        github_repo.info(repo_name="user-repo", owner="ghost-owner")
 
 
-def test_get_info_cache_is_owner_scoped(github_repo):
+def test_info_cache_is_owner_scoped(github_repo):
     # The org and user1 both own a repo named repo-a
-    assert github_repo.get_info(repo_name="repo-a")["full_name"] == "testorg/repo-a"
-    assert github_repo.get_info(repo_name="repo-a", owner="user1")["full_name"] == "user1/repo-a"
+    assert github_repo.info(repo_name="repo-a")["full_name"] == "testorg/repo-a"
+    assert github_repo.info(repo_name="repo-a", owner="user1")["full_name"] == "user1/repo-a"
     # Cached entries must not bleed between owners
-    assert github_repo.get_info(repo_name="repo-a")["full_name"] == "testorg/repo-a"
+    assert github_repo.info(repo_name="repo-a")["full_name"] == "testorg/repo-a"
 
 
 def test_owner_profile(github_repo):
     # The profile's owner (preferred over org_name) scopes all calls
-    ret = github_repo.get_info(profile="github_user")
+    ret = github_repo.info(profile="github_user")
     assert ret["full_name"] == "user1/user-repo"
 
 
 def test_profile_owner_defaults_to_token_user(github_repo):
     # Without owner/org_name, the owner is looked up via the token
-    ret = github_repo.get_info(repo_name="user-repo", profile="github_noowner")
+    ret = github_repo.info(repo_name="user-repo", profile="github_noowner")
     assert ret["full_name"] == "user1/user-repo"
 
 
@@ -111,7 +111,7 @@ def test_update(github_repo, fake_user):
     ret = github_repo.update(repo_name="user-repo", owner="user1", description="Updated")
     assert ret["description"] == "Updated"
     assert fake_user.get_repo("user-repo").description == "Updated"
-    assert github_repo.get_info(repo_name="user-repo", owner="user1")["description"] == "Updated"
+    assert github_repo.info(repo_name="user-repo", owner="user1")["description"] == "Updated"
 
 
 def test_delete(github_repo, fake_user):
