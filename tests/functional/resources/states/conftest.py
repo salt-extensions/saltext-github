@@ -14,13 +14,28 @@ def res_state_opts(res_opts):
 
 
 @pytest.fixture(scope="module")
-def res_states(res_state_opts, res_modules, utils_loader, loader_context):
+def minion_funcs(res_opts, utils_loader, loader_context):
+    """
+    The managing minion's module loader, packed as the ``__minion__``
+    escape hatch like the state engine does in resource context.
+    """
+    return salt.loader.minion_mods(
+        res_opts,
+        loader_context,
+        utils=utils_loader,
+        loaded_base_name=f"{__name__}.minionmods",
+    )
+
+
+@pytest.fixture(scope="module")
+def res_states(res_state_opts, res_modules, utils_loader, loader_context, minion_funcs):
     return salt.loader.states(
         res_state_opts,
         res_modules,
         utils_loader,
         salt.loader.serializers(res_state_opts),
         context=loader_context,
+        minion_mods=minion_funcs,
         loaded_base_name=f"{__name__}.resstates",
     )
 

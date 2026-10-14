@@ -23,6 +23,8 @@ organizations and the authenticated user, a GitHub API limitation.
 
 import logging
 
+from salt.exceptions import CommandExecutionError
+
 from saltext.github.utils.gh import profile as gh_profile
 from saltext.github.utils.gh.statecores import actions as sc_actions
 from saltext.github.utils.gh.statecores import catch_errors
@@ -314,6 +316,62 @@ def deploy_key_absent(name, repo_name=None, owner=None, profile="github"):
         _get_conn(profile),
         name,
         _resolve_repo_name(repo_name, profile),
+        owner=owner,
+        test=__opts__["test"],
+    )
+
+
+@catch_errors
+def deploy_key_actions_present(
+    name, secret_name, read_only=False, rotate=False, repo_name=None, owner=None, profile="github"
+):
+    """
+    Ensure a generated SSH keypair is distributed to a repository:
+    the public half as a deploy key with this title, the private half
+    as an Actions secret. The ed25519 keypair is generated in memory
+    via :py:func:`ssh_pki.create_private_key
+    <salt.modules.ssh_pki.create_private_key>` (requires Salt 3008+)
+    and never persisted; only the public key's fingerprint is reported.
+
+    Since secret values are write-only in the GitHub API, an existing
+    pair cannot be verified to match and is left untouched unless
+    ``rotate`` is set. A pair with a missing half is regenerated.
+
+    name
+        Display title of the deploy key.
+
+    secret_name
+        Name of the Actions secret holding the private key. GitHub
+        treats secret names case-insensitively.
+
+    read_only
+        Deny write access to the repository for this key. Defaults to false.
+
+    rotate
+        Generate and distribute a new keypair even when both halves
+        are present. Defaults to false.
+
+    repo_name
+        Name of the repository. Defaults to the profile's :ghconf:`repo_name`.
+
+    owner
+        Owner of the repository. Defaults to the profile's :ghconf:`owner`.
+
+    profile
+        Profile configuration name to use. Defaults to ``github``.
+    """
+    if "ssh_pki.create_private_key" not in __salt__:
+        raise CommandExecutionError(
+            "This state requires the ssh_pki execution module, available since Salt 3008"
+        )
+    return sc_deploy_keys.actions_present(
+        _get_conn(profile),
+        name,
+        secret_name,
+        _resolve_repo_name(repo_name, profile),
+        keygen=lambda: __salt__["ssh_pki.create_private_key"](algo="ed25519"),
+        read_only=read_only,
+        rotate=rotate,
         owner=owner,
         test=__opts__["test"],
     )

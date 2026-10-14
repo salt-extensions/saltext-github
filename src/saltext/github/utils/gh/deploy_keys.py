@@ -2,9 +2,22 @@
 Operations on GitHub repository deploy keys.
 """
 
+import base64
+import hashlib
 import logging
 
 log = logging.getLogger(__name__)
+
+
+def fingerprint(key):
+    """
+    Return the OpenSSH-style SHA256 fingerprint of an SSH public key.
+
+    key
+        SSH public key.
+    """
+    blob = base64.b64decode(key.split()[1])
+    return "SHA256:" + base64.b64encode(hashlib.sha256(blob).digest()).decode().rstrip("=")
 
 
 def key_body(key):

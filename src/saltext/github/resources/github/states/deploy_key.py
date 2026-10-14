@@ -68,6 +68,52 @@ def present(name, key, read_only=False, profile=None):
 
 
 @catch_errors
+def actions_present(name, secret_name, read_only=False, rotate=False, profile=None):
+    """
+    Ensure a generated SSH keypair is distributed to the targeted
+    repository: the public half as a deploy key with this title, the
+    private half as an Actions secret. The ed25519 keypair is generated
+    in memory on the managing minion via :py:func:`ssh_pki.create_private_key
+    <salt.modules.ssh_pki.create_private_key>` and never persisted;
+    only the public key's fingerprint is reported.
+
+    Since secret values are write-only in the GitHub API, an existing
+    pair cannot be verified to match and is left untouched unless
+    ``rotate`` is set. A pair with a missing half is regenerated.
+
+    name
+        Display title of the deploy key.
+
+    secret_name
+        Name of the Actions secret holding the private key. GitHub
+        treats secret names case-insensitively.
+
+    read_only
+        Deny write access to the repository for this key. Defaults to false.
+
+    rotate
+        Generate and distribute a new keypair even when both halves
+        are present. Defaults to false.
+
+    profile
+        Profile configuration name to use. Defaults to the resource
+        declaration's profile.
+    """
+    conn, owner, repo_name = _core_args(profile)
+    return sc_deploy_keys.actions_present(
+        conn,
+        name,
+        secret_name,
+        repo_name,
+        keygen=lambda: __minion__["ssh_pki.create_private_key"](algo="ed25519"),
+        read_only=read_only,
+        rotate=rotate,
+        owner=owner,
+        test=__opts__["test"],
+    )
+
+
+@catch_errors
 def absent(name, profile=None):
     """
     Ensure no deploy key with this title is present in the targeted
