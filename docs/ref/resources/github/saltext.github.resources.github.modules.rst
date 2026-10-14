@@ -7,6 +7,7 @@ Execution Modules
     :toctree:
 
     actions
+    config
     deploy_key
     environment
     issue
@@ -16,4 +17,6 @@ Execution Modules
     pull
     repo
     ruleset
+    saltutil
+    state
     test

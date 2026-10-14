@@ -43,7 +43,7 @@ def list_(
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' pull.list
+        salt 'my-org/my-repo' pull.list
 
     state
         Filter returned pull requests by their state. Can be either

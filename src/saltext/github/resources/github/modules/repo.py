@@ -34,7 +34,7 @@ def ident():
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' repo.ident
+        salt 'my-org/my-repo' repo.ident
     """
     owner, _, repo_name = __resource__["id"].partition("/")
     return {"id": __resource__["id"], "owner": owner, "repo": repo_name}
@@ -48,7 +48,7 @@ def info(*, ignore_cache=False, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' repo.info
+        salt 'my-org/my-repo' repo.info
 
     ignore_cache
         Bypass the use of cached repository information.
@@ -70,7 +70,7 @@ def get_teams(*, fields=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' repo.get_teams
+        salt 'my-org/my-repo' repo.get_teams
 
     fields
         Only include these fields in the output. A single field name
@@ -104,7 +104,7 @@ def update(
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' repo.update description='Managed by Salt'
+        salt 'my-org/my-repo' repo.update description='Managed by Salt'
 
     description
         Repository description.

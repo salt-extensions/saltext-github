@@ -30,7 +30,7 @@ def get(*, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' pages.get
+        salt 'my-org/my-repo' pages.get
 
     profile
         Profile configuration name to use. Defaults to the resource
@@ -49,7 +49,7 @@ def setup(*, build_type=None, source_branch=None, source_path=None, profile=None
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' pages.setup build_type=workflow
+        salt 'my-org/my-repo' pages.setup build_type=workflow
 
     build_type
         Process by which the site is built, either ``legacy``
@@ -93,7 +93,7 @@ def update(
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' pages.update build_type=workflow
+        salt 'my-org/my-repo' pages.update build_type=workflow
 
     build_type
         Process by which the site is built, either ``legacy``
@@ -138,7 +138,7 @@ def remove(*, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' pages.remove
+        salt 'my-org/my-repo' pages.remove
 
     profile
         Profile configuration name to use. Defaults to the resource

@@ -32,7 +32,7 @@ def list_(*, per_page=None, fields=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' ruleset.list
+        salt 'my-org/my-repo' ruleset.list
 
     per_page
         Pagination size, maximum 100.
@@ -60,7 +60,7 @@ def get(ruleset_id, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' ruleset.get 1234
+        salt 'my-org/my-repo' ruleset.get 1234
 
     ruleset_id
         ID of the ruleset.
@@ -82,7 +82,7 @@ def add(ruleset_params, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' ruleset.add '{name: test, enforcement: active}'
+        salt 'my-org/my-repo' ruleset.add '{name: test, enforcement: active}'
 
     ruleset_params
         Ruleset definition. Must contain at least ``name`` and ``enforcement``.
@@ -104,7 +104,7 @@ def update(ruleset_id, ruleset_params, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' ruleset.update 1234 '{enforcement: disabled}'
+        salt 'my-org/my-repo' ruleset.update 1234 '{enforcement: disabled}'
 
     ruleset_id
         ID of the ruleset.
@@ -130,7 +130,7 @@ def remove(ruleset_id, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' ruleset.remove 1234
+        salt 'my-org/my-repo' ruleset.remove 1234
 
     ruleset_id
         ID of the ruleset.

@@ -33,7 +33,7 @@ def list_secrets(*, fields=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' actions.list_secrets
+        salt 'my-org/my-repo' actions.list_secrets
 
     fields
         Only include these fields in the output. A single field name
@@ -57,7 +57,7 @@ def get_secret(name, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' actions.get_secret MY_SECRET
+        salt 'my-org/my-repo' actions.get_secret MY_SECRET
 
     name
         Name of the secret.
@@ -80,7 +80,7 @@ def set_secret(name, value, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' actions.set_secret MY_SECRET hunter2
+        salt 'my-org/my-repo' actions.set_secret MY_SECRET hunter2
 
     name
         Name of the secret.
@@ -105,7 +105,7 @@ def remove_secret(name, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' actions.remove_secret MY_SECRET
+        salt 'my-org/my-repo' actions.remove_secret MY_SECRET
 
     name
         Name of the secret.
@@ -129,7 +129,7 @@ def get_workflow_permissions(*, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' actions.get_workflow_permissions
+        salt 'my-org/my-repo' actions.get_workflow_permissions
 
     profile
         Profile configuration name to use. Defaults to the resource
@@ -150,7 +150,7 @@ def set_workflow_permissions(
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' actions.set_workflow_permissions \\
+        salt 'my-org/my-repo' actions.set_workflow_permissions \\
             default_workflow_permissions=read can_approve_pull_request_reviews=true
 
     default_workflow_permissions

@@ -32,7 +32,7 @@ def list_(*, fields=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' deploy_key.list
+        salt 'my-org/my-repo' deploy_key.list
 
     fields
         Only include these fields in the output. A single field name
@@ -54,7 +54,7 @@ def get(key_id, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' deploy_key.get 12345
+        salt 'my-org/my-repo' deploy_key.get 12345
 
     key_id
         ID of the deploy key.
@@ -79,7 +79,7 @@ def add(title, key, *, read_only=False, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' deploy_key.add autorelease 'ssh-ed25519 AAAA...' read_only=false
+        salt 'my-org/my-repo' deploy_key.add autorelease 'ssh-ed25519 AAAA...' read_only=false
 
     title
         Display title of the deploy key.
@@ -108,7 +108,7 @@ def remove(key_id, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' deploy_key.remove 12345
+        salt 'my-org/my-repo' deploy_key.remove 12345
 
     key_id
         ID of the deploy key.

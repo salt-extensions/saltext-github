@@ -35,7 +35,7 @@ def list_(
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' milestone.list
+        salt 'my-org/my-repo' milestone.list
 
     state
         Filter milestones by their state. Either ``open``, ``closed``, or ``all``.
@@ -81,8 +81,8 @@ def get(number=None, *, name=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' milestone.get 72
-        salt 'github:my-org/my-repo' milestone.get name=my_milestone
+        salt 'my-org/my-repo' milestone.get 72
+        salt 'my-org/my-repo' milestone.get name=my_milestone
 
     number
         Milestone number to retrieve. If provided, overrides ``name``.
