@@ -16,6 +16,7 @@ _________
     utils.gh.deploy_keys
     utils.gh.environments
     utils.gh.exceptions
+    utils.gh.grains_files
     utils.gh.issues
     utils.gh.labels
     utils.gh.members

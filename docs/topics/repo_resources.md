@@ -12,9 +12,12 @@ resource. Compared to the classic
 {py:mod}`github_repo <saltext.github.modules.github_repo>` modules,
 resources offer:
 
-- direct targeting of repositories (`salt 'my-org/my-repo' ...`),
-  including grain-based targeting across all managed repositories
-- per-repository grains (owner, default branch, visibility, ...)
+- direct targeting of repositories (`salt 'my-org/my-repo'` /
+  `salt -C 'T@github:my-org/my-repo'`), including grain-based
+  targeting across all managed repositories (`salt -G 'default_branch:master'`)
+- per-repository grains (owner, default branch, visibility, ...) -
+  a repository resource's grains can optionally even include data files
+  from the repo itself
 - repository-implicit execution and state modules – SLS files describe
   one repository's desired configuration and are applied per resource,
   without threading `repo_name`/`owner` through every call
@@ -66,16 +69,34 @@ with the SRN `github:<owner>/<repo>`.
 ## Targeting
 
 ```bash
-# One repository
+# One repository, by ID
 salt 'my-org/my-repo' test.ping
 
+# One repository, by SRN
+salt -C 'T@github:my-org/my-repo' test.ping
+
 # By resource grain
-salt -G 'github:default_branch:master' repo.info
+salt -G 'default_branch:master' repo.info
 ```
 
-The resource grains are provided under the `github` key: `id`, `owner`,
-`repo`, `full_name`, `private`, `fork`, `default_branch`, `language`,
-`html_url`, `description` and `homepage`.
+The resource grains carry the repository's identity and basic metadata:
+`id`, `owner`, `repo`, `full_name`, `private`, `fork`, `default_branch`,
+`language`, `html_url`, `description` and `homepage`.
+
+Custom grains sourced from files inside each repository can be declared
+via {ghconf}`resource:grains_files`, each namespace becoming a grain key
+next to the builtin ones (the special `_` namespace merges into the root
+grains, never overwriting existing keys):
+
+```bash
+salt -G 'copier:template_version:2*' repo.info
+```
+
+:::{important}
+Custom grains are controlled by anyone who can commit to the respective
+repository. Restrict the exposed keys via `include` allowlists and
+keep that trust model in mind when building targeting expressions.
+:::
 
 ## Execution modules
 

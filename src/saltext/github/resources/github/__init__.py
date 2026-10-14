@@ -24,11 +24,12 @@ the subtree selected by :conf_minion:`resource_pillar_key` (default
           - my-org
 
 The declaration keys (:ghconf:`resource:profile`, :ghconf:`resource:owners`,
-:ghconf:`resource:repos`/:ghconf:`resource:exclude` patterns and
-:ghconf:`resource:include_archived`) are described in the
-:ref:`configuration guide <github-resource-configuration>`. ``owners``
-may be a mapping, overriding any of the other declaration keys per
-owner::
+:ghconf:`resource:repos`/:ghconf:`resource:exclude` patterns,
+:ghconf:`resource:include_archived` and :ghconf:`resource:grains_files`
+for custom grains sourced from in-repo YAML/JSON files) are described in
+the :ref:`configuration guide <github-resource-configuration>`.
+``owners`` may be a mapping, overriding any of the other declaration
+keys per owner::
 
     resources:
       github:
@@ -48,6 +49,7 @@ import logging
 
 from salt.exceptions import CommandExecutionError
 
+from saltext.github.utils.gh import grains_files as gh_grains_files
 from saltext.github.utils.gh import profile as gh_profile
 from saltext.github.utils.gh import repos as gh_repos
 
@@ -102,14 +104,23 @@ def init(opts):
     Initialize the ``github`` resource type for this minion.
 
     Validates that all declared profiles (the default one and any
-    per-owner overrides) carry a token (without contacting the API)
-    and records the type-level state in ``__context__``.
+    per-owner overrides) carry a token (without contacting the API),
+    validates any ``grains_files`` declarations and records the
+    type-level state in ``__context__``.
     """
     profiles = gh_profile.resource_profiles(opts)
     # Fail fast on unconfigured profiles; the connections themselves
     # are established lazily on first use.
     for profile in profiles:
         gh_profile.get_config_value(profile, "token", opts=opts, context=__context__)
+    # Fail fast on malformed custom grains declarations.
+    decl = gh_profile.resource_decl(opts)
+    gh_grains_files.validate(decl.get("grains_files"))
+    owners = decl.get("owners")
+    if isinstance(owners, dict):
+        for settings in owners.values():
+            if isinstance(settings, dict):
+                gh_grains_files.validate(settings.get("grains_files"))
     __context__["github_resource"] = {
         "initialized": True,
         "profiles": profiles,
@@ -154,8 +165,9 @@ def discover(opts):
 
 def grains():
     """
-    Return the grains of the current resource, a ``github`` mapping
-    carrying the repository's identity and basic metadata.
+    Return the grains of the current resource: the repository's identity
+    and basic metadata, merged with any custom grains sourced from
+    in-repo files per the declaration's ``grains_files`` key.
     """
     resource_id = _resource_id()
     owner, repo_name = _split_id(resource_id)
@@ -164,31 +176,42 @@ def grains():
     # all of this owner's resources within one context.
     gh_repos.list_all(conn, owner=owner)
     info = gh_repos.get_info(conn, repo_name, owner=owner)
-    return {
-        "github": {
-            "id": resource_id,
-            "owner": info["owner"],
-            "repo": info["name"],
-            "full_name": info["full_name"],
-            "private": info["private"],
-            "fork": info["fork"],
-            "default_branch": info["default_branch"],
-            "language": info["language"],
-            "html_url": info["html_url"],
-            "description": info["description"],
-            "homepage": info["homepage"],
-        }
+    ret = {
+        "id": resource_id,
+        "owner": info["owner"],
+        "repo": info["name"],
+        "full_name": info["full_name"],
+        "private": info["private"],
+        "fork": info["fork"],
+        "default_branch": info["default_branch"],
+        "language": info["language"],
+        "html_url": info["html_url"],
+        "description": info["description"],
+        "homepage": info["homepage"],
     }
+    spec = gh_profile.resource_owner_setting(__opts__, owner, "grains_files")
+    if spec:
+        # Revalidate: the pillar can have changed since init(). The
+        # identity grains must survive declaration/content problems.
+        try:
+            normalized = gh_grains_files.validate(spec)
+        except CommandExecutionError as err:
+            log.error("Invalid grains_files declaration, skipping custom grains: %s", err)
+        else:
+            custom = gh_grains_files.collect(conn, repo_name, normalized, owner=owner)
+            gh_grains_files.merge_grains(ret, custom)
+    return ret
 
 
 def grains_refresh():
     """
     Return freshly fetched grains for the current resource, bypassing
-    cached repository information.
+    cached repository information and file contents.
     """
     owner, repo_name = _split_id(_resource_id())
     conn = _conn(__opts__, owner)
     gh_repos.get_info(conn, repo_name, owner=owner, ignore_cache=True)
+    gh_repos.clear_file_cache(conn, repo_name, owner=owner)
     return grains()
 
 

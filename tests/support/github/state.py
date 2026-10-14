@@ -36,6 +36,8 @@ from tests.support.github.entities import PullRequest
 from tests.support.github.entities import PullRequestData
 from tests.support.github.entities import Repo
 from tests.support.github.entities import RepoData
+from tests.support.github.entities import RepoFile
+from tests.support.github.entities import RepoFileData
 from tests.support.github.entities import RepoId
 from tests.support.github.entities import RepoRulesetData
 from tests.support.github.entities import Ruleset
@@ -78,6 +80,7 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
         default_factory=lambda: defaultdict(dict)
     )
     labels: dict[RepoId, dict[str, LabelData]] = field(default_factory=lambda: defaultdict(dict))
+    files: dict[RepoId, dict[str, RepoFileData]] = field(default_factory=lambda: defaultdict(dict))
     pages: dict[RepoId, PagesData] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -164,6 +167,7 @@ class GlobalState:  # pylint: disable=too-many-instance-attributes
             self.secrets,
             self.environments,
             self.labels,
+            self.files,
         ):
             store.pop(resolved, None)
         self.pages.pop(resolved, None)
@@ -224,5 +228,6 @@ _STORES = {
     SecretData: (Secret, "secrets", lambda d: d.repo, lambda d: d.name, "repos"),
     EnvironmentData: (Environment, "environments", lambda d: d.repo, lambda d: d.name, "repos"),
     LabelData: (Label, "labels", lambda d: d.repo, lambda d: d.name, "repos"),
+    RepoFileData: (RepoFile, "files", lambda d: d.repo, lambda d: d.path, "repos"),
     PagesData: (Pages, "pages", lambda d: d.repo, None, "repos"),
 }

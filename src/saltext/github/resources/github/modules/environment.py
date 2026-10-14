@@ -33,7 +33,7 @@ def list_(*, fields=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' environment.list
+        salt 'my-org/my-repo' environment.list
 
     fields
         Only include these fields in the output. A single field name
@@ -56,7 +56,7 @@ def get(name, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' environment.get release
+        salt 'my-org/my-repo' environment.get release
 
     name
         Name of the environment.
@@ -87,7 +87,7 @@ def set_(
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' environment.set release \\
+        salt 'my-org/my-repo' environment.set release \\
             deployment_branch_policy='{protected_branches: false, custom_branch_policies: true}'
 
     name
@@ -138,7 +138,7 @@ def remove(name, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' environment.remove release
+        salt 'my-org/my-repo' environment.remove release
 
     name
         Name of the environment.
@@ -161,7 +161,7 @@ def list_branch_policies(environment, *, fields=None, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' environment.list_branch_policies release
+        salt 'my-org/my-repo' environment.list_branch_policies release
 
     environment
         Name of the environment.
@@ -192,7 +192,7 @@ def add_branch_policy(environment, name, *, typ="branch", profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' environment.add_branch_policy release main
+        salt 'my-org/my-repo' environment.add_branch_policy release main
 
     environment
         Name of the environment.
@@ -224,7 +224,7 @@ def remove_branch_policy(environment, policy_id, *, profile=None):
 
     .. code-block:: bash
 
-        salt 'github:my-org/my-repo' environment.remove_branch_policy release 12345
+        salt 'my-org/my-repo' environment.remove_branch_policy release 12345
 
     environment
         Name of the environment.

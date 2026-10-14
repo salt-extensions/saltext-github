@@ -179,6 +179,55 @@ the master's {conf_master}`pillar_opts` setting) – including SDB rendering.
   Can be overridden per owner in the {ghconf}`owners <resource:owners>`
   mapping.
 
+:::{ghconf} resource:grains_files
+:::
+`grains_files`
+: Custom resource grains sourced from YAML/JSON files inside each
+  repository. A mapping of grain namespace to file specification –
+  each namespace becomes a grain key next to the builtin ones
+  (`id`, `owner`, `repo`, ..., which namespaces must not shadow).
+  The special `_` namespace instead merges its keys into the root
+  grains level; keys that already exist – the builtin identity grains
+  or earlier namespaces – are never overwritten.
+
+  `path`
+  : File path(s) inside the repository, a string or a list. All listed
+    files are fetched; missing ones are skipped and the parsed mappings
+    are shallow-merged in list order, earlier files winning.
+
+  `include`
+  : Optional list of strings or single-key dicts selecting the exposed keys.
+
+    String entries are fnmatch patterns matched case-sensitively against
+    colon-delimited key paths; a match includes the whole subtree, preserving nesting.
+    `*` crosses `:` boundaries.
+
+    Single-entry mappings rename:
+    the value at the exact source path (scalar or subtree, no patterns)
+    is exposed under the new name as a flat or nested namespace key.
+
+    A plain mapping of new name to source path is shorthand for a
+    list of mostly renames. Unset means everything is included.
+
+    See the [Full example config][full-example-config] for detailed syntax examples.
+
+  `exclude`
+  : Optional list of fnmatch patterns pruning matching key paths at
+    any depth, applied after `include`. Does not apply to renamed
+    keys. Note that `*` also crosses `:` boundaries.
+
+  Can be overridden per owner in the {ghconf}`owners <resource:owners>`
+  mapping. Unlike the other keys, the override replaces the
+  declaration-level value entirely (no merging) – an empty mapping
+  thus disables custom grains for that owner.
+
+  :::{important}
+  These grains are controlled by anyone who can commit to the
+  respective repository. Restrict the exposed keys via `include`
+  allowlists and keep that trust model in mind when building targeting
+  expressions. The builtin identity grains cannot be shadowed.
+  :::
+
 ### Minimal example config
 This example showcases the minimally required config to use the modules
 and expose repositories as Salt resources.
@@ -232,20 +281,92 @@ other_enterprise_org:
   token: sdb://osenv/GITHUB_TOKEN
   owner: other-org
 
-# Expose specific repositories as resources
+# Expose select repositories as resources
 resources:
   github:
+
+    # By default, for any owner, only expose repositories that start with `foo-`,
+    # including archived ones.
+    include_archived: true
+    repos:
+      - foo-*
+
+    # Also try to load a file named `.github/data.json` from each repository and
+    # include all keys but those starting with an underscore in grains["data"]
+    grains_files:
+      data:
+        path: .github/data.json
+        exclude:
+          - "_*"
+
+    # Expose repositories specifically from these accounts.
     owners:
+
+      # Use the defaults above. Exposed are: my-github-handle/foo-*
       my-github-handle: {}
+
+      # Exclude archived ones and a specific one. Exposed are my-org/foo-*,
+      # but not the one repository named my-org/foo-not-this-repo.
       my-org:
         exclude:
           - foo-not-this-repo
+        include_archived: false
+
+      # Expose repositories matching other-org/bar-* while using a different profile.
+      # Don't render any custom grains from files in these repositories.
       other-org:
         profile: other_enterprise_org
+        grains_files: {}
         repos:
           - bar-*
-        include_archived: false
-    repos:
-      - foo-*
-    include_archived: true
+
+      # Reset `repos` config to expose all repos.
+      # Showcase custom grains (in detail).
+      tiny-org:
+        # Reset repo selection to include all repos in tiny-org/*.
+        repos: {}
+        # Override the default custom file grains config completely
+        grains_files:
+
+          # When a repo has a `.github/grains.json` file, load it and merge
+          # select keys (by "glob" match) into the repository's grains (no namespace).
+          # You can rename keys by passing a single-key dict
+          # (no globs allowed in source or target).
+          # Explicit renames always win a slot.
+          # Note: inbuilt grains can never be overridden.
+          _:
+            path: .github/grains.json
+            include:
+              - team
+              - status
+              - nested:key
+              - 'include-all-*'
+              - '*-also-these'
+              - 'and-*-these'
+              - 'and:*-these'  # a glob spans nesting levels
+              - some_key: renamed:from:a:deeply:nested:key
+              - some:nested:target: renamed:from:another:deeply:nested:key
+
+          # Try loading several paths and merge their data into the `data` namespace in grains.
+          # If more than one file specifies the same key, the *first* one wins.
+          # This one still excludes any keys that start with an underscore, but shows
+          # exclude/include can be specified as a simple string.
+          data:
+            path:
+              - .github/foo.json
+              - .github/bar.yml
+            exclude: _*
+
+          # Namespaces can be nested.
+          # `include` can be a mapping as a shorthand if most of your
+          # includes are renames. Regular patterns are still supported
+          # by specifying a falsy value.
+          nested:target:copier:
+            path: .copier-answers.yml
+            include:
+              template_version: _commit
+              nested:target: my_question
+              nested_source: my:question
+              just_keep_this_explicit_key:
+              keep_glob_*:stuff: ''
 ```

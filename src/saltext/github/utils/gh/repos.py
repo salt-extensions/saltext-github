@@ -3,6 +3,7 @@ Operations on GitHub repositories. Repository listing and creation are
 organization-scoped, everything else works on any owner's repositories.
 """
 
+import base64
 import logging
 import time
 
@@ -117,6 +118,78 @@ def get_info(conn, name, *, owner=None, ignore_cache=False):
                 data=exc.data,
             ) from exc
     return conn.cache[key]
+
+
+def get_file_content(conn, name, path, *, owner=None, ignore_cache=False):
+    """
+    Return the decoded text content of a repository file via the
+    contents API, or ``None`` when the file is missing or unusable
+    (not a regular file, too large for the API to carry inline, not
+    valid UTF-8). Results are cached, including negative ones.
+
+    conn
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+
+    name
+        Repository name.
+
+    path
+        Path of the file inside the repository.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
+
+    ignore_cache
+        Bypass the cached file content.
+    """
+    owner = owner or conn.owner
+    key = ("repo_file", owner.lower(), name.lower(), path)
+    if key not in conn.cache or ignore_cache:
+        conn.cache[key] = _fetch_file_content(conn, owner, name, path)
+    return conn.cache[key]
+
+
+def _fetch_file_content(conn, owner, name, path):
+    try:
+        res = conn.repo_query(owner, name, "contents", path)
+    except GitHubNotFoundError:
+        return None
+    if not isinstance(res, dict) or res.get("type") != "file":
+        log.warning("Path '%s' in %s/%s is not a file, skipping", path, owner, name)
+        return None
+    if res.get("encoding") != "base64":
+        log.warning(
+            "Cannot decode '%s' in %s/%s: unsupported encoding '%s'",
+            path,
+            owner,
+            name,
+            res.get("encoding"),
+        )
+        return None
+    try:
+        return base64.b64decode(res.get("content") or "").decode("utf-8")
+    except (ValueError, UnicodeDecodeError) as err:
+        log.warning("Failed decoding the content of '%s' in %s/%s: %s", path, owner, name, err)
+        return None
+
+
+def clear_file_cache(conn, name, *, owner=None):
+    """
+    Drop all cached file contents of one repository, including cached
+    negative lookups.
+
+    conn
+        :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
+
+    name
+        Repository name.
+
+    owner
+        Owner of the repository. Defaults to the connection's owner.
+    """
+    prefix = ("repo_file", (owner or conn.owner).lower(), name.lower())
+    for key in [k for k in conn.cache if isinstance(k, tuple) and k[:3] == prefix]:
+        del conn.cache[key]
 
 
 @api_request

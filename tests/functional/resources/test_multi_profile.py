@@ -95,8 +95,8 @@ def test_discover_uses_owner_profile(connection, res_opts):
 def test_grains_per_owner(connection, for_resource):
     with for_resource("otherorg/other-repo"):
         grains = connection["github.grains"]()
-    assert grains["github"]["full_name"] == "otherorg/other-repo"
-    assert grains["github"]["owner"] == "otherorg"
+    assert grains["full_name"] == "otherorg/other-repo"
+    assert grains["owner"] == "otherorg"
 
 
 def test_exec_resolves_per_owner_profile(res_modules, for_resource, loader_context):
