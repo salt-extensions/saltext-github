@@ -24,6 +24,7 @@ _________
     utils.gh.profile
     utils.gh.pulls
     utils.gh.repos
+    utils.gh.resource
     utils.gh.rulesets
     utils.gh.statecores
     utils.gh.statecores.actions

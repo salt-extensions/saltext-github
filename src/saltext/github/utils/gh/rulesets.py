@@ -6,8 +6,6 @@ import logging
 
 from salt.exceptions import CommandExecutionError
 
-from saltext.github.utils.gh import client
-
 log = logging.getLogger(__name__)
 
 
@@ -80,7 +78,7 @@ def list_all(
         repo_name=repo_name,
         org_name=org_name or conn.owner,
     )
-    return client.query(conn, path, headers=headers, per_page=per_page)
+    return conn.query(path, headers=headers, per_page=per_page)
 
 
 def get(conn, ruleset_id, ruleset_type, *, owner=None, repo_name=None, org_name=None, headers=None):
@@ -103,7 +101,7 @@ def get(conn, ruleset_id, ruleset_type, *, owner=None, repo_name=None, org_name=
         org_name=org_name or conn.owner,
         ruleset_id=ruleset_id,
     )
-    return client.query(conn, path, headers=headers)
+    return conn.query(path, headers=headers)
 
 
 def create(
@@ -128,7 +126,7 @@ def create(
         repo_name=repo_name,
         org_name=org_name or conn.owner,
     )
-    return client.query(conn, path, method="POST", data=ruleset_params, headers=headers)
+    return conn.query(path, method="POST", data=ruleset_params, headers=headers)
 
 
 def update(
@@ -165,7 +163,7 @@ def update(
         org_name=org_name or conn.owner,
         ruleset_id=ruleset_id,
     )
-    return client.query(conn, path, method="PUT", data=ruleset_params, headers=headers)
+    return conn.query(path, method="PUT", data=ruleset_params, headers=headers)
 
 
 def delete(
@@ -190,4 +188,4 @@ def delete(
         org_name=org_name or conn.owner,
         ruleset_id=ruleset_id,
     )
-    client.query(conn, path, method="DELETE", headers=headers)
+    conn.query(path, method="DELETE", headers=headers)

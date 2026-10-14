@@ -4,13 +4,7 @@ Operations on GitHub repository deploy keys.
 
 import logging
 
-from saltext.github.utils.gh import client
-
 log = logging.getLogger(__name__)
-
-
-def _path(conn, owner, repo_name, *suffix):
-    return ["repos", owner or conn.owner, repo_name, "keys", *suffix]
 
 
 def key_body(key):
@@ -37,7 +31,7 @@ def list_all(conn, repo_name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, _path(conn, owner, repo_name))
+    return conn.repo_query(owner, repo_name, "keys")
 
 
 def get(conn, repo_name, key_id, *, owner=None):
@@ -59,7 +53,7 @@ def get(conn, repo_name, key_id, *, owner=None):
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the deploy key does not exist.
     """
-    return client.query(conn, _path(conn, owner, repo_name, key_id))
+    return conn.repo_query(owner, repo_name, "keys", key_id)
 
 
 def create(conn, repo_name, title, key, *, read_only=False, owner=None):
@@ -86,9 +80,10 @@ def create(conn, repo_name, title, key, *, read_only=False, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(
-        conn,
-        _path(conn, owner, repo_name),
+    return conn.repo_query(
+        owner,
+        repo_name,
+        "keys",
         method="POST",
         data={"title": title, "key": key, "read_only": read_only},
     )
@@ -110,4 +105,4 @@ def delete(conn, repo_name, key_id, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    client.query(conn, _path(conn, owner, repo_name, key_id), method="DELETE")
+    conn.repo_query(owner, repo_name, "keys", key_id, method="DELETE")

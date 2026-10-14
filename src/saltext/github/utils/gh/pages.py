@@ -5,13 +5,8 @@ Operations on GitHub Pages sites of repositories.
 import logging
 
 from saltext.github.utils import filter_unset
-from saltext.github.utils.gh import client
 
 log = logging.getLogger(__name__)
-
-
-def _path(conn, owner, repo_name):
-    return ["repos", owner or conn.owner, repo_name, "pages"]
 
 
 def build_source(branch=None, path=None):
@@ -45,7 +40,7 @@ def get(conn, repo_name, *, owner=None):
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the repository has no Pages site.
     """
-    return client.query(conn, _path(conn, owner, repo_name))
+    return conn.repo_query(owner, repo_name, "pages")
 
 
 def create(conn, repo_name, *, build_type=None, source=None, owner=None):
@@ -70,9 +65,10 @@ def create(conn, repo_name, *, build_type=None, source=None, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(
-        conn,
-        _path(conn, owner, repo_name),
+    return conn.repo_query(
+        owner,
+        repo_name,
+        "pages",
         method="POST",
         data=filter_unset({"build_type": build_type, "source": source}),
     )
@@ -113,7 +109,7 @@ def update(
     )
     if cname is not ...:
         data["cname"] = cname
-    client.query(conn, _path(conn, owner, repo_name), method="PUT", data=data)
+    conn.repo_query(owner, repo_name, "pages", method="PUT", data=data)
 
 
 def delete(conn, repo_name, *, owner=None):
@@ -129,4 +125,4 @@ def delete(conn, repo_name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    client.query(conn, _path(conn, owner, repo_name), method="DELETE")
+    conn.repo_query(owner, repo_name, "pages", method="DELETE")

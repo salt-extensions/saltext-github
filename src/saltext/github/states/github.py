@@ -14,6 +14,8 @@ import time
 
 from salt.exceptions import CommandExecutionError
 
+from saltext.github.utils.gh.statecores import catch_errors as _catch_errors
+
 log = logging.getLogger(__name__)
 
 __virtualname__ = "github"
@@ -28,6 +30,7 @@ def __virtual__():
     return (False, "github module could not be loaded")  # pragma: no cover
 
 
+@_catch_errors
 def present(name, profile="github", **kwargs):
     """
     Ensure a user is present
@@ -80,6 +83,7 @@ def present(name, profile="github", **kwargs):
     return ret
 
 
+@_catch_errors
 def absent(name, profile="github", **kwargs):
     """
     Ensure a github user is absent
@@ -138,6 +142,7 @@ def absent(name, profile="github", **kwargs):
     return ret
 
 
+@_catch_errors
 def team_present(  # pylint: disable=too-many-statements
     name,
     description=None,
@@ -421,6 +426,7 @@ def _member_violates_mfa(member, member_info, mfa_deadline, members_without_mfa)
     return member.lower() in members_without_mfa and (mfa_deadline > enforce_mfa_from)
 
 
+@_catch_errors
 def team_absent(name, profile="github", **kwargs):
     """
     Ensure a team is absent.
@@ -468,6 +474,7 @@ def team_absent(name, profile="github", **kwargs):
     return ret
 
 
+@_catch_errors
 def repo_present(
     name,
     description=None,
@@ -709,6 +716,7 @@ def repo_present(
     return ret
 
 
+@_catch_errors
 def repo_absent(name, profile="github", **kwargs):
     """
     Ensure a repo is absent.
@@ -762,6 +770,7 @@ def repo_absent(name, profile="github", **kwargs):
     return ret
 
 
+@_catch_errors
 def ruleset_absent(
     name, ruleset_type, profile="github", owner=None, repo_name=None, org_name=None, **kwargs
 ):
@@ -840,6 +849,7 @@ def ruleset_absent(
     return ret
 
 
+@_catch_errors
 def ruleset_present(
     name,
     ruleset_type,

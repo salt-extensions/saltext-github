@@ -2,6 +2,7 @@ import logging
 import shutil
 
 import pytest
+from saltfactories.utils import random_string
 from saltfactories.utils.functional import Loaders
 
 from tests.support.github import DEPLOY_KEY_A
@@ -12,7 +13,8 @@ log = logging.getLogger(__name__)
 
 @pytest.fixture(scope="package")
 def minion_id():  # pragma: no cover
-    return "func-tests-minion-opts"
+    # Random to avoid factory directory collisions, e.g. with pytest-xdist
+    return random_string("func-tests-minion-")
 
 
 @pytest.fixture(scope="module")
@@ -126,7 +128,8 @@ def master_opts(
         }
     )
     factory = salt_factories.salt_master_daemon(
-        "func-tests-master-opts",
+        # Random to avoid factory directory collisions, e.g. with pytest-xdist
+        random_string("func-tests-master-"),
         defaults=master_config_defaults or None,
         overrides=master_config_overrides,
     )

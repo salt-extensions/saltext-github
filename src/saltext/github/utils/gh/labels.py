@@ -6,16 +6,13 @@ import logging
 from urllib.parse import quote
 
 from saltext.github.utils import filter_unset
-from saltext.github.utils.gh import client
 
 log = logging.getLogger(__name__)
 
 
-def _path(conn, owner, repo_name, *suffix):
+def _path(*suffix):
     # Label names can contain characters that are invalid in URL paths
-    return ["repos", owner or conn.owner, repo_name, "labels"] + [
-        quote(str(segment), safe="") for segment in suffix
-    ]
+    return ["labels"] + [quote(str(segment), safe="") for segment in suffix]
 
 
 def normalize_color(color):
@@ -43,7 +40,7 @@ def list_all(conn, repo_name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, _path(conn, owner, repo_name))
+    return conn.repo_query(owner, repo_name, "labels")
 
 
 def get(conn, repo_name, name, *, owner=None):
@@ -65,7 +62,7 @@ def get(conn, repo_name, name, *, owner=None):
     Raises :class:`~saltext.github.utils.gh.exceptions.GitHubNotFoundError`
     if the label does not exist.
     """
-    return client.query(conn, _path(conn, owner, repo_name, name))
+    return conn.repo_query(owner, repo_name, *_path(name))
 
 
 def create(conn, repo_name, name, *, color=None, description=None, owner=None):
@@ -92,7 +89,7 @@ def create(conn, repo_name, name, *, color=None, description=None, owner=None):
         Owner of the repository. Defaults to the connection's owner.
     """
     data = filter_unset({"name": name, "color": normalize_color(color), "description": description})
-    return client.query(conn, _path(conn, owner, repo_name), method="POST", data=data)
+    return conn.repo_query(owner, repo_name, "labels", method="POST", data=data)
 
 
 def update(conn, repo_name, name, *, new_name=None, color=None, description=None, owner=None):
@@ -123,7 +120,7 @@ def update(conn, repo_name, name, *, new_name=None, color=None, description=None
     data = filter_unset(
         {"new_name": new_name, "color": normalize_color(color), "description": description}
     )
-    return client.query(conn, _path(conn, owner, repo_name, name), method="PATCH", data=data)
+    return conn.repo_query(owner, repo_name, *_path(name), method="PATCH", data=data)
 
 
 def delete(conn, repo_name, name, *, owner=None):
@@ -142,4 +139,4 @@ def delete(conn, repo_name, name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    client.query(conn, _path(conn, owner, repo_name, name), method="DELETE")
+    conn.repo_query(owner, repo_name, *_path(name), method="DELETE")

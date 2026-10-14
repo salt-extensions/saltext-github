@@ -10,23 +10,18 @@ defaults to the :ghconf:`profile <resource:profile>` named in the resource decla
 
 import logging
 
+from salt.utils.functools import namespaced_function
+
 from saltext.github.utils import filter_fields
 from saltext.github.utils.gh import labels as gh_labels
-from saltext.github.utils.gh import profile as gh_profile
+from saltext.github.utils.gh import resource as gh_resource
 
 log = logging.getLogger(__name__)
 
 __func_alias__ = {"list_": "list"}
 
 
-def _conn(profile=None):
-    owner, _ = _ident()
-    return gh_profile.resource_conn(__opts__, __context__, profile=profile, owner=owner)
-
-
-def _ident():
-    owner, _, repo_name = __resource__["id"].partition("/")
-    return owner, repo_name
+_core_args = namespaced_function(gh_resource.core_args, globals())
 
 
 def list_(*, fields=None, profile=None):
@@ -48,8 +43,8 @@ def list_(*, fields=None, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    labels = gh_labels.list_all(_conn(profile), repo_name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    labels = gh_labels.list_all(conn, repo_name, owner=owner)
     return filter_fields({label["name"]: label for label in labels}, fields)
 
 
@@ -70,8 +65,8 @@ def get(name, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    return gh_labels.get(_conn(profile), repo_name, name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    return gh_labels.get(conn, repo_name, name, owner=owner)
 
 
 def add(name, *, color=None, description=None, profile=None):
@@ -99,9 +94,9 @@ def add(name, *, color=None, description=None, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     return gh_labels.create(
-        _conn(profile), repo_name, name, color=color, description=description, owner=owner
+        conn, repo_name, name, color=color, description=description, owner=owner
     )
 
 
@@ -132,9 +127,9 @@ def edit(name, *, new_name=None, color=None, description=None, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     return gh_labels.update(
-        _conn(profile),
+        conn,
         repo_name,
         name,
         new_name=new_name,
@@ -161,6 +156,6 @@ def remove(name, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    gh_labels.delete(_conn(profile), repo_name, name, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    gh_labels.delete(conn, repo_name, name, owner=owner)
     return True

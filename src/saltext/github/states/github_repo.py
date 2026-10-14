@@ -23,10 +23,9 @@ organizations and the authenticated user, a GitHub API limitation.
 
 import logging
 
-from salt.exceptions import CommandExecutionError
-
 from saltext.github.utils.gh import profile as gh_profile
 from saltext.github.utils.gh.statecores import actions as sc_actions
+from saltext.github.utils.gh.statecores import catch_errors
 from saltext.github.utils.gh.statecores import deploy_keys as sc_deploy_keys
 from saltext.github.utils.gh.statecores import environments as sc_environments
 from saltext.github.utils.gh.statecores import labels as sc_labels
@@ -62,13 +61,7 @@ def _allow_privacy_change(profile):
     )
 
 
-def _failed(name, err):
-    """
-    Render a raised error into a failed state return.
-    """
-    return {"name": name, "changes": {}, "result": False, "comment": str(err)}
-
-
+@catch_errors
 def present(
     name,
     description=None,
@@ -142,29 +135,27 @@ def present(
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_repo.present(
-            _get_conn(profile),
-            name,
-            owner=owner,
-            description=description,
-            homepage=homepage,
-            private=private,
-            has_issues=has_issues,
-            has_wiki=has_wiki,
-            has_downloads=has_downloads,
-            auto_init=auto_init,
-            gitignore_template=gitignore_template,
-            license_template=license_template,
-            default_branch=default_branch,
-            teams=teams,
-            allow_privacy_change=_allow_privacy_change(profile),
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_repo.present(
+        _get_conn(profile),
+        name,
+        owner=owner,
+        description=description,
+        homepage=homepage,
+        private=private,
+        has_issues=has_issues,
+        has_wiki=has_wiki,
+        has_downloads=has_downloads,
+        auto_init=auto_init,
+        gitignore_template=gitignore_template,
+        license_template=license_template,
+        default_branch=default_branch,
+        teams=teams,
+        allow_privacy_change=_allow_privacy_change(profile),
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def absent(name, owner=None, profile="github"):
     """
     Ensure a repository is absent.
@@ -178,12 +169,10 @@ def absent(name, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_repo.absent(_get_conn(profile), name, owner=owner, test=__opts__["test"])
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_repo.absent(_get_conn(profile), name, owner=owner, test=__opts__["test"])
 
 
+@catch_errors
 def ruleset_present(name, ruleset_params=None, repo_name=None, owner=None, profile="github"):
     """
     Ensure a repository ruleset is present and configured as specified.
@@ -219,19 +208,17 @@ def ruleset_present(name, ruleset_params=None, repo_name=None, owner=None, profi
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_rulesets.present(
-            _get_conn(profile),
-            name,
-            _resolve_repo_name(repo_name, profile),
-            ruleset_params=ruleset_params,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_rulesets.present(
+        _get_conn(profile),
+        name,
+        _resolve_repo_name(repo_name, profile),
+        ruleset_params=ruleset_params,
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def ruleset_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure a repository ruleset is absent.
@@ -248,18 +235,16 @@ def ruleset_absent(name, repo_name=None, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_rulesets.absent(
-            _get_conn(profile),
-            name,
-            _resolve_repo_name(repo_name, profile),
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_rulesets.absent(
+        _get_conn(profile),
+        name,
+        _resolve_repo_name(repo_name, profile),
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def deploy_key_present(name, key, read_only=False, repo_name=None, owner=None, profile="github"):
     """
     Ensure a deploy key with this title and public key is present
@@ -297,20 +282,18 @@ def deploy_key_present(name, key, read_only=False, repo_name=None, owner=None, p
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_deploy_keys.present(
-            _get_conn(profile),
-            name,
-            key,
-            _resolve_repo_name(repo_name, profile),
-            read_only=read_only,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_deploy_keys.present(
+        _get_conn(profile),
+        name,
+        key,
+        _resolve_repo_name(repo_name, profile),
+        read_only=read_only,
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def deploy_key_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure no deploy key with this title is present in a repository.
@@ -327,18 +310,16 @@ def deploy_key_absent(name, repo_name=None, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_deploy_keys.absent(
-            _get_conn(profile),
-            name,
-            _resolve_repo_name(repo_name, profile),
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_deploy_keys.absent(
+        _get_conn(profile),
+        name,
+        _resolve_repo_name(repo_name, profile),
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def actions_secret_present(
     name, value=None, force=False, repo_name=None, owner=None, profile="github"
 ):
@@ -372,20 +353,18 @@ def actions_secret_present(
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_actions.secret_present(
-            _get_conn(profile),
-            name,
-            _resolve_repo_name(repo_name, profile),
-            value=value,
-            force=force,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_actions.secret_present(
+        _get_conn(profile),
+        name,
+        _resolve_repo_name(repo_name, profile),
+        value=value,
+        force=force,
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def actions_secret_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure an Actions secret is absent from a repository.
@@ -403,18 +382,16 @@ def actions_secret_absent(name, repo_name=None, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_actions.secret_absent(
-            _get_conn(profile),
-            name,
-            _resolve_repo_name(repo_name, profile),
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_actions.secret_absent(
+        _get_conn(profile),
+        name,
+        _resolve_repo_name(repo_name, profile),
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def workflow_permissions_managed(
     name,
     default_workflow_permissions=None,
@@ -446,20 +423,18 @@ def workflow_permissions_managed(
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_actions.workflow_permissions_managed(
-            _get_conn(profile),
-            name,
-            repo_name or name,
-            default_workflow_permissions=default_workflow_permissions,
-            can_approve_pull_request_reviews=can_approve_pull_request_reviews,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_actions.workflow_permissions_managed(
+        _get_conn(profile),
+        name,
+        repo_name or name,
+        default_workflow_permissions=default_workflow_permissions,
+        can_approve_pull_request_reviews=can_approve_pull_request_reviews,
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def environment_present(
     name,
     wait_timer=None,
@@ -503,22 +478,20 @@ def environment_present(
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_environments.present(
-            _get_conn(profile),
-            name,
-            _resolve_repo_name(repo_name, profile),
-            wait_timer=wait_timer,
-            prevent_self_review=prevent_self_review,
-            reviewers=reviewers,
-            deployment_branches=deployment_branches,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_environments.present(
+        _get_conn(profile),
+        name,
+        _resolve_repo_name(repo_name, profile),
+        wait_timer=wait_timer,
+        prevent_self_review=prevent_self_review,
+        reviewers=reviewers,
+        deployment_branches=deployment_branches,
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def environment_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure an environment is absent from a repository.
@@ -535,18 +508,16 @@ def environment_absent(name, repo_name=None, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_environments.absent(
-            _get_conn(profile),
-            name,
-            _resolve_repo_name(repo_name, profile),
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_environments.absent(
+        _get_conn(profile),
+        name,
+        _resolve_repo_name(repo_name, profile),
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def label_present(name, color=None, description=None, repo_name=None, owner=None, profile="github"):
     """
     Ensure a label is present in a repository and configured as
@@ -571,20 +542,18 @@ def label_present(name, color=None, description=None, repo_name=None, owner=None
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_labels.present(
-            _get_conn(profile),
-            name,
-            _resolve_repo_name(repo_name, profile),
-            color=color,
-            description=description,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_labels.present(
+        _get_conn(profile),
+        name,
+        _resolve_repo_name(repo_name, profile),
+        color=color,
+        description=description,
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def label_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure a label is absent from a repository.
@@ -601,18 +570,16 @@ def label_absent(name, repo_name=None, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_labels.absent(
-            _get_conn(profile),
-            name,
-            _resolve_repo_name(repo_name, profile),
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_labels.absent(
+        _get_conn(profile),
+        name,
+        _resolve_repo_name(repo_name, profile),
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def pages_present(
     name,
     build_type=None,
@@ -657,23 +624,21 @@ def pages_present(
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_pages.present(
-            _get_conn(profile),
-            name,
-            repo_name or name,
-            build_type=build_type,
-            source_branch=source_branch,
-            source_path=source_path,
-            cname=cname,
-            https_enforced=https_enforced,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_pages.present(
+        _get_conn(profile),
+        name,
+        repo_name or name,
+        build_type=build_type,
+        source_branch=source_branch,
+        source_path=source_path,
+        cname=cname,
+        https_enforced=https_enforced,
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def pages_absent(name, repo_name=None, owner=None, profile="github"):
     """
     Ensure GitHub Pages are disabled for a repository.
@@ -690,13 +655,10 @@ def pages_absent(name, repo_name=None, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    try:
-        return sc_pages.absent(
-            _get_conn(profile),
-            name,
-            repo_name or name,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    return sc_pages.absent(
+        _get_conn(profile),
+        name,
+        repo_name or name,
+        owner=owner,
+        test=__opts__["test"],
+    )

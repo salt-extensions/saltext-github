@@ -33,8 +33,6 @@ in the :ref:`configuration guide <github-configuration>`. The profile's
 
 import logging
 
-from salt.exceptions import CommandExecutionError
-
 from saltext.github.utils import filter_fields
 from saltext.github.utils.gh import members as gh_members
 from saltext.github.utils.gh import profile as gh_profile
@@ -48,13 +46,6 @@ __virtualname__ = "github_org"
 
 def _get_conn(profile):
     return gh_profile.get_conn(profile, opts=__opts__, context=__context__)
-
-
-def _get_team(conn, name, owner=None):
-    """
-    Return a team's cached details, raising when it does not exist.
-    """
-    return gh_teams.find(conn, name, owner=owner)
 
 
 def list_members(owner=None, ignore_cache=False, profile="github"):
@@ -204,7 +195,7 @@ def get_team(name, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    return _strip_team_caches(_get_team(_get_conn(profile), name, owner=owner))
+    return _strip_team_caches(gh_teams.find(_get_conn(profile), name, owner=owner))
 
 
 def add_team(
@@ -248,9 +239,8 @@ def add_team(
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    conn = _get_conn(profile)
-    gh_teams.create(
-        conn,
+    ght = _get_conn(profile).bind(gh_teams)
+    ght.create(
         name,
         description=description,
         repo_names=repo_names,
@@ -258,7 +248,7 @@ def add_team(
         permission=permission,
         owner=owner,
     )
-    return _strip_team_caches(_get_team(conn, name, owner=owner))
+    return _strip_team_caches(ght.find(name, owner=owner))
 
 
 def edit_team(name, description=None, privacy=None, permission=None, owner=None, profile="github"):
@@ -291,17 +281,16 @@ def edit_team(name, description=None, privacy=None, permission=None, owner=None,
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    conn = _get_conn(profile)
-    gh_teams.update(
-        conn,
-        _get_team(conn, name, owner=owner),
+    ght = _get_conn(profile).bind(gh_teams)
+    ght.update(
+        ght.find(name, owner=owner),
         name,
         description=description,
         privacy=privacy,
         permission=permission,
         owner=owner,
     )
-    return _strip_team_caches(_get_team(conn, name, owner=owner))
+    return _strip_team_caches(ght.find(name, owner=owner))
 
 
 def remove_team(name, owner=None, profile="github"):
@@ -323,8 +312,8 @@ def remove_team(name, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    conn = _get_conn(profile)
-    gh_teams.delete(conn, _get_team(conn, name, owner=owner), owner=owner)
+    ght = _get_conn(profile).bind(gh_teams)
+    ght.delete(ght.find(name, owner=owner), owner=owner)
     return True
 
 
@@ -355,10 +344,8 @@ def list_team_repos(team_name, owner=None, fields=None, ignore_cache=False, prof
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    conn = _get_conn(profile)
-    repos = gh_teams.list_repos(
-        conn, _get_team(conn, team_name, owner=owner), owner=owner, ignore_cache=ignore_cache
-    )
+    ght = _get_conn(profile).bind(gh_teams)
+    repos = ght.list_repos(ght.find(team_name, owner=owner), owner=owner, ignore_cache=ignore_cache)
     return filter_fields({repo["name"]: repo for repo in repos.values()}, fields)
 
 
@@ -389,13 +376,8 @@ def add_team_repo(repo_name, team_name, permission=None, owner=None, profile="gi
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    conn = _get_conn(profile)
-    if not gh_teams.add_repo(
-        conn, _get_team(conn, team_name, owner=owner), repo_name, permission=permission, owner=owner
-    ):
-        raise CommandExecutionError(
-            f"Failed setting permission {permission} on repo {repo_name} for team {team_name}."
-        )
+    ght = _get_conn(profile).bind(gh_teams)
+    ght.add_repo(ght.find(team_name, owner=owner), repo_name, permission=permission, owner=owner)
     return True
 
 
@@ -421,8 +403,8 @@ def remove_team_repo(repo_name, team_name, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    conn = _get_conn(profile)
-    gh_teams.remove_repo(conn, _get_team(conn, team_name, owner=owner), repo_name, owner=owner)
+    ght = _get_conn(profile).bind(gh_teams)
+    ght.remove_repo(ght.find(team_name, owner=owner), repo_name, owner=owner)
     return True
 
 
@@ -448,9 +430,9 @@ def list_team_members(team_name, owner=None, ignore_cache=False, profile="github
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    conn = _get_conn(profile)
-    return gh_teams.list_members(
-        conn, _get_team(conn, team_name, owner=owner), owner=owner, ignore_cache=ignore_cache
+    ght = _get_conn(profile).bind(gh_teams)
+    return ght.list_members(
+        ght.find(team_name, owner=owner), owner=owner, ignore_cache=ignore_cache
     )
 
 
@@ -501,8 +483,8 @@ def add_team_member(name, team_name, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    conn = _get_conn(profile)
-    gh_teams.add_member(conn, _get_team(conn, team_name, owner=owner), name, owner=owner)
+    ght = _get_conn(profile).bind(gh_teams)
+    ght.add_member(ght.find(team_name, owner=owner), name, owner=owner)
     return True
 
 
@@ -528,8 +510,8 @@ def remove_team_member(name, team_name, owner=None, profile="github"):
     profile
         Profile configuration name to use. Defaults to ``github``.
     """
-    conn = _get_conn(profile)
-    gh_teams.remove_member(conn, _get_team(conn, team_name, owner=owner), name, owner=owner)
+    ght = _get_conn(profile).bind(gh_teams)
+    ght.remove_member(ght.find(team_name, owner=owner), name, owner=owner)
     return True
 
 

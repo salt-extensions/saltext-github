@@ -12,38 +12,19 @@ the resource declaration.
 
 import logging
 
-from salt.exceptions import CommandExecutionError
+from salt.utils.functools import namespaced_function
 
-from saltext.github.utils.gh import profile as gh_profile
+from saltext.github.utils.gh import resource as gh_resource
 from saltext.github.utils.gh.statecores import actions as sc_actions
+from saltext.github.utils.gh.statecores import catch_errors
 
 log = logging.getLogger(__name__)
 
 
-def _ident():
-    """
-    Resource identity. Salt's authoring docs promise ``__resource__``
-    inside state overrides, but no released Salt packs it there — fall
-    back to the ``repo.ident`` execution override, which does see it.
-    """
-    try:
-        rid = __resource__["id"]
-    except NameError:
-        return __salt__["repo.ident"]()
-    owner, _, repo_name = rid.partition("/")
-    return {"id": rid, "owner": owner, "repo": repo_name}
+_core_args = namespaced_function(gh_resource.core_args, globals())
 
 
-def _core_args(profile):
-    ident = _ident()
-    conn = gh_profile.resource_conn(__opts__, __context__, profile=profile, owner=ident["owner"])
-    return conn, ident["owner"], ident["repo"]
-
-
-def _failed(name, err):
-    return {"name": name, "changes": {}, "result": False, "comment": str(err)}
-
-
+@catch_errors
 def secret_present(name, value=None, force=False, profile=None):
     """
     Ensure an Actions secret is present in the targeted repository.
@@ -70,21 +51,19 @@ def secret_present(name, value=None, force=False, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    try:
-        conn, owner, repo_name = _core_args(profile)
-        return sc_actions.secret_present(
-            conn,
-            name,
-            repo_name,
-            value=value,
-            force=force,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    conn, owner, repo_name = _core_args(profile)
+    return sc_actions.secret_present(
+        conn,
+        name,
+        repo_name,
+        value=value,
+        force=force,
+        owner=owner,
+        test=__opts__["test"],
+    )
 
 
+@catch_errors
 def secret_absent(name, profile=None):
     """
     Ensure an Actions secret is absent from the targeted repository.
@@ -97,13 +76,11 @@ def secret_absent(name, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    try:
-        conn, owner, repo_name = _core_args(profile)
-        return sc_actions.secret_absent(conn, name, repo_name, owner=owner, test=__opts__["test"])
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    conn, owner, repo_name = _core_args(profile)
+    return sc_actions.secret_absent(conn, name, repo_name, owner=owner, test=__opts__["test"])
 
 
+@catch_errors
 def workflow_permissions_managed(
     name,
     default_workflow_permissions=None,
@@ -128,16 +105,13 @@ def workflow_permissions_managed(
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    try:
-        conn, owner, repo_name = _core_args(profile)
-        return sc_actions.workflow_permissions_managed(
-            conn,
-            name,
-            repo_name,
-            default_workflow_permissions=default_workflow_permissions,
-            can_approve_pull_request_reviews=can_approve_pull_request_reviews,
-            owner=owner,
-            test=__opts__["test"],
-        )
-    except CommandExecutionError as err:
-        return _failed(name, err)
+    conn, owner, repo_name = _core_args(profile)
+    return sc_actions.workflow_permissions_managed(
+        conn,
+        name,
+        repo_name,
+        default_workflow_permissions=default_workflow_permissions,
+        can_approve_pull_request_reviews=can_approve_pull_request_reviews,
+        owner=owner,
+        test=__opts__["test"],
+    )

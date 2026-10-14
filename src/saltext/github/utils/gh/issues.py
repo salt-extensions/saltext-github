@@ -4,8 +4,6 @@ Operations on GitHub repository issues.
 
 import logging
 
-from saltext.github.utils.gh import client
-
 log = logging.getLogger(__name__)
 
 
@@ -25,7 +23,7 @@ def get(conn, repo_name, number, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    return client.query(conn, ["repos", owner or conn.owner, repo_name, "issues", str(number)])
+    return conn.repo_query(owner, repo_name, "issues", str(number))
 
 
 def get_comments(conn, repo_name, number, since=None, *, owner=None):
@@ -51,9 +49,9 @@ def get_comments(conn, repo_name, number, since=None, *, owner=None):
     params = {}
     if since:
         params["since"] = since
-    return client.query(
-        conn,
-        ["repos", owner or conn.owner, repo_name, "issues", str(number), "comments"],
+    return conn.repo_query(
+        owner,
+        *(repo_name, "issues", str(number), "comments"),
         params=params,
     )
 
@@ -149,7 +147,7 @@ def list_all(
     if direction and direction != "desc":
         params["direction"] = direction
 
-    issues = client.query(conn, ["repos", owner or conn.owner, repo_name, "issues"], params=params)
+    issues = conn.repo_query(owner, repo_name, "issues", params=params)
 
     # Pull requests are included in the issue list from GitHub.
     # Let's not include those in the return.

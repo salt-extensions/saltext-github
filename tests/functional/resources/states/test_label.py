@@ -1,3 +1,5 @@
+import inspect
+
 import pytest
 
 
@@ -29,8 +31,10 @@ def test_state_reads_packed_resource(res_states, monkeypatch):
     ``repo.ident`` fallback. No resource contextvar is set here, so a
     successful run proves the direct path was taken.
     """
+    # Unwrap the catch_errors decorator: packing happens on the module's
+    # globals, which the decorator's wrapper function does not share.
     monkeypatch.setitem(
-        res_states["label.present"].__globals__,
+        inspect.unwrap(res_states["label.present"]).__globals__,
         "__resource__",
         {"id": "testorg/repo-a", "type": "github"},
     )

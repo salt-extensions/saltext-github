@@ -29,6 +29,27 @@ log = logging.getLogger(__name__)
 API_URL_DEFAULT = "https://api.github.com"
 
 
+class ModWrapper:
+    __slots__ = ("conn", "mod")
+
+    def __init__(self, conn, mod):
+        self.conn = conn
+        self.mod = mod
+
+    def __getattr__(self, attr):
+        func = getattr(self.mod, attr)
+        if not callable(func):
+            return func
+
+        @functools.wraps(func)
+        def _owner_default(*args, owner=..., **kwargs):
+            if owner is ...:
+                return func(self.conn, *args, **kwargs)
+            return func(self.conn, *args, owner=owner or self.conn.owner, **kwargs)
+
+        return _owner_default
+
+
 @dataclass(slots=True)
 class GitHubConnection:
     """
@@ -120,6 +141,104 @@ class GitHubConnection:
             self.cache[key] = self.client.get_user(owner).type
         return self.cache[key]
 
+    def bind(self, mod):
+        """
+        Wrap a module to pass the connection as the first positional argument
+        and auto-default the ``owner`` param to the one defined on the client
+        when any function is called.
+        """
+        return ModWrapper(self, mod)
+
+    def repo_query(self, owner, *path, **kwargs):
+        """
+        Make a direct call to the ``/repos`` GitHub API, defaulting the first following
+        path segment to the configured ``owner`` if unspecified.
+        Otherwise delegates to ``query``.
+
+        owner
+            Pass an explicit owner. Defaults to the owner configured for the connection.
+
+        Pass an arbitrary number of path segments as string-valued positional args.
+        """
+        return self.query(["repos", owner or self.owner] + list(path), **kwargs)
+
+    def query(self, path, *, params=None, method="GET", headers=None, data=None, per_page=None):
+        """
+        Make a direct call to the GitHub API, transparently following pagination.
+
+        path
+            URL path to query, either as a string or a list of segments.
+
+        params
+            Mapping of query parameters.
+
+        method
+            HTTP method to use. Defaults to ``GET``.
+
+        headers
+            Mapping of extra headers to send.
+
+        data
+            Request body. JSON strings are decoded first.
+
+        per_page
+            Pagination size, maximum 100.
+
+        Returns the decoded response data. List results are merged across pages.
+        Raises :class:`GitHubNotFoundError` for missing resources and
+        :class:`GitHubApiError` for other error responses.
+        """
+        args = dict(params) if isinstance(params, dict) else {}
+        segments = [path] if isinstance(path, str) else list(path or [])
+        url = "/" + "/".join(str(segment) for segment in segments)
+
+        log.debug("GitHub API path: %s", url)
+
+        if per_page and "per_page" not in args:
+            args["per_page"] = per_page
+
+        if isinstance(data, str):
+            data = json.loads(data)
+
+        requester = self.client.requester
+
+        complete_result = []
+        next_page = None
+        while True:
+            if next_page:
+                args["page"] = next_page
+            try:
+                status, resp_headers, text = requester.requestJson(
+                    method, url, parameters=args or None, headers=headers, input=data
+                )
+            except github.GithubException as err:
+                exc_type = GitHubNotFoundError if err.status == 404 else GitHubApiError
+                raise exc_type(
+                    _error_message(err.status, err.data), status=err.status, data=err.data
+                ) from err
+            except Exception as err:  # pylint: disable=broad-except
+                raise CommandExecutionError(f"GitHub API request failed: {err}") from err
+            log.debug("GitHub Response Status Code: %s", status)
+            decoded = json.loads(text) if text else None
+
+            if not 200 <= status < 300:
+                exc_type = GitHubNotFoundError if status == 404 else GitHubApiError
+                raise exc_type(_error_message(status, decoded, text), status=status, data=decoded)
+
+            if not isinstance(decoded, list):
+                # If only querying for one item, such as a single issue,
+                # the GitHub API returns a single dictionary, instead of
+                # a list of dictionaries. In that case, we can return.
+                return decoded
+
+            complete_result += decoded
+
+            next_page = _next_page_number(resp_headers)
+            if next_page is None:
+                break
+
+        return complete_result
+
 
 def _error_message(status, data, fallback=""):
     message = data.get("message", fallback) if isinstance(data, dict) else (data or fallback)
@@ -147,88 +266,6 @@ def api_request(func):
             ) from err
 
     return wrapper
-
-
-def query(conn, path, *, params=None, method="GET", headers=None, data=None, per_page=None):
-    """
-    Make a direct call to the GitHub API, transparently following pagination.
-
-    conn
-        :class:`GitHubConnection` to run the request through (honoring
-        its ``api_url``, authentication and retry handling).
-
-    path
-        URL path to query, either as a string or a list of segments.
-
-    params
-        Mapping of query parameters.
-
-    method
-        HTTP method to use. Defaults to ``GET``.
-
-    headers
-        Mapping of extra headers to send.
-
-    data
-        Request body. JSON strings are decoded first.
-
-    per_page
-        Pagination size, maximum 100.
-
-    Returns the decoded response data. List results are merged across pages.
-    Raises :class:`GitHubNotFoundError` for missing resources and
-    :class:`GitHubApiError` for other error responses.
-    """
-    args = dict(params) if isinstance(params, dict) else {}
-    segments = [path] if isinstance(path, str) else list(path or [])
-    url = "/" + "/".join(str(segment) for segment in segments)
-
-    log.debug("GitHub API path: %s", url)
-
-    if per_page and "per_page" not in args:
-        args["per_page"] = per_page
-
-    if isinstance(data, str):
-        data = json.loads(data)
-
-    requester = conn.client.requester
-
-    complete_result = []
-    next_page = None
-    while True:
-        if next_page:
-            args["page"] = next_page
-        try:
-            status, resp_headers, text = requester.requestJson(
-                method, url, parameters=args or None, headers=headers, input=data
-            )
-        except github.GithubException as err:
-            exc_type = GitHubNotFoundError if err.status == 404 else GitHubApiError
-            raise exc_type(
-                _error_message(err.status, err.data), status=err.status, data=err.data
-            ) from err
-        except Exception as err:  # pylint: disable=broad-except
-            raise CommandExecutionError(f"GitHub API request failed: {err}") from err
-        log.debug("GitHub Response Status Code: %s", status)
-        decoded = json.loads(text) if text else None
-
-        if not 200 <= status < 300:
-            exc_type = GitHubNotFoundError if status == 404 else GitHubApiError
-            raise exc_type(_error_message(status, decoded, text), status=status, data=decoded)
-
-        if not isinstance(decoded, list):
-            # If only querying for one item, such as a single issue,
-            # the GitHub API returns a single dictionary, instead of
-            # a list of dictionaries. In that case, we can return.
-            return decoded
-
-        complete_result += decoded
-
-        next_page = _next_page_number(resp_headers)
-        if next_page is None:
-            break
-
-    return complete_result
 
 
 def _next_page_number(headers):

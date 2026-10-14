@@ -59,11 +59,41 @@ def __virtual__():
     )
 
 
+# Anything below here is deprecated. Replacement functions are in github_org/github_repo.
+# This module is intended for non-org/non-repo functionality now.
+
+
 def _get_conn(profile):
     """
     Return the GitHub connection, cached into __context__ for performance
     """
     return gh_profile.get_conn(profile, opts=__opts__, context=__context__)
+
+
+def _get_conn_repo(profile, repo_name) -> tuple[object, str]:
+    return _get_conn(profile), repo_name or _get_config_value(profile, "repo_name")
+
+
+def _get_config_value(profile, config_name):
+    """
+    Helper function that returns a profile's configuration value based on
+    the supplied configuration name.
+
+    profile
+        The profile name that contains configuration information.
+
+    config_name
+        The configuration item's name to use to return configuration values.
+    """
+    return gh_profile.get_config_value(profile, config_name, opts=__opts__, context=__context__)
+
+
+def _get_owner(profile):
+    """
+    Helper function that returns a profile's default repository owner
+    (``owner``, legacy alias ``org_name``), or None when unset.
+    """
+    return gh_profile.get_owner(profile, opts=__opts__, context=__context__)
 
 
 def get_user(name, profile="github", user_details=False):
@@ -105,32 +135,6 @@ def get_user(name, profile="github", user_details=False):
     except GitHubNotFoundError:
         log.error("Resource not found", exc_info_on_loglevel=logging.DEBUG)
         return False
-
-
-# Anything below here is deprecated. Replacement functions are in github_org/github_repo.
-# This module is intended for non-org/non-repo functionality now.
-
-
-def _get_config_value(profile, config_name):
-    """
-    Helper function that returns a profile's configuration value based on
-    the supplied configuration name.
-
-    profile
-        The profile name that contains configuration information.
-
-    config_name
-        The configuration item's name to use to return configuration values.
-    """
-    return gh_profile.get_config_value(profile, config_name, opts=__opts__, context=__context__)
-
-
-def _get_owner(profile):
-    """
-    Helper function that returns a profile's default repository owner
-    (``owner``, legacy alias ``org_name``), or None when unset.
-    """
-    return gh_profile.get_owner(profile, opts=__opts__, context=__context__)
 
 
 def list_users(profile="github", ignore_cache=False):
@@ -240,12 +244,9 @@ def get_issue(issue_number, repo_name=None, profile="github", output="min"):
         salt myminion github.get_issue 514
         salt myminion github.get_issue 514 repo_name=salt
     """
-    if repo_name is None:
-        repo_name = _get_config_value(profile, "repo_name")
-
     ret = {}
     try:
-        issue_data = gh_issues.get(_get_conn(profile), repo_name, issue_number)
+        issue_data = gh_issues.get(*_get_conn_repo(profile, repo_name), issue_number)
     except GitHubApiError:
         return ret
 
@@ -294,10 +295,9 @@ def get_issue_comments(issue_number, repo_name=None, profile="github", since=Non
         salt myminion github.get_issue_comments 514
         salt myminion github.get_issue 514 repo_name=salt
     """
-    if repo_name is None:
-        repo_name = _get_config_value(profile, "repo_name")
-
-    comments = gh_issues.get_comments(_get_conn(profile), repo_name, issue_number, since=since)
+    comments = gh_issues.get_comments(
+        *_get_conn_repo(profile, repo_name), issue_number, since=since
+    )
 
     ret = {}
     for comment in comments or []:
@@ -400,12 +400,8 @@ def get_issues(
 
         salt myminion github.get_issues my-github-repo
     """
-    if repo_name is None:
-        repo_name = _get_config_value(profile, "repo_name")
-
     issues = gh_issues.list_all(
-        _get_conn(profile),
-        repo_name,
+        *_get_conn_repo(profile, repo_name),
         milestone=milestone,
         state=state,
         assignee=assignee,
@@ -479,12 +475,8 @@ def get_milestones(
 
         salt myminion github.get_milestones
     """
-    if repo_name is None:
-        repo_name = _get_config_value(profile, "repo_name")
-
     milestones = gh_milestones.list_all(
-        _get_conn(profile),
-        repo_name,
+        *_get_conn_repo(profile, repo_name),
         state=state,
         sort=sort,
         direction=direction,
@@ -536,17 +528,14 @@ def get_milestone(number=None, name=None, repo_name=None, profile="github", outp
         salt myminion github.get_milestone 72
         salt myminion github.get_milestone name=my_milestone
     """
-    ret = {}
-
     if not (number or name):
         raise CommandExecutionError("Either a milestone 'name' or 'number' must be provided.")
 
-    if repo_name is None:
-        repo_name = _get_config_value(profile, "repo_name")
+    ret = {}
 
     if number:
         try:
-            milestone_data = gh_milestones.get(_get_conn(profile), repo_name, number)
+            milestone_data = gh_milestones.get(*_get_conn_repo(profile, repo_name), number)
         except GitHubApiError:
             return ret
         milestone_id = (milestone_data or {}).get("id")
@@ -1093,16 +1082,12 @@ def add_team_repo(repo_name, team_name, profile="github", permission=None):
         log.error("Team %s does not exist", team_name)
         return False
     try:
-        if not gh_teams.add_repo(conn, team_info, repo_name, permission=permission):
-            log.error(
-                "Failed setting permission %s on repo %s for team %s",
-                permission,
-                repo_name,
-                team_name,
-            )
-            return False
+        gh_teams.add_repo(conn, team_info, repo_name, permission=permission)
     except GitHubNotFoundError:
         log.error("Resource not found: %s", team_info["id"], exc_info_on_loglevel=logging.DEBUG)
+        return False
+    except CommandExecutionError as err:
+        log.error(str(err), exc_info_on_loglevel=logging.DEBUG)
         return False
     return True
 
@@ -1387,12 +1372,8 @@ def get_prs(
         salt myminion github.get_prs
         salt myminion github.get_prs base=2016.11
     """
-    if repo_name is None:
-        repo_name = _get_config_value(profile, "repo_name")
-
     prs = gh_pulls.list_all(
-        _get_conn(profile),
-        repo_name,
+        *_get_conn_repo(profile, repo_name),
         state=state,
         head=head,
         base=base,

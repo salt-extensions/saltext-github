@@ -10,23 +10,18 @@ defaults to the :ghconf:`profile <resource:profile>` named in the resource decla
 
 import logging
 
+from salt.utils.functools import namespaced_function
+
 from saltext.github.utils import filter_fields
 from saltext.github.utils.gh import deploy_keys as gh_deploy_keys
-from saltext.github.utils.gh import profile as gh_profile
+from saltext.github.utils.gh import resource as gh_resource
 
 log = logging.getLogger(__name__)
 
 __func_alias__ = {"list_": "list"}
 
 
-def _conn(profile=None):
-    owner, _ = _ident()
-    return gh_profile.resource_conn(__opts__, __context__, profile=profile, owner=owner)
-
-
-def _ident():
-    owner, _, repo_name = __resource__["id"].partition("/")
-    return owner, repo_name
+_core_args = namespaced_function(gh_resource.core_args, globals())
 
 
 def list_(*, fields=None, profile=None):
@@ -47,8 +42,8 @@ def list_(*, fields=None, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    return filter_fields(gh_deploy_keys.list_all(_conn(profile), repo_name, owner=owner), fields)
+    conn, owner, repo_name = _core_args(profile)
+    return filter_fields(gh_deploy_keys.list_all(conn, repo_name, owner=owner), fields)
 
 
 def get(key_id, *, profile=None):
@@ -68,8 +63,8 @@ def get(key_id, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    return gh_deploy_keys.get(_conn(profile), repo_name, key_id, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    return gh_deploy_keys.get(conn, repo_name, key_id, owner=owner)
 
 
 def add(title, key, *, read_only=False, profile=None):
@@ -99,9 +94,9 @@ def add(title, key, *, read_only=False, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
+    conn, owner, repo_name = _core_args(profile)
     return gh_deploy_keys.create(
-        _conn(profile), repo_name, title, key, read_only=bool(read_only), owner=owner
+        conn, repo_name, title, key, read_only=bool(read_only), owner=owner
     )
 
 
@@ -122,6 +117,6 @@ def remove(key_id, *, profile=None):
         Profile configuration name to use. Defaults to the resource
         declaration's profile.
     """
-    owner, repo_name = _ident()
-    gh_deploy_keys.delete(_conn(profile), repo_name, key_id, owner=owner)
+    conn, owner, repo_name = _core_args(profile)
+    gh_deploy_keys.delete(conn, repo_name, key_id, owner=owner)
     return True
