@@ -243,6 +243,21 @@ def fake_setup(fake_state):
     )
     release.add_branch_policy("main")
     repo_a.add_label("bug", color="d73a4a", description="Something is broken")
+    # Repository files, consumed by the resource type's grains_files tests
+    repo_a.add_file(
+        ".copier-answers.yml",
+        "_commit: v1.2.3\n_src_path: gh:org/tpl\nproject_name: Repo A\nteam: platform\n",
+    )
+    repo_a.add_file(
+        ".github/metadata.json",
+        '{"team": "json-team", "service": {"tier": "gold", "name": "svc-a"},'
+        ' "org": {"config": {"visibility": "public"}}}',
+    )
+    repo_a.add_file(
+        ".github/other-metadata.json",
+        # `owner` attempts to shadow a builtin identity grain (must lose)
+        '{"team": "other-team", "extra": true, "owner": "evil"}',
+    )
     repo_b.set_pages(build_type="legacy", source={"branch": "gh-pages", "path": "/"})
     bug = repo_a.add_issue(
         "Found a bug", user1, labels=["bug", "prio:high"], assignee="user2", milestone="v1.0"
@@ -254,6 +269,7 @@ def fake_setup(fake_state):
     # User-owned repositories, incl. one shadowing an org repo's name
     user1.add_repo("repo-a", description="User-owned repo-a")
     user_repo = user1.add_repo("user-repo", private=True)
+    user_repo.add_file(".copier-answers.yml", "_commit: u9.9.9\nproject_name: User Repo\n")
     user_repo.add_label("user-bug", color="123456")
     user_repo.add_milestone("u1.0", user1)
     user_repo.add_issue("User issue", user2)

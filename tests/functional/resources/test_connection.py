@@ -130,7 +130,7 @@ def test_empty_decl_derived_user(resource_funcs, res_opts, github_profile, for_r
     assert resource_funcs["github.discover"](opts) == ["user1/repo-a", "user1/user-repo"]
     with for_resource("user1/user-repo"):
         grains = resource_funcs["github.grains"]()
-    assert grains["github"]["owner"] == "user1"
+    assert grains["owner"] == "user1"
 
 
 def test_empty_decl_none_value(resource_funcs, res_opts):
@@ -205,19 +205,17 @@ def test_grains(connection, for_resource):
     with for_resource("testorg/repo-a"):
         grains = connection["github.grains"]()
     assert grains == {
-        "github": {
-            "id": "testorg/repo-a",
-            "owner": "testorg",
-            "repo": "repo-a",
-            "full_name": "testorg/repo-a",
-            "private": False,
-            "fork": False,
-            "default_branch": "main",
-            "language": "Python",
-            "html_url": "https://github.example.com/testorg/repo-a",
-            "description": "Test repo repo-a",
-            "homepage": None,
-        }
+        "id": "testorg/repo-a",
+        "owner": "testorg",
+        "repo": "repo-a",
+        "full_name": "testorg/repo-a",
+        "private": False,
+        "fork": False,
+        "default_branch": "main",
+        "language": "Python",
+        "html_url": "https://github.example.com/testorg/repo-a",
+        "description": "Test repo repo-a",
+        "homepage": None,
     }
 
 
@@ -237,8 +235,8 @@ def test_grains_cold_context(res_opts, utils_loader, for_resource):
     funcs["github.init"](res_opts)
     with for_resource("user1/repo-a"):
         grains = funcs["github.grains"]()
-    assert grains["github"]["description"] == "User-owned repo-a"
-    assert grains["github"]["owner"] == "user1"
+    assert grains["description"] == "User-owned repo-a"
+    assert grains["owner"] == "user1"
 
 
 def test_grains_identity_routing(connection, for_resource):
@@ -250,18 +248,18 @@ def test_grains_identity_routing(connection, for_resource):
         org_grains = connection["github.grains"]()
     with for_resource("user1/repo-a"):
         user_grains = connection["github.grains"]()
-    assert org_grains["github"]["description"] == "Test repo repo-a"
-    assert user_grains["github"]["description"] == "User-owned repo-a"
+    assert org_grains["description"] == "Test repo repo-a"
+    assert user_grains["description"] == "User-owned repo-a"
 
 
 def test_grains_refresh(connection, for_resource, fake_org):
     with for_resource("testorg/repo-a"):
-        assert connection["github.grains"]()["github"]["description"] == "Test repo repo-a"
+        assert connection["github.grains"]()["description"] == "Test repo repo-a"
         fake_org.get_repo("repo-a").update(description="Changed behind the cache")
         # Plain grains() serves from the warmed cache
-        assert connection["github.grains"]()["github"]["description"] == "Test repo repo-a"
+        assert connection["github.grains"]()["description"] == "Test repo repo-a"
         refreshed = connection["github.grains_refresh"]()
-    assert refreshed["github"]["description"] == "Changed behind the cache"
+    assert refreshed["description"] == "Changed behind the cache"
 
 
 def test_ping(connection, for_resource):

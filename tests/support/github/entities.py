@@ -14,6 +14,7 @@ PyGithub asserts that followed URLs stay within the configured API host.
 # with the GlobalState they are bound to, while the state stores entity data.
 # pyright: reportImportCycles=false
 
+import base64
 import zlib
 from collections.abc import Callable
 from collections.abc import ItemsView
@@ -717,6 +718,28 @@ class Repo(Entity):
         del self.gh.labels[self.data.repo_id][name]
 
     @property
+    def files(self) -> "EntityView[str, RepoFile]":
+        return EntityView(
+            {
+                path: RepoFile(self.gh, data)
+                for path, data in self.gh.files[self.data.repo_id].items()
+            }
+        )
+
+    def add_file(self, path: str, content: str = "") -> "RepoFile":
+        return self.gh.add(RepoFileData(path, self.data.repo_id, content=content))
+
+    def get_file(self, path: str, *, exc=NotFound) -> "RepoFile":
+        if path not in self.gh.files[self.data.repo_id]:
+            raise exc(f"File {path=} does not exist in repo {self.data.repo_id}")
+        return RepoFile(self.gh, self.gh.files[self.data.repo_id][path])
+
+    def remove_file(self, path: str, *, exc=NotFound) -> None:
+        if path not in self.gh.files[self.data.repo_id]:
+            raise exc(f"File {path=} does not exist in repo {self.data.repo_id}")
+        del self.gh.files[self.data.repo_id][path]
+
+    @property
     def pages(self) -> "Pages | None":
         if self.data.repo_id not in self.gh.pages:
             return None
@@ -1259,6 +1282,36 @@ class Label(Entity):
             }
             | ovrr
         )
+
+
+@dataclass
+class RepoFileData(EntityData):
+    path: str
+    repo: RepoId
+    _: KW_ONLY
+    content: str = ""
+
+    def __post_init__(self):
+        # File paths are only unique per repo, include it in the ID.
+        self.id = zlib.crc32(f"{type(self).__name__}/{self.repo}/{self.path}".encode())
+
+
+@dataclass
+class RepoFile(Entity):
+    data: RepoFileData
+
+    def payload(self, /, **ovrr):
+        content = self.data.content.encode()
+        return {
+            "type": "file",
+            "name": self.data.path.rsplit("/", maxsplit=1)[-1],
+            "path": self.data.path,
+            "sha": f"{self.data.id:x}",
+            "size": len(content),
+            "encoding": "base64",
+            "content": base64.b64encode(content).decode(),
+            "url": f"{self.gh.base_url}/repos/{self.data.repo}/contents/{self.data.path}",
+        } | ovrr
 
 
 @dataclass

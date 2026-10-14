@@ -3,6 +3,7 @@ Route mixins implementing the consumed GitHub API surface, grouped per area.
 """
 
 from tests.support.github.routes.actions import ActionsRoutes
+from tests.support.github.routes.contents import ContentsRoutes
 from tests.support.github.routes.deploy_keys import DeployKeyRoutes
 from tests.support.github.routes.environments import EnvironmentRoutes
 from tests.support.github.routes.issues import IssueRoutes
@@ -17,6 +18,7 @@ from tests.support.github.routes.teams import TeamRoutes
 
 __all__ = [
     "ActionsRoutes",
+    "ContentsRoutes",
     "DeployKeyRoutes",
     "EnvironmentRoutes",
     "IssueRoutes",

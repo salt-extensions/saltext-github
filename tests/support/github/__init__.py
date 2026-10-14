@@ -43,6 +43,7 @@ from tests.support.github.entities import Organization
 from tests.support.github.entities import Pages
 from tests.support.github.entities import PullRequest
 from tests.support.github.entities import Repo
+from tests.support.github.entities import RepoFile
 from tests.support.github.entities import RepoId
 from tests.support.github.entities import Ruleset
 from tests.support.github.entities import Secret
@@ -50,6 +51,7 @@ from tests.support.github.entities import Team
 from tests.support.github.entities import TeamMember
 from tests.support.github.entities import User
 from tests.support.github.routes import ActionsRoutes
+from tests.support.github.routes import ContentsRoutes
 from tests.support.github.routes import DeployKeyRoutes
 from tests.support.github.routes import EnvironmentRoutes
 from tests.support.github.routes import IssueRoutes
@@ -89,6 +91,7 @@ __all__ = [
     "Pages",
     "PullRequest",
     "Repo",
+    "RepoFile",
     "RepoId",
     "Request",
     "Ruleset",
@@ -112,6 +115,7 @@ class FakeGitHubAPI(  # pylint: disable=too-many-ancestors
     LabelRoutes,
     PagesRoutes,
     MetaRoutes,
+    ContentsRoutes,
 ):
     """
     Dict-backed implementation of the consumed GitHub API surface.
