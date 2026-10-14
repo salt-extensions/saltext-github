@@ -35,3 +35,4 @@ _________
     utils.gh.statecores.repo
     utils.gh.statecores.rulesets
     utils.gh.teams
+    utils.gh.users

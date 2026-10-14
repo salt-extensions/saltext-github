@@ -24,6 +24,10 @@ class OrgRoutes(APIBase):
         except NotFound:
             return 200, self.state.get_org(match["login"]).payload()
 
+    @GET("users/<login>/keys")
+    def _list_user_keys(self, match, _query, _body):
+        return 200, self.state.get_user(match["login"]).key_payloads()
+
     @GET("orgs/<org>/members")
     def _list_members(self, match, query, _body):
         org = self._resolve_org(match)

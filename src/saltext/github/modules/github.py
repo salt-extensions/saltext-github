@@ -1,7 +1,9 @@
 """
 General module for interacting with the GitHub v3 API.
 
-**Currently only contains deprecated (legacy) functions**.
+Contains functionality that is not tied to a single organization or
+repository, e.g. generic account lookups, the token's API rate limit
+status or direct queries against arbitrary API endpoints.
 
 :depends: PyGithub python module
 
@@ -11,9 +13,9 @@ General module for interacting with the GitHub v3 API.
     deprecated in favor of the :py:mod:`github_org
     <saltext.github.modules.github_org>` and :py:mod:`github_repo
     <saltext.github.modules.github_repo>` modules, which raise errors
-    instead of logging and returning ``False``. This module remains the
-    namespace for functionality that is not tied to a single organization,
-    e.g. looking up arbitrary users.
+    instead of logging and returning ``False``. The non-deprecated
+    functions in this module behave like the scoped modules in this
+    regard.
 
 Configuration
 -------------
@@ -30,6 +32,7 @@ from salt.exceptions import CommandExecutionError
 from saltext.github.utils import filter_unset
 
 try:
+    from saltext.github.utils.gh import client as gh_client
     from saltext.github.utils.gh import issues as gh_issues
     from saltext.github.utils.gh import members as gh_members
     from saltext.github.utils.gh import milestones as gh_milestones
@@ -38,6 +41,7 @@ try:
     from saltext.github.utils.gh import repos as gh_repos
     from saltext.github.utils.gh import rulesets as gh_rulesets
     from saltext.github.utils.gh import teams as gh_teams
+    from saltext.github.utils.gh import users as gh_users
     from saltext.github.utils.gh.exceptions import GitHubApiError
     from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
@@ -57,10 +61,6 @@ def __virtual__():
         False,
         "The github execution module cannot be loaded: PyGithub library is not installed.",
     )
-
-
-# Anything below here is deprecated. Replacement functions are in github_org/github_repo.
-# This module is intended for non-org/non-repo functionality now.
 
 
 def _get_conn(profile):
@@ -96,6 +96,108 @@ def _get_owner(profile):
     return gh_profile.get_owner(profile, opts=__opts__, context=__context__)
 
 
+def query(
+    path, params=None, method="GET", headers=None, data=None, per_page=None, profile="github"
+):
+    """
+    Make a direct call to the GitHub API, transparently following
+    pagination. Useful for endpoints without a dedicated wrapper function.
+
+    .. versionadded:: 1.1.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call github.query repos/saltstack/salt
+        salt-call github.query orgs/my-org/members per_page=100
+        salt-call github.query repos/my-org/my-repo/labels method=POST data='{name: bug}'
+
+    path
+        URL path to query, either as a string or a list of segments.
+
+    params
+        Mapping of query parameters.
+
+    method
+        HTTP method to use. Defaults to ``GET``.
+
+    headers
+        Mapping of extra headers to send.
+
+    data
+        Request body, either as a mapping or a JSON string.
+
+    per_page
+        Pagination size, maximum 100.
+
+    profile
+        Profile configuration name to use. Defaults to ``github``.
+
+    Returns the decoded response data. List results are merged across pages.
+    Raises :py:class:`CommandExecutionError <salt.exceptions.CommandExecutionError>`
+    subclasses on error responses.
+    """
+    if isinstance(path, str):
+        path = path.strip("/")
+    return _get_conn(profile).query(
+        path, params=params, method=method, headers=headers, data=data, per_page=per_page
+    )
+
+
+def rate_limit(profile="github"):
+    """
+    Return the API rate limit status of the profile's token, keyed by
+    resource (``core``, ``search``, ...).
+
+    .. versionadded:: 1.1.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call github.rate_limit
+
+    profile
+        Profile configuration name to use. Defaults to ``github``.
+    """
+    return gh_client.rate_limit(_get_conn(profile))
+
+
+def account_info(name=None, profile="github"):
+    """
+    Return the public profile of any user or organization account
+    (distinguished via the returned ``type`` field).
+
+    The scoped variants of this function — :py:func:`github_user.info
+    <saltext.github.modules.github_user.info>` and :py:func:`github_org.info
+    <saltext.github.modules.github_org.info>` — **fail** when the account
+    is not of the corresponding type.
+
+    .. versionadded:: 1.1.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call github.account_info github-handle
+        salt-call github.account_info  # the profile's owner
+
+    name
+        Login of the account to look up. Defaults to the profile's
+        :ghconf:`owner` (which itself defaults to the token's user).
+
+    profile
+        Profile configuration name to use. Defaults to ``github``.
+    """
+    return gh_users.get_info(_get_conn(profile), name)
+
+
+###########################################################################################
+# Anything below here is deprecated. Replacement functions are in github_org/github_repo. #
+###########################################################################################
+
+
 def get_user(name, profile="github", user_details=False):
     """
     Get a GitHub user by name.
@@ -104,7 +206,9 @@ def get_user(name, profile="github", user_details=False):
         Despite its name, this function looks up the user's membership in
         the profile's organization, not a generic user account. Use
         :py:func:`github_org.get_member <saltext.github.modules.github_org.get_member>`
-        instead.
+        for the same functionality, or :py:func:`github.account_info
+        <saltext.github.modules.github.account_info>` for looking up arbitrary
+        accounts.
 
     name
         The user for which to obtain information.
@@ -560,7 +664,7 @@ def get_repo_info(repo_name, profile="github", ignore_cache=False):
     Return information for a given repo.
 
     .. deprecated:: 1.1.0
-        Use :py:func:`github_repo.get_info <saltext.github.modules.github_repo.get_info>` instead.
+        Use :py:func:`github_repo.info <saltext.github.modules.github_repo.info>` instead.
 
     repo_name
         The name of the repository.

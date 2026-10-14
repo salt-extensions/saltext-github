@@ -12,3 +12,4 @@ _________________
     github
     github_org
     github_repo
+    github_user

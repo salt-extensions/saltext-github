@@ -194,7 +194,7 @@ def create(
     )
 
 
-def get_info(repo_name=None, owner=None, ignore_cache=False, profile="github"):
+def info(repo_name=None, owner=None, ignore_cache=False, profile="github"):
     """
     Return information about a repository.
 
@@ -202,7 +202,7 @@ def get_info(repo_name=None, owner=None, ignore_cache=False, profile="github"):
 
     .. code-block:: bash
 
-        salt-call github_repo.get_info my-repo
+        salt-call github_repo.info my-repo
 
     repo_name
         Name of the repository. Defaults to the profile's :ghconf:`repo_name`.

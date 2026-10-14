@@ -347,6 +347,8 @@ class UserData(EntityData):
     public_gists: int = 1
     followers: int = 42
     following: int = 37
+    # Public SSH keys (GET /users/<login>/keys), not part of the user payload
+    ssh_keys: tuple[str, ...] = ()
 
     def __post_init__(self):
         if not self.login:
@@ -362,6 +364,7 @@ class User(Entity):
 
     def payload(self, /, **ovrr):
         rend = asdict(self.data)
+        rend.pop("ssh_keys")
         return (
             rend
             | {
@@ -370,6 +373,9 @@ class User(Entity):
             }
             | ovrr
         )
+
+    def key_payloads(self):
+        return [{"id": zlib.crc32(key.encode()), "key": key} for key in sorted(self.data.ssh_keys)]
 
     @property
     def repos(self) -> "EntityView[RepoName, Repo]":
