@@ -10,6 +10,7 @@ Execution Modules
     config
     deploy_key
     environment
+    grains
     issue
     label
     milestone
