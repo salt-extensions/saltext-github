@@ -1,1 +1,0 @@
-Added a persistent cross-process per-connection cache (on by default, opt out via the {ghconf}`cache` profile parameter), serving token/account identities and file-based custom resource grains (validated against each repository's `pushed_at` timestamp) without refetching, e.g. across `salt-call --local` invocations
