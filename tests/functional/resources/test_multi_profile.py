@@ -103,9 +103,11 @@ def test_exec_resolves_per_owner_profile(res_modules, for_resource, loader_conte
     with for_resource("otherorg/other-repo"):
         info = res_modules["repo.info"]()
     assert info["owner"] == "otherorg"
-    # The connection was built from the github_other profile: its cache
-    # key carries that profile's owner.
-    conn_keys = [
-        key for key in loader_context if isinstance(key, str) and key.startswith("github.")
-    ]
-    assert any(":otherorg:" in key for key in conn_keys)
+    assert "github.profile.github_other" in loader_context
+    assert loader_context["github.profile.github_other"].owner == "otherorg"
+    ident = loader_context["github.profile.github_other"].ident
+    assert f"github.conn.{ident}" in loader_context
+    assert (
+        loader_context[f"github.conn.{ident}"].client
+        is loader_context["github.profile.github_other"].client
+    )

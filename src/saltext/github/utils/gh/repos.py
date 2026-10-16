@@ -11,6 +11,7 @@ from github.GithubException import UnknownObjectException
 from salt.exceptions import CommandExecutionError
 
 from saltext.github.utils import filter_unset
+from saltext.github.utils.gh.cache import MISS
 from saltext.github.utils.gh.client import api_request
 from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
@@ -39,6 +40,7 @@ def to_dict(repo):
     ret["forks_count"] = repo.forks_count
     ret["open_issues_count"] = repo.open_issues_count
     ret["default_branch"] = repo.default_branch
+    ret["pushed_at"] = repo.pushed_at.isoformat() if repo.pushed_at else None
     ret["has_issues"] = repo.has_issues
     ret["has_wiki"] = repo.has_wiki
     ret["has_downloads"] = repo.has_downloads
@@ -67,7 +69,7 @@ def list_all(conn, *, owner=None, ignore_cache=False):
     if key not in conn.cache or ignore_cache:
         if conn.owner_type(owner) == "Organization":
             found = conn.get_org(owner).get_repos()
-        elif owner.lower() == conn.auth_user.login.lower():
+        elif owner.lower() == conn.auth_login.lower():
             # Listing the authenticated user's repos directly includes
             # private ones, which /users/{owner}/repos does not carry.
             found = conn.auth_user.get_repos(affiliation="owner")
@@ -125,7 +127,9 @@ def get_file_content(conn, name, path, *, owner=None, ignore_cache=False):
     Return the decoded text content of a repository file via the
     contents API, or ``None`` when the file is missing or unusable
     (not a regular file, too large for the API to carry inline, not
-    valid UTF-8). Results are cached, including negative ones.
+    valid UTF-8). Results are cached, including negative ones – also
+    persistently when the connection carries a store, validated against
+    the repository's ``pushed_at`` timestamp.
 
     conn
         :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
@@ -144,9 +148,32 @@ def get_file_content(conn, name, path, *, owner=None, ignore_cache=False):
     """
     owner = owner or conn.owner
     key = ("repo_file", owner.lower(), name.lower(), path)
-    if key not in conn.cache or ignore_cache:
-        conn.cache[key] = _fetch_file_content(conn, owner, name, path)
-    return conn.cache[key]
+    if key in conn.cache and not ignore_cache:
+        return conn.cache[key]
+    content = MISS
+    pushed_at = None
+    if conn.store is not None:
+        pushed_at = _pushed_at(conn, name, owner)
+        if not ignore_cache:
+            content = conn.store.get_file(owner, name, path, pushed_at)
+    if content is MISS:
+        content = _fetch_file_content(conn, owner, name, path)
+        if conn.store is not None:
+            conn.store.set_file(owner, name, path, content, pushed_at)
+    conn.cache[key] = content
+    return content
+
+
+def _pushed_at(conn, name, owner):
+    """
+    Return a repository's last-push timestamp (from the cached repository
+    information, usually pre-warmed by a listing), or ``None`` when it
+    cannot be determined.
+    """
+    try:
+        return get_info(conn, name, owner=owner).get("pushed_at")
+    except CommandExecutionError:
+        return None
 
 
 def _fetch_file_content(conn, owner, name, path):
@@ -176,7 +203,7 @@ def _fetch_file_content(conn, owner, name, path):
 def clear_file_cache(conn, name, *, owner=None):
     """
     Drop all cached file contents of one repository, including cached
-    negative lookups.
+    negative lookups and persistently stored ones.
 
     conn
         :class:`~saltext.github.utils.gh.client.GitHubConnection` to use.
@@ -187,9 +214,12 @@ def clear_file_cache(conn, name, *, owner=None):
     owner
         Owner of the repository. Defaults to the connection's owner.
     """
-    prefix = ("repo_file", (owner or conn.owner).lower(), name.lower())
+    owner = owner or conn.owner
+    prefix = ("repo_file", owner.lower(), name.lower())
     for key in [k for k in conn.cache if isinstance(k, tuple) and k[:3] == prefix]:
         del conn.cache[key]
+    if conn.store is not None:
+        conn.store.flush_repo(owner, name)
 
 
 @api_request

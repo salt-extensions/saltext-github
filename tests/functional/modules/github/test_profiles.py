@@ -24,8 +24,17 @@ def other_github():
 
 @pytest.fixture(scope="module")
 def minion_config_defaults(github_profile, other_github):
-    no_url = {"token": "other-token", "owner": "testorg"}  # we'll patch api_url for this one
-    api_url_set = {"token": "other-token", "api_url": other_github.url, "owner": "testorg"}
+    no_url = {  # we'll patch api_url for this one
+        "token": "other-token",
+        "owner": "testorg",
+        "cache": False,
+    }
+    api_url_set = {
+        "token": "other-token",
+        "api_url": other_github.url,
+        "owner": "testorg",
+        "cache": False,
+    }
     broken = github_profile.copy()
     broken["org_name"] = "missing-org"
     return {

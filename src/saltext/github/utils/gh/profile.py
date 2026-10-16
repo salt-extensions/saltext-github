@@ -13,13 +13,14 @@ unavailable to parts of the resource subsystem (type discovery runs
 before the minion's module loader exists).
 """
 
-import hashlib
 import logging
 
 from salt.exceptions import CommandExecutionError
 
+from saltext.github.utils.gh.cache import PersistentCache
 from saltext.github.utils.gh.client import API_URL_DEFAULT
 from saltext.github.utils.gh.client import GitHubConnection
+from saltext.github.utils.gh.client import get_connection_ident
 
 log = logging.getLogger(__name__)
 
@@ -161,6 +162,10 @@ def get_conn(profile, *, opts, context, utils=None):
     Return a :class:`~saltext.github.utils.gh.client.GitHubConnection`
     for a profile, cached in ``context`` for performance.
 
+    Unless the profile disables it (:ghconf:`cache`), the connection
+    carries a :class:`~saltext.github.utils.gh.cache.PersistentCache`
+    for slow-changing API data, surviving across processes.
+
     profile
         Profile name that contains configuration information.
 
@@ -174,24 +179,36 @@ def get_conn(profile, *, opts, context, utils=None):
     utils
         Pass ``__utils__`` when available (SDB rendering).
     """
+    profile_key = f"github.profile.{profile}"
+    if profile_key in context:
+        return context[profile_key]
+
     token = get_config_value(profile, "token", opts=opts, context=context, utils=utils)
-    owner = get_owner(profile, opts=opts, context=context, utils=utils)
     api_url = get_api_url(profile, opts=opts, context=context, utils=utils)
-    return _conn_for(token, owner, api_url, context)
-
-
-def _conn_for(token, owner, api_url, context):
-    """
-    Return the connection for the resolved profile values, cached in
-    ``context`` for performance.
-    """
     # Hash the token to keep the secret out of context dumps
-    token_hash = hashlib.sha256(token.encode()).hexdigest()[:16]
-    key = f"github.{token_hash}:{owner}:{api_url}"
+    ident = get_connection_ident(token, api_url)
+    conn_key = f"github.conn.{ident}"
 
-    if key not in context:
-        context[key] = GitHubConnection(token, owner, api_url=api_url)
-    return context[key]
+    # This config is HTTP connection-independent. We should reuse a client, if it exists.
+    owner = get_owner(profile, opts=opts, context=context, utils=utils)
+    cache_enabled = get_config_value(
+        profile, "cache", opts=opts, context=context, utils=utils, default=True
+    )
+
+    if conn_key in context:
+        other_conn = context[conn_key]
+        store = ...
+        if bool(other_conn.store) is not cache_enabled:
+            store = PersistentCache(opts, ident) if cache_enabled else None
+        context[profile_key] = context[conn_key].with_(owner=owner, store=store)
+    else:
+        context[profile_key] = context[conn_key] = GitHubConnection(
+            token,
+            owner,
+            api_url=api_url,
+            store=cache_enabled and PersistentCache(opts, ident) or None,
+        )
+    return context[profile_key]
 
 
 def resource_decl(opts):

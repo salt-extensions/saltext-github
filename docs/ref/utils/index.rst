@@ -12,6 +12,7 @@ _________
     utils
     utils.gh
     utils.gh.actions
+    utils.gh.cache
     utils.gh.client
     utils.gh.deploy_keys
     utils.gh.environments

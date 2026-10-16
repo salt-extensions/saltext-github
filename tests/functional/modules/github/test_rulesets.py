@@ -9,6 +9,7 @@ def minion_config_defaults(github_profile):
     owner_profile = {
         "token": github_profile["token"],
         "owner": github_profile["org_name"],
+        "cache": False,
     }
     if api_url := github_profile.get("api_url"):
         owner_profile["api_url"] = api_url
