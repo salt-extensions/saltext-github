@@ -30,20 +30,34 @@ def to_dict(repo):
     ret["full_name"] = repo.full_name
     ret["owner"] = repo.owner.login
     ret["private"] = repo.private
+    ret["visibility"] = repo.visibility
     ret["html_url"] = repo.html_url
+    ret["clone_url"] = repo.clone_url
+    ret["ssh_url"] = repo.ssh_url
     ret["description"] = repo.description
     ret["fork"] = repo.fork
+    ret["archived"] = repo.archived
+    ret["disabled"] = repo.disabled
+    ret["is_template"] = repo.is_template
     ret["homepage"] = repo.homepage
+    ret["license"] = repo.license.spdx_id if repo.license else None
+    ret["topics"] = repo.topics
+    ret["custom_properties"] = repo.custom_properties
     ret["size"] = repo.size
     ret["stargazers_count"] = repo.stargazers_count
     ret["language"] = repo.language
     ret["forks_count"] = repo.forks_count
     ret["open_issues_count"] = repo.open_issues_count
     ret["default_branch"] = repo.default_branch
+    ret["created_at"] = repo.created_at.isoformat() if repo.created_at else None
+    ret["updated_at"] = repo.updated_at.isoformat() if repo.updated_at else None
     ret["pushed_at"] = repo.pushed_at.isoformat() if repo.pushed_at else None
-    ret["has_issues"] = repo.has_issues
-    ret["has_wiki"] = repo.has_wiki
+    ret["has_discussions"] = repo.has_discussions
     ret["has_downloads"] = repo.has_downloads
+    ret["has_issues"] = repo.has_issues
+    ret["has_pages"] = repo.has_pages
+    ret["has_projects"] = repo.has_projects
+    ret["has_wiki"] = repo.has_wiki
     return ret
 
 
