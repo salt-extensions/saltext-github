@@ -116,6 +116,20 @@ def test_owner_lookup_failure_hints_at_profile_parameter(conn):
         conn.owner  # pylint: disable=pointless-statement
 
 
+def test_is_auth_user_matches_case_insensitively(conn):
+    conn.client.get_user.return_value.login = "TokenUser"
+    assert conn.is_auth_user("tokenuser") is True
+    assert conn.is_auth_user("otheruser") is False
+
+
+def test_is_auth_user_false_for_non_user_tokens(conn):
+    # GitHub App installation tokens are not tied to a user account
+    conn.client.get_user.side_effect = pygithub.GithubException(
+        403, {"message": "Resource not accessible by integration"}, None
+    )
+    assert conn.is_auth_user("someuser") is False
+
+
 def test_explicit_owner_skips_token_lookup():
     with patch("saltext.github.utils.gh.client.github.Github", autospec=True):
         explicit = gh_client.GitHubConnection("token", "testorg")
