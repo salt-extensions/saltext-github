@@ -80,8 +80,11 @@ salt -G 'default_branch:master' repo.info
 ```
 
 The resource grains carry the repository's identity and basic metadata:
-`id`, `owner`, `repo`, `full_name`, `private`, `fork`, `default_branch`,
-`language`, `html_url`, `description` and `homepage`.
+`id`, `owner`, `repo`, `full_name`, `private`, `visibility`, `fork`,
+`archived`, `disabled`, `is_template`, `default_branch`, `language`,
+`license`, `topics`, `custom_properties`, `html_url`, `clone_url`,
+`ssh_url`, `description`, `homepage`, `created_at`, `has_discussions`,
+`has_pages` and `has_projects`.
 
 Custom grains sourced from files inside each repository can be declared
 via {ghconf}`resource:grains_files`, each namespace becoming a grain key

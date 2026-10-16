@@ -490,10 +490,20 @@ class RepoData(EntityData):  # pylint: disable=too-many-instance-attributes
     private: bool = False
     fork: bool = False
     archived: bool = False
+    disabled: bool = False
+    is_template: bool = False
     language: str = "Python"
+    # SPDX identifier, rendered as a nested license object in the payload
+    license: str | None = None
+    topics: list[str] = field(default_factory=list)
+    custom_properties: dict[str, Any] = field(default_factory=dict)
     default_branch: str = "main"
+    created_at: str = CREATED_AT
+    updated_at: str = CREATED_AT
     pushed_at: str = CREATED_AT
+    has_discussions: bool = False
     has_issues: bool = True
+    has_projects: bool = True
     has_wiki: bool = True
     has_downloads: bool = True
     # Managed via the Actions permissions endpoints, not part of the repo payload
@@ -769,6 +779,11 @@ class Repo(Entity):
             "owner": {"login": self.data.owner},
             "url": f"{self.gh.base_url}/repos/{self.data.full_name}",
             "html_url": f"https://github.example.com/{self.data.full_name}",
+            "clone_url": f"https://github.example.com/{self.data.full_name}.git",
+            "ssh_url": f"git@github.example.com:{self.data.full_name}.git",
+            "visibility": "private" if self.data.private else "public",
+            "license": {"spdx_id": self.data.license} if self.data.license else None,
+            "has_pages": self.data.repo_id in self.gh.pages,
             "size": 100,
             "stargazers_count": 1,
             "watchers_count": 1,
