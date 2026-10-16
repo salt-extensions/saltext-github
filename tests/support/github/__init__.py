@@ -21,6 +21,7 @@ Layout:
     Per-area route mixins composed into :class:`FakeGitHubAPI` below.
 """
 
+from tests.support.github.base import APP_TOKEN
 from tests.support.github.base import DEPLOY_KEY_A
 from tests.support.github.base import DEPLOY_KEY_B
 from tests.support.github.base import ORG
@@ -67,6 +68,7 @@ from tests.support.github.routing import Request
 from tests.support.github.state import GlobalState
 
 __all__ = [
+    "APP_TOKEN",
     "DEPLOY_KEY_A",
     "DEPLOY_KEY_B",
     "ORG",

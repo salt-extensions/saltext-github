@@ -207,6 +207,17 @@ class GitHubConnection:
             self.cache["auth_login"] = login
         return self.cache["auth_login"]
 
+    def is_auth_user(self, login):
+        """
+        Whether a login belongs to the token's user. Returns ``False``
+        for tokens that are not tied to a user account (e.g. GitHub App
+        installation tokens), whose user lookup fails.
+        """
+        try:
+            return login.lower() == self.auth_login.lower()
+        except github.GithubException:
+            return False
+
     def owner_type(self, owner=None):
         """
         Return the account type of an owner login, either ``Organization``

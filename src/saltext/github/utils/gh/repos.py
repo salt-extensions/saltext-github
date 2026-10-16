@@ -83,7 +83,7 @@ def list_all(conn, *, owner=None, ignore_cache=False):
     if key not in conn.cache or ignore_cache:
         if conn.owner_type(owner) == "Organization":
             found = conn.get_org(owner).get_repos()
-        elif owner.lower() == conn.auth_login.lower():
+        elif conn.is_auth_user(owner):
             # Listing the authenticated user's repos directly includes
             # private ones, which /users/{owner}/repos does not carry.
             found = conn.auth_user.get_repos(affiliation="owner")
@@ -339,7 +339,7 @@ def create(
     owner = owner or conn.owner
     if conn.owner_type(owner) == "Organization":
         creator = conn.get_org(owner)
-    elif owner.lower() == conn.auth_user.login.lower():
+    elif conn.is_auth_user(owner):
         creator = conn.auth_user
     else:
         raise CommandExecutionError(

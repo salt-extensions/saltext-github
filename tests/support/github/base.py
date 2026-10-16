@@ -24,6 +24,9 @@ from tests.support.github.routing import Request
 from tests.support.github.state import GlobalState
 
 TOKEN = "test-token"
+# Accepted alongside TOKEN, modeling a GitHub App installation token
+# (not tied to a user account, user-scoped endpoints are inaccessible)
+APP_TOKEN = "test-app-token"
 ORG = "testorg"
 
 # Sample SSH public keys for deploy key tests
@@ -47,11 +50,18 @@ class APIBase:
     """
 
     def __init__(
-        self, token: str = TOKEN, state: GlobalState | None = None, auth_login: str = "user1"
+        self,
+        token: str = TOKEN,
+        state: GlobalState | None = None,
+        auth_login: str = "user1",
+        app_token: str | None = APP_TOKEN,
     ):
         self.token = token
         # The user the token belongs to (GET /user, /user/repos)
         self.auth_login = auth_login
+        # Second accepted token without an associated user account,
+        # modeling a GitHub App installation token
+        self.app_token = app_token
         self.base_url = None
         self.lock = threading.Lock()
         self.requests = []
@@ -113,7 +123,10 @@ class APIBase:
         """
         with self.lock:
             self.requests.append(Request(method, path, query, body))
-            if auth not in (f"token {self.token}", f"Bearer {self.token}"):  # pragma: no cover
+            if self.app_token and auth in (f"token {self.app_token}", f"Bearer {self.app_token}"):
+                if path == "/user" or path.startswith("/user/"):
+                    return 403, {}, {"message": "Resource not accessible by integration"}
+            elif auth not in (f"token {self.token}", f"Bearer {self.token}"):  # pragma: no cover
                 return 401, {}, {"message": "Bad credentials"}
             for patterns, func in self._routes.get(method, ()):
                 for route in patterns:
