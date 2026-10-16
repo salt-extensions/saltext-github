@@ -21,7 +21,10 @@ Layout:
     Per-area route mixins composed into :class:`FakeGitHubAPI` below.
 """
 
-from tests.support.github.base import APP_TOKEN
+from tests.support.github.base import APP_ID
+from tests.support.github.base import APP_INSTALLATION_ID
+from tests.support.github.base import APP_TOKEN_PREFIX
+from tests.support.github.base import APP_USER_INSTALLATION_ID
 from tests.support.github.base import DEPLOY_KEY_A
 from tests.support.github.base import DEPLOY_KEY_B
 from tests.support.github.base import ORG
@@ -52,6 +55,7 @@ from tests.support.github.entities import Team
 from tests.support.github.entities import TeamMember
 from tests.support.github.entities import User
 from tests.support.github.routes import ActionsRoutes
+from tests.support.github.routes import AppRoutes
 from tests.support.github.routes import ContentsRoutes
 from tests.support.github.routes import DeployKeyRoutes
 from tests.support.github.routes import EnvironmentRoutes
@@ -68,7 +72,10 @@ from tests.support.github.routing import Request
 from tests.support.github.state import GlobalState
 
 __all__ = [
-    "APP_TOKEN",
+    "APP_ID",
+    "APP_INSTALLATION_ID",
+    "APP_TOKEN_PREFIX",
+    "APP_USER_INSTALLATION_ID",
     "DEPLOY_KEY_A",
     "DEPLOY_KEY_B",
     "ORG",
@@ -118,6 +125,7 @@ class FakeGitHubAPI(  # pylint: disable=too-many-ancestors
     PagesRoutes,
     MetaRoutes,
     ContentsRoutes,
+    AppRoutes,
 ):
     """
     Dict-backed implementation of the consumed GitHub API surface.

@@ -14,13 +14,18 @@ before the minion's module loader exists).
 """
 
 import logging
+from pathlib import Path
 
 from salt.exceptions import CommandExecutionError
 
+from saltext.github.utils.gh.cache import MISS
 from saltext.github.utils.gh.cache import PersistentCache
 from saltext.github.utils.gh.client import API_URL_DEFAULT
 from saltext.github.utils.gh.client import GitHubConnection
+from saltext.github.utils.gh.client import build_app_auth
+from saltext.github.utils.gh.client import get_app_connection_ident
 from saltext.github.utils.gh.client import get_connection_ident
+from saltext.github.utils.gh.client import resolve_app_installation_id
 
 log = logging.getLogger(__name__)
 
@@ -183,14 +188,53 @@ def get_conn(profile, *, opts, context, utils=None):
     if profile_key in context:
         return context[profile_key]
 
-    token = get_config_value(profile, "token", opts=opts, context=context, utils=utils)
+    token = get_config_value(
+        profile, "token", opts=opts, context=context, utils=utils, default=None
+    )
+    app_id = get_config_value(
+        profile, "app_id", opts=opts, context=context, utils=utils, default=None
+    )
     api_url = get_api_url(profile, opts=opts, context=context, utils=utils)
-    # Hash the token to keep the secret out of context dumps
-    ident = get_connection_ident(token, api_url)
+    owner = get_owner(profile, opts=opts, context=context, utils=utils)
+    permissions = get_config_value(
+        profile, "permissions", opts=opts, context=context, utils=utils, default=None
+    )
+    if token is not None and app_id is not None:
+        raise CommandExecutionError(
+            f"The '{profile}' profile specifies both 'token' and 'app_id', "
+            "which are mutually exclusive."
+        )
+    if token is not None:
+        if permissions is not None:
+            raise CommandExecutionError(
+                f"The 'permissions' parameter is only valid for GitHub App ('app_id') "
+                f"profiles, but the '{profile}' profile uses token authentication."
+            )
+        # Hash the token to keep the secret out of context dumps
+        ident = get_connection_ident(token, api_url)
+    elif app_id is not None:
+        if not owner:
+            raise CommandExecutionError(
+                f"GitHub App authentication requires the 'owner' parameter "
+                f"in the '{profile}' profile."
+            )
+        if permissions is not None and not isinstance(permissions, dict):
+            raise CommandExecutionError(
+                f"The 'permissions' parameter of the '{profile}' profile must be a "
+                "mapping of permission name to access level."
+            )
+        # Derived from the app's identity, not its short-lived
+        # installation tokens - persistent cache banks survive rotation.
+        # Differently restricted profiles must not share connections.
+        ident = get_app_connection_ident(app_id, owner, api_url, permissions)
+    else:
+        raise CommandExecutionError(
+            f"The '{profile}' profile is missing authentication credentials. "
+            "Specify either 'token' or 'app_id' + 'private_key'/'private_key_path'."
+        )
     conn_key = f"github.conn.{ident}"
 
     # This config is HTTP connection-independent. We should reuse a client, if it exists.
-    owner = get_owner(profile, opts=opts, context=context, utils=utils)
     cache_enabled = get_config_value(
         profile, "cache", opts=opts, context=context, utils=utils, default=True
     )
@@ -202,13 +246,70 @@ def get_conn(profile, *, opts, context, utils=None):
             store = PersistentCache(opts, ident) if cache_enabled else None
         context[profile_key] = context[conn_key].with_(owner=owner, store=store)
     else:
+        store = PersistentCache(opts, ident) if cache_enabled else None
+        auth = token
+        if auth is None:
+            auth = _get_app_auth(
+                profile,
+                app_id,
+                owner=owner,
+                api_url=api_url,
+                permissions=permissions,
+                store=store,
+                opts=opts,
+                context=context,
+                utils=utils,
+            )
         context[profile_key] = context[conn_key] = GitHubConnection(
-            token,
+            auth,
             owner,
             api_url=api_url,
-            store=cache_enabled and PersistentCache(opts, ident) or None,
+            ident=ident,
+            store=store,
         )
     return context[profile_key]
+
+
+def _get_app_auth(
+    profile, app_id, *, owner, api_url, permissions, store, opts, context, utils=None
+):
+    """
+    Build the PyGithub auth object for a GitHub App profile. When the
+    profile does not pin :ghconf:`installation_id`, the app's
+    installation on ``owner`` is discovered via the API (cached in
+    ``store``, when available).
+    """
+    private_key = get_config_value(
+        profile, "private_key", opts=opts, context=context, utils=utils, default=None
+    )
+    private_key_path = get_config_value(
+        profile, "private_key_path", opts=opts, context=context, utils=utils, default=None
+    )
+    if (private_key is None) is (private_key_path is None):
+        raise CommandExecutionError(
+            f"GitHub App authentication requires exactly one of 'private_key' or "
+            f"'private_key_path', the '{profile}' profile specifies "
+            f"{'both' if private_key is not None else 'neither'}."
+        )
+    if private_key_path is not None:
+        try:
+            private_key = Path(private_key_path).read_text(encoding="utf-8")
+        except OSError as err:
+            raise CommandExecutionError(
+                f"Failed reading 'private_key_path' of the '{profile}' profile: {err}"
+            ) from err
+    installation_id = get_config_value(
+        profile, "installation_id", opts=opts, context=context, utils=utils, default=None
+    )
+    if installation_id is None and store is not None:
+        installation_id = store.get_meta("installation_id")
+        if installation_id is MISS:
+            installation_id = None
+    if installation_id is None:
+        installation_id = resolve_app_installation_id(app_id, private_key, owner, api_url)
+        if store is not None:
+            store.set_meta("installation_id", installation_id)
+    return build_app_auth(app_id, private_key, installation_id, permissions)
 
 
 def resource_decl(opts):

@@ -164,6 +164,43 @@ def rate_limit(profile="github"):
     return gh_client.rate_limit(_get_conn(profile))
 
 
+def revoke_app_token(profile="github"):
+    """
+    Revoke the GitHub App installation access token the profile
+    currently authenticates with and drop the associated cached
+    connections, ensuring a subsequent call mints a fresh token.
+    Only valid for GitHub App (:ghconf:`app_id`) profiles.
+
+    Minted tokens are valid for one hour (fixed by GitHub) and are
+    never persisted by this extension, so revocation is optional
+    hygiene – useful e.g. as the last step of an ephemeral CI run.
+
+    .. versionadded:: 1.1.0
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt-call github.revoke_app_token
+
+    profile
+        Profile configuration name to use. Defaults to ``github``.
+    """
+    conn = _get_conn(profile)
+    gh_client.revoke_installation_token(conn)
+    # The revoked token stays attached to the connection's auth
+    # (PyGithub only re-mints on expiry, not on auth failures) -
+    # evict all context entries sharing it so later invocations
+    # build a fresh connection.
+    for key in list(__context__):
+        if key == f"github.conn.{conn.ident}" or (
+            key.startswith("github.profile.")
+            and getattr(__context__[key], "ident", None) == conn.ident
+        ):
+            __context__.pop(key)
+    return True
+
+
 def account_info(name=None, profile="github"):
     """
     Return the public profile of any user or organization account

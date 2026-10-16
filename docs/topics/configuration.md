@@ -8,7 +8,8 @@ All modules provided by this extension read their configuration from
 profile
 : A profile is a mapping under a top-level key in the minion
   configuration, minion pillar or master configuration
-  (grains work also, but should not contain secrets such as the required {ghconf}`token`).
+  (grains work also, but should not contain secrets such as
+  {ghconf}`token` or {ghconf}`private_key`).
   Functions and states use the profile named `github` by default and accept a
   `profile` argument to select a different one.
 
@@ -21,7 +22,9 @@ The following keys can be specified in the profile:
 :::{ghconf} token
 :::
 `token`
-: **Required**. Access token to authenticate with.
+: Access token to authenticate with. Either this or GitHub App
+  credentials ({ghconf}`app_id` + a private key) are required,
+  mutually exclusively.
 
 :::{ghconf} owner
 :::
@@ -33,6 +36,7 @@ The following keys can be specified in the profile:
 
   Needs to be set explicitly when the token does not have an associated
   resolvable user account such as GitHub App installation tokens.
+  Required for GitHub App ({ghconf}`app_id`) profiles.
 
   :::{versionadded} 1.1.0
   Renamed from `org_name`. The new {py:mod}`github_repo <saltext.github.modules.github_repo>`
@@ -52,8 +56,12 @@ The following keys can be specified in the profile:
 `cache`
 : Keep a persistent cross-process cache for specific API data,
   stored in the minion's {conf_minion}`cachedir`.
-  All entries are namespaced by a token/API URL-derived identity,
+  All entries are namespaced by a credential/API URL-derived identity,
   hence rotated credentials never serve stale data.
+  For GitHub App profiles, the identity derives from the app's identity
+  ({ghconf}`app_id` + {ghconf}`owner` + {ghconf}`permissions`) rather
+  than its short-lived installation tokens, so the cache survives token
+  rotation.
   The data that is cached is either static or refreshed as soon
   as it changes. Defaults to true.
 
@@ -65,6 +73,7 @@ The following keys can be specified in the profile:
 
   * {ghconf}`token`-associated user handle (never changes)
   * account name => account type lookups (should never change)
+  * discovered GitHub App installation IDs (see {ghconf}`app_id`)
 
   When the {py:mod}`github resource type <saltext.github.resources.github>` is configured
   with {ghconf}`grains_files <resource:grains_files>`, file contents
@@ -110,6 +119,7 @@ my_user:
 salt-call github_repo.list profile=my_user
 ```
 
+(secret-management)=
 ## Secret management
 
 Profile values containing [SDB URIs](https://docs.saltproject.io/en/latest/topics/sdb/index.html)
@@ -128,6 +138,103 @@ github:
   token: sdb://osenv/GITHUB_TOKEN
   owner: my_organization
 ```
+
+## GitHub App authentication
+
+:::{versionadded} 1.1.0
+:::
+
+Instead of a static {ghconf}`token`, a profile can authenticate as a
+[GitHub App installation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation).
+
+:::{hint}
+Two short-lived credentials are involved: an app JWT (signed with the
+private key, freshly minted per app-scoped request, only used to
+discover installations and mint tokens) and the installation access
+tokens performing the actual API calls, which are valid for one hour
+(fixed by GitHub) and never persisted by this extension. For explicit
+cleanup – e.g. as the last step of an ephemeral CI run –
+{py:func}`github.revoke_app_token <saltext.github.modules.github.revoke_app_token>`
+revokes the current token immediately.
+:::
+
+:::{ghconf} app_id
+:::
+`app_id`
+: App ID (or client ID) of a GitHub App to authenticate as, together
+  with exactly one of {ghconf}`private_key` or {ghconf}`private_key_path`
+  and a required {ghconf}`owner`. Installation access tokens are minted
+  (and refreshed before expiry) automatically, removing the need to
+  pass short-lived tokens into the profile (e.g. via
+  `actions/create-github-app-token` in CI).
+
+  The app's installation on {ghconf}`owner` is discovered via the API
+  (an organization, falling back to user accounts) unless pinned with
+  {ghconf}`installation_id`. The discovered ID is kept in the
+  persistent {ghconf}`cache`, when enabled.
+
+  Minted tokens carry all of the app's granted permissions on all
+  repositories the installation covers, unless restricted via
+  {ghconf}`permissions` (per token) or by installing the app on
+  selected repositories only (per installation).
+
+  :::{versionadded} 1.1.0
+  :::
+
+:::{ghconf} private_key
+:::
+`private_key`
+: Private key of the GitHub App ({ghconf}`app_id`) in PEM format.
+  Like all profile values, it can be an [SDB URI](#secret-management),
+  avoiding plain text keys in the configuration.
+
+  :::{versionadded} 1.1.0
+  :::
+
+:::{ghconf} private_key_path
+:::
+`private_key_path`
+: Path to a local file containing the private key of the GitHub App
+  ({ghconf}`app_id`) in PEM format, as an alternative to
+  {ghconf}`private_key`.
+
+  :::{versionadded} 1.1.0
+  :::
+
+:::{ghconf} installation_id
+:::
+`installation_id`
+: ID of the GitHub App's ({ghconf}`app_id`) installation on
+  {ghconf}`owner`. Optional – when unset, it is discovered via the API.
+
+  :::{versionadded} 1.1.0
+  :::
+
+:::{ghconf} permissions
+:::
+`permissions`
+: Restrict the installation access tokens minted for this GitHub App
+  ({ghconf}`app_id`) profile to a subset of the app's granted
+  permissions – a mapping of permission name to access level, e.g.
+  `contents: read`. Defaults to all granted permissions.
+
+  Allows profiles with different privileges to share a single app,
+  e.g. a read-only profile for CI validation runs (`test=True`)
+  next to an unrestricted one for applying:
+
+  ```yaml
+  github_readonly:
+    app_id: 123456
+    private_key: sdb://osenv/GITHUB_APP_PRIVATE_KEY
+    owner: my_organization
+    permissions:
+      metadata: read
+      contents: read
+      administration: read
+  ```
+
+  :::{versionadded} 1.1.0
+  :::
 
 (github-resource-configuration)=
 ## Repository resource declaration
