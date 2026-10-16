@@ -21,7 +21,7 @@ The following keys can be specified in the profile:
 :::{ghconf} token
 :::
 `token`
-: Required. Access token to authenticate with.
+: **Required**. Access token to authenticate with.
 
 :::{ghconf} owner
 :::
@@ -40,6 +40,44 @@ The following keys can be specified in the profile:
   `org_name` keeps being supported as a legacy alias.
   :::
 
+:::{ghconf} api_url
+:::
+`api_url`
+: Base URL of the GitHub API. Set this when targeting a GitHub
+  Enterprise Server instance, e.g. `https://github.example.com/api/v3`.
+  Defaults to `https://api.github.com`.
+
+:::{ghconf} cache
+:::
+`cache`
+: Keep a persistent cross-process cache for specific API data,
+  stored in the minion's {conf_minion}`cachedir`.
+  All entries are namespaced by a token/API URL-derived identity,
+  hence rotated credentials never serve stale data.
+  The data that is cached is either static or refreshed as soon
+  as it changes. Defaults to true.
+
+  :::{versionadded} 1.1.0
+  :::
+
+  :::{hint}
+  Always cached are:
+
+  * {ghconf}`token`-associated user handle (never changes)
+  * account name => account type lookups (should never change)
+
+  When the {py:mod}`github resource type <saltext.github.resources.github>` is configured
+  with {ghconf}`grains_files <resource:grains_files>`, file contents
+  (including negative lookups) are also cached in relation to
+  the repository's `pushed_at` timestamp (and automatically refreshed as soon
+  as that timestamp changes).
+  {py:func}`grains_refresh <saltext.github.resources.github.grains_refresh>`
+  bypasses and rewrites the cached file contents.
+  This especially benefits `salt-call --local` setups, where every
+  invocation starts a fresh process and would otherwise refetch all
+  file-based grains.
+  :::
+
 :::{ghconf} repo_name
 :::
 `repo_name`
@@ -53,13 +91,6 @@ The following keys can be specified in the profile:
 `allow_repo_privacy_changes`
 : Allow automated repository privacy modifications. Defaults to false since
   it can be dangerous to change the privacy of a repository in an automated way.
-
-:::{ghconf} api_url
-:::
-`api_url`
-: Base URL of the GitHub API. Set this when targeting a GitHub
-  Enterprise Server instance, e.g. `https://github.example.com/api/v3`.
-  Defaults to `https://api.github.com`.
 
 ## Multiple profiles
 

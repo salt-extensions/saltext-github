@@ -98,6 +98,14 @@ repository. Restrict the exposed keys via `include` allowlists and
 keep that trust model in mind when building targeting expressions.
 :::
 
+:::{hint}
+File-based grains and account metadata survive across processes (e.g.
+`salt-call --local` invocations) in a persistent cache, which is
+enabled by default (opt out per profile via {ghconf}`cache`). Cached
+file contents stay valid until the respective repository receives a
+new push.
+:::
+
 ## Execution modules
 
 Jobs dispatched to a `github` resource use repository-implicit,

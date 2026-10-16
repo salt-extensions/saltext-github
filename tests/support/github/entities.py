@@ -492,6 +492,7 @@ class RepoData(EntityData):  # pylint: disable=too-many-instance-attributes
     archived: bool = False
     language: str = "Python"
     default_branch: str = "main"
+    pushed_at: str = CREATED_AT
     has_issues: bool = True
     has_wiki: bool = True
     has_downloads: bool = True

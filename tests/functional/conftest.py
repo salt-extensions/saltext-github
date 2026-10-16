@@ -171,6 +171,9 @@ def github_profile(fake_github, fake_org):
         "api_url": fake_github.url,
         "allow_repo_privacy_changes": True,
         "repo_name": "repo-a",
+        # The persistent cache (on by default) would outlive the
+        # per-test fake state reset; dedicated tests re-enable it.
+        "cache": False,
     }
 
 
@@ -190,7 +193,7 @@ def fake_state(fake_github):
 
 
 @pytest.fixture(scope="module")
-def fake_org(fake_state, fake_setup):  # pylint: disable=unused-argument
+def fake_org(fake_state, fake_state_setup):  # pylint: disable=unused-argument
     """
     Fake organization named ``testorg``. Ensure ``fake_setup`` creates it.
     """
@@ -198,7 +201,7 @@ def fake_org(fake_state, fake_setup):  # pylint: disable=unused-argument
 
 
 @pytest.fixture(scope="module")
-def fake_user(fake_state, fake_setup):  # pylint: disable=unused-argument
+def fake_user(fake_state, fake_state_setup):  # pylint: disable=unused-argument
     """
     Fake user ``user1``, which the fake API treats as the token's
     (authenticated) user. Ensure ``fake_setup`` creates it.
@@ -209,10 +212,13 @@ def fake_user(fake_state, fake_setup):  # pylint: disable=unused-argument
 @pytest.fixture(autouse=True)
 def _restore_fake_state(fake_github):
     """
-    Before each test, reset the state to the module's defaults as specified in
+    After each test, reset the state to the module's defaults as specified in
     ``fake_setup``. Also, clear the request log.
     """
-    fake_github.reset()
+    try:
+        yield
+    finally:
+        fake_github.reset()
 
 
 @pytest.fixture(scope="module")
@@ -282,7 +288,10 @@ def fake_setup(fake_state):
 
 
 @pytest.fixture(scope="module", autouse=True)
-def fake_state_setup(fake_state, request):
+def fake_state_reset(fake_state):
     fake_state.reset()
-    request.getfixturevalue("fake_setup")
+
+
+@pytest.fixture(scope="module", autouse=True)
+def fake_state_setup(fake_state, fake_setup):  # pylint: disable=unused-argument
     fake_state.snapshot()

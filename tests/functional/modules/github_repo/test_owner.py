@@ -17,9 +17,11 @@ def minion_config_defaults(github_profile):
         "token": github_profile["token"],
         "owner": "user1",
         "repo_name": "user-repo",
+        "cache": False,
     }
     noowner_profile = {
         "token": github_profile["token"],
+        "cache": False,
     }
     if api_url := github_profile.get("api_url"):
         user_profile["api_url"] = noowner_profile["api_url"] = api_url

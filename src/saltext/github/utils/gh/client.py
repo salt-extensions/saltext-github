@@ -8,7 +8,9 @@ subclass) on API errors. They are shared between the classic ``github``
 execution module and future resource modules.
 """
 
+import copy
 import functools
+import hashlib
 import json
 import logging
 import re
@@ -16,11 +18,14 @@ from dataclasses import KW_ONLY
 from dataclasses import InitVar
 from dataclasses import dataclass
 from dataclasses import field
+from types import EllipsisType
 
 import github
 from github.GithubException import UnknownObjectException
 from salt.exceptions import CommandExecutionError
 
+from saltext.github.utils.gh.cache import MISS
+from saltext.github.utils.gh.cache import PersistentCache
 from saltext.github.utils.gh.exceptions import GitHubApiError
 from saltext.github.utils.gh.exceptions import GitHubNotFoundError
 
@@ -50,6 +55,20 @@ class ModWrapper:
         return _owner_default
 
 
+def get_connection_ident(token, api_url):
+    """
+    Render the internal identity for a (token, api_url) combination.
+    The output is used in context cache keys and persistent cache banks.
+
+    token
+        API token from profile.
+
+    api_url
+        API URL from profile.
+    """
+    return hashlib.sha256(f"{token}:{api_url}".encode()).hexdigest()[:16]
+
+
 @dataclass(slots=True)
 class GitHubConnection:
     """
@@ -68,21 +87,62 @@ class GitHubConnection:
     api_url
         Base URL of the GitHub API. Set this when targeting a GitHub
         Enterprise Server instance. Defaults to the public GitHub API.
+
+    store
+        Optional :class:`~saltext.github.utils.gh.cache.PersistentCache`
+        for slow-changing API data, surviving across processes.
     """
 
     token: InitVar[str]
     _owner: str | None = None
     _: KW_ONLY
     api_url: str = API_URL_DEFAULT
-
     cache: dict = field(default_factory=dict)
+
     client: github.Github = field(init=False, repr=False)
+    #: Identity of the connection's credentials/endpoint, safe to expose
+    #: (e.g. as a persistent cache namespace).
+    ident: str = field(init=False, default="")
+    store: PersistentCache | None = field(default=None, repr=False)
 
     def __post_init__(self, token: str):
         self.api_url = (self.api_url or API_URL_DEFAULT).rstrip("/")
+        self.ident = get_connection_ident(token, self.api_url)
         self.client = github.Github(
             auth=github.Auth.Token(token), base_url=self.api_url, per_page=100
         )
+
+    def with_(
+        self,
+        *,
+        owner: str | None | EllipsisType = ...,
+        store: PersistentCache | None | EllipsisType = ...,
+    ):
+        """
+        Return an instance of this connection with different internal config.
+
+        owner
+            If specified, ensure the returned connection defaults to this owner.
+
+        store
+            If specified, ensure the returned connection uses this persistent
+            store/does not use any.
+        """
+        if owner is ... and store is ...:
+            return self
+        # `token` is an InitVar, so a replace() does not work.
+        # We're intentionally sharing the same client and context cache.
+        # Implies that sharing the same token+api_url in profiles
+        # with different cache config and accessing them in the same run
+        # can return cached data/omit writing it because of the shared context cache.
+        # There is no risk of data leak because it's the same token and API though.
+        new = copy.copy(self)
+
+        if owner is not ...:
+            new._owner = owner
+        if store is not ...:
+            new.store = store
+        return new
 
     @property
     def owner(self):
@@ -92,7 +152,7 @@ class GitHubConnection:
         """
         if self._owner is None:
             try:
-                self._owner = self.auth_user.login
+                self._owner = self.auth_login
             except github.GithubException as err:
                 raise CommandExecutionError(
                     "Failed to look up the token's user for the default repository "
@@ -130,15 +190,40 @@ class GitHubConnection:
             self.cache["auth_user"] = self.client.get_user()
         return self.cache["auth_user"]
 
+    @property
+    def auth_login(self):
+        """
+        Login of the token's user (cached, persistently when the
+        connection carries a store).
+        """
+        if "auth_login" not in self.cache:
+            login = MISS
+            if self.store is not None:
+                login = self.store.get_meta("auth_login")
+            if login is MISS:
+                login = self.auth_user.login
+                if self.store is not None:
+                    self.store.set_meta("auth_login", login)
+            self.cache["auth_login"] = login
+        return self.cache["auth_login"]
+
     def owner_type(self, owner=None):
         """
         Return the account type of an owner login, either ``Organization``
-        or ``User`` (cached). Defaults to the connection's owner.
+        or ``User`` (cached, persistently when the connection carries a
+        store). Defaults to the connection's owner.
         """
         owner = owner or self.owner
         key = ("owner_type", owner.lower())
         if key not in self.cache:
-            self.cache[key] = self.client.get_user(owner).type
+            otype = MISS
+            if self.store is not None:
+                otype = self.store.get_meta(f"owner_type_{owner.lower()}")
+            if otype is MISS:
+                otype = self.client.get_user(owner).type
+                if self.store is not None:
+                    self.store.set_meta(f"owner_type_{owner.lower()}", otype)
+            self.cache[key] = otype
         return self.cache[key]
 
     def bind(self, mod):
