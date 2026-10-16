@@ -93,7 +93,8 @@ def test_flush_repo(store):
     assert store.get_file("org", "other", "a.yml", PUSHED) == "other"
 
 
-def test_ident_namespacing(backend):  # pylint: disable=unused-argument
+@pytest.mark.usefixtures("backend")
+def test_ident_namespacing():
     one = gh_cache.PersistentCache({}, "ident1")
     two = gh_cache.PersistentCache({}, "ident2")
     one.set_meta("auth_login", "user1")

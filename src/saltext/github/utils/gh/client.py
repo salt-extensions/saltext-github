@@ -69,14 +69,126 @@ def get_connection_ident(token, api_url):
     return hashlib.sha256(f"{token}:{api_url}".encode()).hexdigest()[:16]
 
 
+def get_app_connection_ident(app_id, owner, api_url, permissions=None):
+    """
+    Render the internal identity for a GitHub App's installation on an
+    owner, the app-authenticated counterpart of
+    :func:`get_connection_ident`. Derived from the app's identity
+    rather than its short-lived installation tokens, so it stays stable
+    across token minting/rotation (keeping e.g. persistent cache banks
+    alive between processes).
+
+    app_id
+        App ID (or client ID) from profile.
+
+    owner
+        Owner (organization or user) login the app installation targets.
+
+    api_url
+        API URL from profile.
+
+    permissions
+        Optional permission restrictions the minted tokens are subject
+        to. Profiles restricted differently must not share connections
+        (and thus identities), their tokens are not interchangeable.
+    """
+    perms = ""
+    if permissions:
+        perms = ":" + json.dumps(permissions, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(f"app:{app_id}:{owner.lower()}:{api_url}{perms}".encode()).hexdigest()[
+        :16
+    ]
+
+
+def _app_auth(app_id, private_key):
+    """
+    Build PyGithub app (JWT) auth, surfacing invalid credentials early
+    with a helpful error.
+    """
+    try:
+        auth = github.Auth.AppAuth(app_id, private_key)
+        # JWT creation (and thus private key parsing) usually happens
+        # lazily during the first request - fail fast instead.
+        auth.create_jwt()
+    except Exception as err:  # pylint: disable=broad-except
+        raise CommandExecutionError(
+            f"Failed initializing GitHub App authentication: {err}"
+        ) from err
+    return auth
+
+
+def build_app_auth(app_id, private_key, installation_id, permissions=None):
+    """
+    Return PyGithub auth for a GitHub App installation. It mints
+    installation tokens on demand and refreshes them before expiry.
+
+    app_id
+        App ID (or client ID) of the GitHub App.
+
+    private_key
+        Private key of the GitHub App in PEM format.
+
+    installation_id
+        ID of the app's installation on the target owner, see
+        :func:`resolve_app_installation_id`.
+
+    permissions
+        Optional mapping of permission name to access level the minted
+        tokens are restricted to. Defaults to all the app's granted
+        permissions.
+    """
+    return _app_auth(app_id, private_key).get_installation_auth(
+        int(installation_id), token_permissions=permissions or None
+    )
+
+
+def resolve_app_installation_id(app_id, private_key, owner, api_url):
+    """
+    Resolve the ID of a GitHub App's installation on an owner
+    (an organization, falling back to user accounts).
+
+    app_id
+        App ID (or client ID) of the GitHub App.
+
+    private_key
+        Private key of the GitHub App in PEM format.
+
+    owner
+        Owner (organization or user) login the app installation targets.
+
+    api_url
+        Base URL of the GitHub API.
+    """
+    integration = github.GithubIntegration(auth=_app_auth(app_id, private_key), base_url=api_url)
+    try:
+        try:
+            return integration.get_org_installation(owner).id
+        except UnknownObjectException:
+            return integration.get_user_installation(owner).id
+    except UnknownObjectException as err:
+        raise GitHubNotFoundError(
+            f"GitHub App {app_id} does not appear to be installed on '{owner}'",
+            status=err.status,
+            data=err.data,
+        ) from err
+    except github.GithubException as err:
+        raise GitHubApiError(
+            _error_message(err.status, err.data), status=err.status, data=err.data
+        ) from err
+    finally:
+        integration.close()
+
+
 @dataclass(slots=True)
 class GitHubConnection:
     """
     An authenticated PyGithub client bound to a default repository owner
     (an organization or user), together with caches for API responses.
 
-    token
-        Personal access token to authenticate with.
+    auth
+        Personal access token to authenticate with, or a PyGithub
+        ``Auth`` instance (e.g. the result of :func:`build_app_auth`).
+        Passing the latter requires ``ident``.
 
     owner
         Login of the organization or user this connection is scoped to.
@@ -88,29 +200,36 @@ class GitHubConnection:
         Base URL of the GitHub API. Set this when targeting a GitHub
         Enterprise Server instance. Defaults to the public GitHub API.
 
+    ident
+        Identity of the connection's credentials/endpoint, safe to
+        expose (e.g. as a persistent cache namespace). Defaults to
+        :func:`get_connection_ident` for token auth; required for
+        ``Auth`` instances (whose tokens can be short-lived, see
+        :func:`get_app_connection_ident`).
+
     store
         Optional :class:`~saltext.github.utils.gh.cache.PersistentCache`
         for slow-changing API data, surviving across processes.
     """
 
-    token: InitVar[str]
+    auth: InitVar[str | github.Auth.Auth]
     _owner: str | None = None
     _: KW_ONLY
     api_url: str = API_URL_DEFAULT
     cache: dict = field(default_factory=dict)
 
     client: github.Github = field(init=False, repr=False)
-    #: Identity of the connection's credentials/endpoint, safe to expose
-    #: (e.g. as a persistent cache namespace).
-    ident: str = field(init=False, default="")
+    ident: str = ""
     store: PersistentCache | None = field(default=None, repr=False)
 
-    def __post_init__(self, token: str):
+    def __post_init__(self, auth: str | github.Auth.Auth):
         self.api_url = (self.api_url or API_URL_DEFAULT).rstrip("/")
-        self.ident = get_connection_ident(token, self.api_url)
-        self.client = github.Github(
-            auth=github.Auth.Token(token), base_url=self.api_url, per_page=100
-        )
+        if isinstance(auth, str):
+            self.ident = self.ident or get_connection_ident(auth, self.api_url)
+            auth = github.Auth.Token(auth)
+        elif not self.ident:
+            raise ValueError("Passing an Auth instance requires 'ident'")
+        self.client = github.Github(auth=auth, base_url=self.api_url, per_page=100)
 
     def with_(
         self,
@@ -130,7 +249,7 @@ class GitHubConnection:
         """
         if owner is ... and store is ...:
             return self
-        # `token` is an InitVar, so a replace() does not work.
+        # `auth` is an InitVar, so a replace() does not work.
         # We're intentionally sharing the same client and context cache.
         # Implies that sharing the same token+api_url in profiles
         # with different cache config and accessing them in the same run
@@ -334,6 +453,26 @@ class GitHubConnection:
                 break
 
         return complete_result
+
+
+def revoke_installation_token(conn):
+    """
+    Revoke the GitHub App installation access token a connection
+    currently authenticates with (would otherwise stay valid for one
+    hour after minting).
+
+    The connection – and any others sharing its client – must not be
+    used afterwards: PyGithub only mints a new token once the revoked
+    one would have expired, not in response to auth failures. Callers
+    should evict the connection from their caches, ensuring later
+    invocations build a fresh one.
+
+    conn
+        :class:`GitHubConnection` to use. Must be app-authenticated.
+    """
+    if not isinstance(conn.client.requester.auth, github.Auth.AppInstallationAuth):
+        raise CommandExecutionError("Only GitHub App ('app_id') profiles support token revocation.")
+    conn.query("installation/token", method="DELETE")
 
 
 def rate_limit(conn):

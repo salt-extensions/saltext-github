@@ -7,13 +7,11 @@ with a 403).
 import pytest
 from salt.exceptions import CommandExecutionError
 
-from tests.support.github import APP_TOKEN
-
 
 @pytest.fixture(scope="module")
-def minion_config_defaults(github_profile):
+def minion_config_defaults(fake_github, github_profile):
     app_profile = {
-        "token": APP_TOKEN,
+        "token": fake_github.app_token,
         "api_url": github_profile["api_url"],
         "owner": "testorg",
         "repo_name": "repo-a",
