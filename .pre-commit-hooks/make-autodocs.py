@@ -168,10 +168,10 @@ def _process_resources(kind_path, paths):
     type page, so the overlay modules nest under a per-kind subheading
     in the navigation instead of being appended to one flat list.
 
-    There is no kind index: the root document's "Resources" toctree
-    globs ``ref/resources/*``, which picks up exactly the type pages
-    because everything else is written to a ``<rtype>/`` subdirectory
-    (toctree globs do not cross directories).
+    There is no kind index: the root document's "Provided Resources"
+    toctree globs ``ref/resources/*``, which picks up exactly the type
+    pages because everything else is written to a ``<rtype>/``
+    subdirectory (toctree globs do not cross directories).
     """
     resources_dir = src_dir / "resources"
     types = {}
@@ -293,8 +293,8 @@ for kind in docs_by_kind:
             changed_something = True
 
     if kind == "resources":
-        # No kind index: the root document's "Resources" toctree globs
-        # the per-type pages directly.
+        # No kind index: the root document's "Provided Resources" toctree
+        # globs the per-type pages directly.
         if index_rst.exists():
             print(f"Removing stale {index_rst}")
             index_rst.unlink()

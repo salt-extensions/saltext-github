@@ -85,6 +85,9 @@ def test_single_stock_state(res_modules, for_resource):
     assert chunk["result"] is True
 
 
+@pytest.mark.skip_on_windows(
+    reason="state.sls calls cmd.run there, which is not exposed in the resource context"
+)
 def test_sls(res_modules, fake_org, state_tree, for_resource, testmode):
     """
     ``state.sls`` compiles from the managing minion's fileserver and runs
