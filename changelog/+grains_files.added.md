@@ -1,1 +1,0 @@
-Added custom repository resource grains sourced from in-repo YAML/JSON files (e.g. copier answers) via the {ghconf}`grains_files <resource:grains_files>` resource declaration key, with per-namespace key filtering, renaming and optional merging into the root grains
