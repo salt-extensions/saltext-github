@@ -3,13 +3,11 @@ import copy
 import pytest
 import salt.loader
 
-from tests.functional.resources.conftest import RTYPE
-
 
 @pytest.fixture(scope="module")
-def res_state_opts(res_opts):
+def res_state_opts(res_type, res_opts):
     opts = copy.deepcopy(res_opts)
-    opts["resource_type"] = RTYPE
+    opts["resource_type"] = res_type
     return opts
 
 

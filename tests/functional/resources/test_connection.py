@@ -14,28 +14,28 @@ from saltext.github.utils.gh import profile as gh_profile
 
 
 @pytest.fixture
-def connection(resource_funcs, res_opts):
-    resource_funcs["github.init"](res_opts)
-    return resource_funcs
+def connection(res_funcs, res_opts):
+    res_funcs["github.init"](res_opts)
+    return res_funcs
 
 
-def test_virtual(resource_funcs):
-    assert "github.discover" in resource_funcs
+def test_virtual(res_funcs):
+    assert "github.discover" in res_funcs
 
 
-def test_init_and_initialized(resource_funcs, res_opts):
-    assert resource_funcs["github.initialized"]() is False
-    resource_funcs["github.init"](res_opts)
-    assert resource_funcs["github.initialized"]() is True
-    resource_funcs["github.shutdown"](res_opts)
-    assert resource_funcs["github.initialized"]() is False
+def test_init_and_initialized(res_funcs, res_opts):
+    assert res_funcs["github.initialized"]() is False
+    res_funcs["github.init"](res_opts)
+    assert res_funcs["github.initialized"]() is True
+    res_funcs["github.shutdown"](res_opts)
+    assert res_funcs["github.initialized"]() is False
 
 
-def test_init_missing_profile(resource_funcs, res_opts):
+def test_init_missing_profile(res_funcs, res_opts):
     opts = copy.deepcopy(res_opts)
     opts["pillar"]["resources"]["github"] = {"profile": "nonexistent"}
     with pytest.raises(CommandExecutionError, match="could not be found.*nonexistent"):
-        resource_funcs["github.init"](opts)
+        res_funcs["github.init"](opts)
 
 
 def test_discover_default_owner(connection, res_opts):
@@ -114,7 +114,7 @@ def test_discover_per_owner_archived(connection, res_opts, fake_org, fake_user):
     ]
 
 
-def test_empty_decl_derived_user(resource_funcs, res_opts, github_profile, for_resource):
+def test_empty_decl_derived_user(res_funcs, res_opts, github_profile, for_resource):
     """
     A bare ``resources: github: {}`` declaration with a minimal default
     profile (token only) manages the token user's repositories.
@@ -126,26 +126,26 @@ def test_empty_decl_derived_user(resource_funcs, res_opts, github_profile, for_r
     if api_url := github_profile.get("api_url"):
         opts["github"]["api_url"] = api_url
     opts["pillar"]["resources"]["github"] = {}
-    resource_funcs["github.init"](opts)
-    assert resource_funcs["github.discover"](opts) == ["user1/repo-a", "user1/user-repo"]
+    res_funcs["github.init"](opts)
+    assert res_funcs["github.discover"](opts) == ["user1/repo-a", "user1/user-repo"]
     with for_resource("user1/user-repo"):
-        grains = resource_funcs["github.grains"]()
+        grains = res_funcs["github.grains"]()
     assert grains["owner"] == "user1"
 
 
-def test_empty_decl_none_value(resource_funcs, res_opts):
+def test_empty_decl_none_value(res_funcs, res_opts):
     """
     ``resources: github:`` (an empty YAML value) behaves like an empty
     declaration.
     """
     opts = copy.deepcopy(res_opts)
     opts["pillar"]["resources"]["github"] = None
-    resource_funcs["github.init"](opts)
+    res_funcs["github.init"](opts)
     # The default profile's owner (testorg via the org_name alias) applies
-    assert resource_funcs["github.discover"](opts) == ["testorg/repo-a", "testorg/repo-b"]
+    assert res_funcs["github.discover"](opts) == ["testorg/repo-a", "testorg/repo-b"]
 
 
-def test_empty_decl_profile_owner(resource_funcs, res_opts, github_profile):
+def test_empty_decl_profile_owner(res_funcs, res_opts, github_profile):
     """
     A bare declaration with an owner-scoped default profile manages
     that owner's repositories.
@@ -158,11 +158,11 @@ def test_empty_decl_profile_owner(resource_funcs, res_opts, github_profile):
     if api_url := github_profile.get("api_url"):
         opts["github"]["api_url"] = api_url
     opts["pillar"]["resources"]["github"] = {}
-    resource_funcs["github.init"](opts)
-    assert resource_funcs["github.discover"](opts) == ["testorg/repo-a", "testorg/repo-b"]
+    res_funcs["github.init"](opts)
+    assert res_funcs["github.discover"](opts) == ["testorg/repo-a", "testorg/repo-b"]
 
 
-def test_decl_alternative_profile_with_exclude(resource_funcs, res_opts, github_profile):
+def test_decl_alternative_profile_with_exclude(res_funcs, res_opts, github_profile):
     """
     A declaration naming an alternative profile (token user derived)
     plus root-level exclude patterns — without the default ``github``
@@ -180,8 +180,8 @@ def test_decl_alternative_profile_with_exclude(resource_funcs, res_opts, github_
         "profile": "github_repos",
         "exclude": ["user-*"],
     }
-    resource_funcs["github.init"](opts)
-    assert resource_funcs["github.discover"](opts) == ["user1/repo-a"]
+    res_funcs["github.init"](opts)
+    assert res_funcs["github.discover"](opts) == ["user1/repo-a"]
 
 
 def test_owner_setting_inheritance(res_opts):

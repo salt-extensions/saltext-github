@@ -52,9 +52,9 @@ def resource_decl():
 
 
 @pytest.fixture
-def connection(resource_funcs, res_opts):
-    resource_funcs["github.init"](res_opts)
-    return resource_funcs
+def connection(res_funcs, res_opts):
+    res_funcs["github.init"](res_opts)
+    return res_funcs
 
 
 def test_grains_custom_namespaces(connection, for_resource):
@@ -123,18 +123,18 @@ def test_grains_non_mapping_file_skipped(connection, for_resource, fake_org, cap
     assert grains["repo"] == "repo-a"
 
 
-def test_init_invalid_grains_files(resource_funcs, res_opts):
+def test_init_invalid_grains_files(res_funcs, res_opts):
     opts = copy.deepcopy(res_opts)
     opts["pillar"]["resources"]["github"]["grains_files"] = {"owner": {"path": "f"}}
     with pytest.raises(CommandExecutionError, match="shadows a builtin"):
-        resource_funcs["github.init"](opts)
+        res_funcs["github.init"](opts)
 
 
-def test_init_invalid_per_owner_grains_files(resource_funcs, res_opts):
+def test_init_invalid_per_owner_grains_files(res_funcs, res_opts):
     opts = copy.deepcopy(res_opts)
     opts["pillar"]["resources"]["github"]["owners"]["user1"]["grains_files"] = {"ns": {}}
     with pytest.raises(CommandExecutionError, match="'path' is required"):
-        resource_funcs["github.init"](opts)
+        res_funcs["github.init"](opts)
 
 
 def test_grains_file_fetches_cached(connection, for_resource, fake_github):

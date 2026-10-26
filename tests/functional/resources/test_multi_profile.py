@@ -38,9 +38,9 @@ def res_opts(minion_opts, resource_decl, github_profile):
 
 
 @pytest.fixture
-def connection(resource_funcs, res_opts):
-    resource_funcs["github.init"](res_opts)
-    return resource_funcs
+def connection(res_funcs, res_opts):
+    res_funcs["github.init"](res_opts)
+    return res_funcs
 
 
 def test_owner_profile_resolution(res_opts):
@@ -62,11 +62,11 @@ def test_owners_mapping_and_list_forms(res_opts):
     assert gh_profile.resource_profiles(opts) == ["github"]
 
 
-def test_init_validates_all_profiles(resource_funcs, res_opts):
+def test_init_validates_all_profiles(res_funcs, res_opts):
     opts = copy.deepcopy(res_opts)
     opts["pillar"]["resources"]["github"]["owners"]["otherorg"]["profile"] = "missing_profile"
     with pytest.raises(CommandExecutionError, match="could not be found.*missing_profile"):
-        resource_funcs["github.init"](opts)
+        res_funcs["github.init"](opts)
 
 
 def test_discover_union_across_profiles(connection, res_opts):

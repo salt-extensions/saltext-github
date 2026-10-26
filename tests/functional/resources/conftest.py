@@ -9,23 +9,14 @@ and ``salt.loader.resource_modules``.
 
 import contextlib
 import copy
-import os
 
 import pytest
 import salt.loader
 import salt.loader.context as loader_ctx
-from salt.version import __version_info__ as _SALT_VERSION
 
-# Salt version in test venv
-if os.environ.get("SALT_REQUIREMENT") == "salt==master":
-    SALT_VERSION = (_SALT_VERSION[0] + 1, 0)
-else:
-    SALT_VERSION = tuple(_SALT_VERSION)
-
-if SALT_VERSION < (3008, 3):
-    pytest.skip(reason="Resource modules require Salt >=3008.3")
-
-RTYPE = "github"
+pytest.importorskip(
+    "salt.utils.resources", reason="The resources subsystem requires Salt 3008.0 or newer"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -38,18 +29,30 @@ def reset_loaders_state():
 
 
 @pytest.fixture(scope="module")
+def res_type():
+    """
+    Resource type to test. Override per module.
+    """
+    return "github"
+
+
+@pytest.fixture(scope="module")
 def resource_decl():
     """
-    The ``github`` entry of the resource pillar subtree. Override per
-    module to test owners/repos/exclude/include_archived handling.
+    The ``<res_type>`` entry of the resource pillar subtree.
+    Override per test module.
     """
     return {"profile": "github"}
 
 
 @pytest.fixture(scope="module")
-def res_opts(minion_opts, resource_decl):
+def res_opts(minion_opts, resource_decl, res_type):
+    """
+    Minion opts, including pillar definition for resources as specified
+    by ``res_type`` and ``resource_decl``.
+    """
     opts = copy.deepcopy(minion_opts)
-    opts["pillar"] = {"resources": {RTYPE: resource_decl}}
+    opts["pillar"] = {"resources": {res_type: resource_decl}}
     return opts
 
 
@@ -61,8 +64,7 @@ def loader_context():
 @pytest.fixture(autouse=True)
 def _fresh_loader_context(loader_context):
     """
-    The fake API state resets per test, so cached connections (and their
-    repository caches) must be dropped alongside.
+    Reset the loader context per test.
     """
     try:
         yield
@@ -76,7 +78,11 @@ def utils_loader(res_opts):
 
 
 @pytest.fixture(scope="module")
-def resource_funcs(res_opts, utils_loader, loader_context):
+def res_funcs(res_opts, utils_loader, loader_context):
+    """
+    Loader of resource connection modules.
+    If the resource does not expose any override modules, only use this loader.
+    """
     return salt.loader.resource(
         res_opts,
         utils=utils_loader,
@@ -86,11 +92,15 @@ def resource_funcs(res_opts, utils_loader, loader_context):
 
 
 @pytest.fixture(scope="module")
-def res_modules(res_opts, resource_funcs, utils_loader, loader_context):
+def res_modules(res_opts, res_type, res_funcs, utils_loader, loader_context):
+    """
+    Loader of execution modules for the resource type specified in ``res_type``.
+    Only relevant if the resource exposes override modules.
+    """
     return salt.loader.resource_modules(
         res_opts,
-        RTYPE,
-        resource_funcs=resource_funcs,
+        res_type,
+        resource_funcs=res_funcs,
         utils=utils_loader,
         context=loader_context,
         loaded_base_name=f"{__name__}.resmods",
@@ -98,14 +108,23 @@ def res_modules(res_opts, resource_funcs, utils_loader, loader_context):
 
 
 @pytest.fixture
-def for_resource():
+def for_resource(res_type):
     """
     Context manager setting ``__resource__`` for the duration of a call,
     mirroring what the minion's dispatch does.
+
+    Usage:
+
+    .. code-block:: py
+
+        def test_foo_get(res_modules, for_resource):
+            with for_resource("resource_id"):
+                res = res_modules["foo.bar"]()
+            # ...
     """
 
     @contextlib.contextmanager
-    def _set(rid, rtype=RTYPE):
+    def _set(rid, rtype=res_type):
         token = loader_ctx.resource_ctxvar.set({"id": rid, "type": rtype})
         try:
             yield
